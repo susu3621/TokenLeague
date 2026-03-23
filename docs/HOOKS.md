@@ -4,23 +4,50 @@ TokenLeague provides statistics hooks for Claude Code and Codex CLI to automatic
 
 ## Quick Start
 
-### 1. Install Hooks
+### Install Hooks
 
 Run the installation script:
 
 ```bash
 cd /path/to/TokenLeague
-./scripts/install_hooks.sh --both
+./scripts/install_hooks.sh --both --global
 ```
 
-Options:
-- `--claude` - Install only Claude Code hooks
-- `--codex` - Install only Codex CLI hooks
-- `--both` - Install both (default)
-- `--global` - Install to `~/.claude` and `~/.codex`
-- `--local` - Install to project directory (default)
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--claude` | Install only Claude Code hooks |
+| `--codex` | Install only Codex CLI hooks |
+| `--both` | Install both (default) |
+| `--global` | Install to `~/.claude` and `~/.codex` |
+| `--local` | Install to project directory (default) |
 
-### 2. Configure Environment Variables
+**Examples:**
+```bash
+# Install globally for all projects (recommended)
+./scripts/install_hooks.sh --both --global
+
+# Install only Claude Code hooks globally
+./scripts/install_hooks.sh --claude --global
+
+# Install to current project directory only
+./scripts/install_hooks.sh --both --local
+```
+
+### Uninstall Hooks
+
+```bash
+# Uninstall global hooks
+./scripts/install_hooks.sh --both --global --uninstall
+
+# Uninstall only Claude Code hooks
+./scripts/install_hooks.sh --claude --global --uninstall
+
+# Uninstall only Codex CLI hooks
+./scripts/install_hooks.sh --codex --global --uninstall
+```
+
+### Configure Environment Variables
 
 Add to your shell profile (`~/.bashrc` or `~/.zshrc`):
 
@@ -221,19 +248,18 @@ codex_hooks = true
 
 ## Uninstalling
 
-Remove the hooks configuration:
+Run the uninstall command:
 
 ```bash
-# For Claude Code
-rm -rf .claude/hooks/tokenleague.py
-# Edit .claude/settings.json to remove TokenLeague hooks
-
-# For Codex CLI
-rm -rf .codex/hooks/tokenleague.py
-# Edit .codex/hooks.json to remove TokenLeague hooks
+./scripts/install_hooks.sh --both --global --uninstall
 ```
 
-Remove environment variables from your shell profile.
+The uninstaller will:
+- Remove `tokenleague.py` and `tokenleague.env.example` files
+- Remove TokenLeague hooks from `settings.json` / `hooks.json`
+- Preserve other hooks and configurations
+
+To completely remove TokenLeague, also remove the environment variables from your shell profile (`~/.bashrc` or `~/.zshrc`).
 
 ## API Reference
 
