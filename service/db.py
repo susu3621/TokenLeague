@@ -73,6 +73,12 @@ def _normalize_metadata(metadata: Any) -> dict[str, Any]:
     return {}
 
 
+def _normalize_datetime_fields(record: dict[str, Any], *fields: str) -> dict[str, Any]:
+    for field in fields:
+        record[field] = _parse_datetime(record.get(field))
+    return record
+
+
 def _public_user(user: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": user["id"],
@@ -620,11 +626,11 @@ def _within_window(event_time: datetime | None, window: str, now: datetime) -> b
 
 
 def _prompt_event_time(event: dict[str, Any]) -> datetime | None:
-    return event.get("prompt_finished_at") or event.get("prompt_started_at")
+    return _parse_datetime(event.get("prompt_finished_at") or event.get("prompt_started_at"))
 
 
 def _task_run_time(task_run: dict[str, Any]) -> datetime | None:
-    return task_run.get("finished_at") or task_run.get("started_at")
+    return _parse_datetime(task_run.get("finished_at") or task_run.get("started_at"))
 
 
 def _build_leaderboard_rows(
@@ -708,6 +714,7 @@ def _fetch_prompt_events_from_db() -> list[dict[str, Any]]:
     cursor.close()
     conn.close()
     for row in rows:
+        _normalize_datetime_fields(row, "prompt_started_at", "prompt_finished_at")
         row["metadata"] = json.loads(row.pop("metadata_json") or "{}")
     return rows
 
@@ -727,6 +734,7 @@ def _fetch_task_runs_from_db() -> list[dict[str, Any]]:
     cursor.close()
     conn.close()
     for row in rows:
+        _normalize_datetime_fields(row, "started_at", "finished_at")
         row["metadata"] = json.loads(row.pop("metadata_json") or "{}")
     return rows
 

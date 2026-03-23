@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import os
 from pathlib import Path
+import sys
 from urllib.parse import urlparse
 
 from flask import Flask, abort, g, jsonify, redirect, render_template, request, session, url_for
@@ -96,6 +97,43 @@ def _missing_fields(payload: dict, required_fields: tuple[str, ...]) -> list[str
 
 def _json_error(message: str, status_code: int):
     return jsonify({"success": False, "error": message}), status_code
+
+
+def _log_ingest(
+    endpoint: str,
+    outcome: str,
+    *,
+    user=None,
+    payload: dict | None = None,
+    reason: str | None = None,
+    missing_fields: list[str] | None = None,
+):
+    parts = [f"ingest/{endpoint} {outcome}"]
+    if reason:
+        parts.append(f"reason={reason}")
+    if missing_fields:
+        parts.append(f"missing_fields={','.join(missing_fields)}")
+    if user:
+        parts.append(f"username={user['username']}")
+        parts.append(f"user_id={user['id']}")
+    if payload:
+        external_event_id = (payload.get("external_event_id") or "").strip()
+        external_task_id = (payload.get("external_task_id") or "").strip()
+        agent_type = (payload.get("agent_type") or "").strip()
+        agent_version = (payload.get("agent_version") or "").strip()
+        model_name = (payload.get("model_name") or "").strip()
+        if external_event_id:
+            parts.append(f"external_event_id={external_event_id}")
+        if external_task_id:
+            parts.append(f"external_task_id={external_task_id}")
+        if agent_type:
+            parts.append(f"agent_type={agent_type}")
+        if agent_version:
+            parts.append(f"agent_version={agent_version}")
+        if model_name:
+            parts.append(f"model_name={model_name}")
+    parts.append(f"remote_addr={request.remote_addr or '-'}")
+    print(" ".join(parts), file=sys.stderr, flush=True)
 
 
 @app.before_request
@@ -350,6 +388,7 @@ def api_ingest_prompt_event():
     """Create prompt event usage record"""
     user = _hook_user()
     if not user:
+        _log_ingest("prompt-event", "rejected", reason="invalid_hook_key")
         return _json_error("Valid hook key is required", 401)
 
     data = request.get_json(silent=True) or {}
@@ -368,9 +407,18 @@ def api_ingest_prompt_event():
         ),
     )
     if missing_fields:
+        _log_ingest(
+            "prompt-event",
+            "rejected",
+            user=user,
+            payload=data,
+            reason="missing_fields",
+            missing_fields=missing_fields,
+        )
         return _json_error(f"Missing required fields: {', '.join(missing_fields)}", 400)
 
     event = db.upsert_prompt_event(user["id"], data)
+    _log_ingest("prompt-event", "accepted", user=user, payload=event)
     return jsonify({"success": True, "event": {"external_event_id": event["external_event_id"]}})
 
 
@@ -379,6 +427,7 @@ def api_ingest_task_run():
     """Create task run usage record"""
     user = _hook_user()
     if not user:
+        _log_ingest("task-run", "rejected", reason="invalid_hook_key")
         return _json_error("Valid hook key is required", 401)
 
     data = request.get_json(silent=True) or {}
@@ -397,9 +446,18 @@ def api_ingest_task_run():
         ),
     )
     if missing_fields:
+        _log_ingest(
+            "task-run",
+            "rejected",
+            user=user,
+            payload=data,
+            reason="missing_fields",
+            missing_fields=missing_fields,
+        )
         return _json_error(f"Missing required fields: {', '.join(missing_fields)}", 400)
 
     task_run = db.upsert_task_run(user["id"], data)
+    _log_ingest("task-run", "accepted", user=user, payload=task_run)
     return jsonify({"success": True, "task_run": {"external_task_id": task_run["external_task_id"]}})
 
 

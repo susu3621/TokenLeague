@@ -78,6 +78,105 @@ def test_prompt_ingest_requires_valid_hook_key(client):
     assert response.status_code == 401
 
 
+def test_prompt_ingest_logs_rejection_reason(client, capsys):
+    now = datetime.now(timezone.utc)
+
+    response = client.post(
+        "/api/ingest/prompt-event",
+        json=_prompt_payload("event-log-reject", now),
+    )
+
+    assert response.status_code == 401
+    stderr = capsys.readouterr().err
+    assert "ingest/prompt-event rejected" in stderr
+    assert "reason=invalid_hook_key" in stderr
+
+
+def test_prompt_ingest_logs_success(auth_session, capsys):
+    from db import create_user
+
+    alice = create_user("alice", "secret123", display_name="Alice")
+    now = datetime.now(timezone.utc)
+
+    response = auth_session.post(
+        "/api/ingest/prompt-event",
+        headers={"X-Hook-Key": alice["hook_key"]},
+        json=_prompt_payload("event-log-success", now),
+    )
+
+    assert response.status_code == 200
+    stderr = capsys.readouterr().err
+    assert "ingest/prompt-event accepted" in stderr
+    assert "username=alice" in stderr
+    assert "external_event_id=event-log-success" in stderr
+
+
+def test_task_run_ingest_logs_success(auth_session, capsys):
+    from db import create_user
+
+    alice = create_user("alice", "secret123", display_name="Alice")
+    now = datetime.now(timezone.utc)
+
+    response = auth_session.post(
+        "/api/ingest/task-run",
+        headers={"X-Hook-Key": alice["hook_key"]},
+        json=_task_payload("task-log-success", now),
+    )
+
+    assert response.status_code == 200
+    stderr = capsys.readouterr().err
+    assert "ingest/task-run accepted" in stderr
+    assert "username=alice" in stderr
+    assert "external_task_id=task-log-success" in stderr
+
+
+def test_leaderboard_handles_naive_datetimes_from_db(monkeypatch):
+    import db
+
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    naive_now = now.replace(tzinfo=None)
+
+    monkeypatch.setattr(db, "use_in_memory_store", lambda: False)
+    monkeypatch.setattr(
+        db,
+        "_fetch_prompt_events_from_db",
+        lambda: [
+            {
+                "user_id": 1,
+                "task_id": "task-1",
+                "external_event_id": "event-1",
+                "prompt_started_at": naive_now,
+                "prompt_finished_at": naive_now,
+                "input_token_count": 10,
+                "output_token_count": 5,
+                "total_token_count": 15,
+                "duration_ms": 0,
+                "agent_type": "claude-code",
+                "agent_version": "2.1.81",
+                "model_name": "glm-5",
+                "status": "completed",
+                "metadata": {},
+            }
+        ],
+    )
+    monkeypatch.setattr(db, "_fetch_task_runs_from_db", lambda: [])
+    monkeypatch.setattr(
+        db,
+        "get_user_by_id",
+        lambda user_id: {
+            "id": user_id,
+            "username": "admin",
+            "display_name": "Admin",
+            "status": db.USER_ACTIVE,
+        },
+    )
+
+    rows = db.get_leaderboard(window="all")
+
+    assert rows[0]["username"] == "admin"
+    assert rows[0]["total_token_count"] == 15
+
+
 def test_ingest_events_feed_leaderboard_filters_and_user_stats(auth_session):
     from db import create_user
 
