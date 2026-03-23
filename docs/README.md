@@ -1,8 +1,16 @@
-# Template Project Docs
+# TokenLeague Documentation
 
-Use this directory as the base for your next project.
+TokenLeague is a token usage leaderboard application for tracking AI assistant usage.
 
-这个文档目录是新项目的站内文档起点，建议先把项目目标、模块边界、运行方式和迁移规则写在这里。
+## Available Documentation
+
+- **[Hooks Guide](HOOKS.md)** - Setup statistics hooks for Claude Code and Codex CLI
+
+## Quick Links
+
+- **API List**: `/api` - View all available API endpoints
+- **Leaderboard**: `/leaderboard` - Token usage rankings
+- **Admin Panel**: `/admin/users` - User management
 
 ## What this template includes
 

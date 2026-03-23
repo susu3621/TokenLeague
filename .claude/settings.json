@@ -1,0 +1,43 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PROJECT_DIR}/.claude/hooks/tokenleague.py",
+            "timeout": 5000,
+            "async": true,
+            "statusMessage": "TokenLeague: Initializing session"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PROJECT_DIR}/.claude/hooks/tokenleague.py",
+            "timeout": 5000,
+            "async": true,
+            "statusMessage": "TokenLeague: Recording usage"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PROJECT_DIR}/.claude/hooks/tokenleague.py",
+            "timeout": 5000,
+            "async": true,
+            "statusMessage": "TokenLeague: Finalizing session"
+          }
+        ]
+      }
+    ]
+  }
+}
