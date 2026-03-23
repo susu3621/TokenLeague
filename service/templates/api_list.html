@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}API List | Template Project{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h1 style="margin-top: 0;">API List</h1>
+    <p class="muted">This page is generated from the Flask route table.</p>
+    <table>
+        <thead>
+            <tr>
+                <th>Methods</th>
+                <th>Endpoint</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for api in apis %}
+            <tr>
+                <td>{{ api.methods | join(", ") }}</td>
+                <td><code>{{ api.endpoint }}</code></td>
+                <td>{{ api.description }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

@@ -1,0 +1,11 @@
+services:
+  web:
+    build: .
+    env_file:
+      - .env
+    restart: unless-stopped
+    environment:
+      MY_FLASK_SECRET_KEY: ${MY_FLASK_SECRET_KEY:-change-me}
+      PORT: 5006
+    ports:
+      - "5006:5006"

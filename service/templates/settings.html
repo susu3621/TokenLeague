@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Settings | {{ project_title }}{% endblock %}
+
+{% block content %}
+<section class="stack">
+    <div class="card">
+        <h1 style="margin-top: 0;">League Settings</h1>
+        <p class="muted">Configure the TokenLeague shell title and subtitle shown across the authenticated pages.</p>
+        {% if message %}
+        <p style="color: #027a48;">{{ message }}</p>
+        {% endif %}
+        <form method="POST" class="stack">
+            <div>
+                <label for="project_title">Project title</label>
+                <input id="project_title" name="project_title" value="{{ project_title }}">
+            </div>
+            <div>
+                <label for="project_subtitle">Project subtitle</label>
+                <input id="project_subtitle" name="project_subtitle" value="{{ project_subtitle }}">
+            </div>
+            <button class="btn-primary" type="submit">Save</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-top: 0;">Current Users</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Display Name</th>
+                    <th>Username</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>{{ user.id }}</td>
+                    <td>{{ user.display_name }}</td>
+                    <td>{{ user.username }}</td>
+                    <td>{{ user.role }}</td>
+                    <td>{{ user.status }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

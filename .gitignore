@@ -1,0 +1,129 @@
+# 多平台评论爬取工具 .gitignore 文件
+.specstory
+crawler/MediaCrawler/MediaCrawlerPro-Downloader/
+crawler/MediaCrawler/MediaCrawlerPro-Python/
+crawler/MediaCrawler/MediaCrawlerPro-SignSrv/
+
+# Python相关
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+venv/
+env/
+ENV/
+.env
+.venv
+env.bak/
+venv.bak/
+virtualenv/
+
+# IDE相关
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+.classpath
+*.sublime-workspace
+*.sublime-project
+
+# 系统相关
+.DS_Store
+Thumbs.db
+desktop.ini
+.directory
+
+# 日志文件
+logs/
+*.log
+log.txt
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 数据文件 - 可能包含大量或敏感数据
+data/
+/raw/
+/processed/
+/exports/
+*.csv
+*.xlsx
+!industry_research/industries/*/source/*.xlsx
+!industry_research/industries/*/workbooks/*.xlsx
+*.xls
+*.db
+*.sqlite3
+*.bak
+
+# 配置文件 - 可能包含敏感信息
+config/*.local.yaml
+config/*.local.json
+config/settings.local.*
+*.env
+
+# 数据库相关
+*.sql
+*.sqlite
+*.db-journal
+
+# 爬虫相关
+.scrapy/
+dbs/
+.scrapyd/
+twistd.pid
+
+# 浏览器自动化相关
+chromedriver
+geckodriver
+drivers/
+
+# 临时文件
+tmp/
+temp/
+.tmp/
+.temp/
+*.tmp
+*.temp
+
+# 测试相关
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.pytest_cache/
+coverage.xml
+*.cover
+.coverage.*
+
+# 其他
+.ipynb_checkpoints
+*.ipynb
+
+# 保留空文件夹的 .gitkeep 文件（一般用于保持文件夹结构）
+!.gitkeep
+
+# Git worktrees
+.worktrees/ 

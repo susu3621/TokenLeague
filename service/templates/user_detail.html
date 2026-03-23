@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}{{ stats.user.display_name }} | {{ project_title }}{% endblock %}
+
+{% block content %}
+<section class="stack">
+    <div class="card">
+        <h1 class="hero-title">{{ stats.user.display_name }}</h1>
+        <p class="muted" style="margin-top: 10px;">User detail for {{ stats.user.username }} within the selected {{ window }} window.</p>
+        <table>
+            <tbody>
+                <tr><th>Total Token</th><td>{{ stats.summary.total_token_count }}</td></tr>
+                <tr><th>Prompt Count</th><td>{{ stats.summary.prompt_count }}</td></tr>
+                <tr><th>Task Count</th><td>{{ stats.summary.task_count }}</td></tr>
+                <tr><th>Average Token / Prompt</th><td>{{ "%.2f"|format(stats.summary.avg_token_per_prompt) }}</td></tr>
+                <tr><th>Last Active</th><td>{{ stats.summary.last_active_at or '-' }}</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-top: 0;">Agent Breakdown</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Agent Type</th>
+                    <th>Version</th>
+                    <th>Model</th>
+                    <th>Total Token</th>
+                    <th>Prompts</th>
+                    <th>Tasks</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in stats.agent_breakdown %}
+                <tr>
+                    <td>{{ row.agent_type }}</td>
+                    <td>{{ row.agent_version }}</td>
+                    <td>{{ row.model_name }}</td>
+                    <td>{{ row.total_token_count }}</td>
+                    <td>{{ row.prompt_count }}</td>
+                    <td>{{ row.task_count }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="muted">No data in this window.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-top: 0;">Recent Prompt Events</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Event</th>
+                    <th>Task</th>
+                    <th>Total Token</th>
+                    <th>Model</th>
+                    <th>Completed At</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in stats.recent_prompt_events %}
+                <tr>
+                    <td>{{ row.external_event_id }}</td>
+                    <td>{{ row.task_id }}</td>
+                    <td>{{ row.total_token_count }}</td>
+                    <td>{{ row.model_name }}</td>
+                    <td>{{ row.prompt_finished_at or '-' }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="muted">No prompt events recorded.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

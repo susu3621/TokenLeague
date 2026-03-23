@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Docs | Template Project{% endblock %}
+
+{% block styles %}
+<style>
+    .docs-layout {
+        display: grid;
+        grid-template-columns: 240px 1fr;
+        gap: 20px;
+    }
+
+    .docs-sidebar ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .docs-sidebar li + li {
+        margin-top: 8px;
+    }
+
+    .docs-sidebar a {
+        color: var(--muted);
+        text-decoration: none;
+    }
+
+    .docs-content pre {
+        overflow-x: auto;
+        background: #111827;
+        color: #f9fafb;
+        padding: 14px;
+        border-radius: 10px;
+    }
+    @media (max-width: 760px) {
+        .docs-layout {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="docs-layout">
+    <aside class="card docs-sidebar">
+        <h2 style="margin-top: 0;">Documents</h2>
+        <ul>
+            {% for doc in doc_list %}
+            <li><a href="{{ url_for('docs_page', filepath=doc.path) }}">{{ doc.title }}</a></li>
+            {% endfor %}
+        </ul>
+    </aside>
+    <article class="card docs-content">
+        <div id="docs-content"></div>
+    </article>
+</section>
+
+<script id="raw-markdown" type="text/plain">{{ raw_markdown }}</script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+    (function () {
+        var raw = document.getElementById("raw-markdown").textContent;
+        var target = document.getElementById("docs-content");
+        if (window.marked && raw.trim()) {
+            target.innerHTML = marked.parse(raw);
+        } else {
+            target.textContent = raw;
+        }
+    }());
+</script>
+{% endblock %}

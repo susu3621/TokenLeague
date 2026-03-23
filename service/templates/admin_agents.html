@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Agent Catalog | {{ project_title }}{% endblock %}
+
+{% block content %}
+<section class="stack">
+    <div class="card">
+        <h1 class="hero-title">Agent Catalog</h1>
+        <p class="muted" style="margin-top: 10px;">Observed combinations of agent type, version, and model from usage ingestion.</p>
+    </div>
+
+    <div class="card">
+        <table>
+            <thead>
+                <tr>
+                    <th>Agent Type</th>
+                    <th>Version</th>
+                    <th>Model</th>
+                    <th>Prompt Events</th>
+                    <th>Task Runs</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for agent in agents %}
+                <tr>
+                    <td>{{ agent.agent_type }}</td>
+                    <td>{{ agent.agent_version }}</td>
+                    <td>{{ agent.model_name }}</td>
+                    <td>{{ agent.prompt_event_count }}</td>
+                    <td>{{ agent.task_run_count }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="muted">No agent activity recorded yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

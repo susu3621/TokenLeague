@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Leaderboard | {{ project_title }}{% endblock %}
+
+{% block content %}
+<section class="stack">
+    <div class="card">
+        <h1 class="hero-title">Token Leaderboard</h1>
+        <p class="muted" style="margin-top: 10px;">Main ranking is ordered by total token consumption. Use filters to inspect specific agent types, versions, or models.</p>
+        <form method="GET" class="stack" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end;">
+            <div>
+                <label for="window">Window</label>
+                <select id="window" name="window" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;">
+                    <option value="day" {% if window == 'day' %}selected{% endif %}>Day</option>
+                    <option value="week" {% if window == 'week' %}selected{% endif %}>Week</option>
+                    <option value="all" {% if window == 'all' %}selected{% endif %}>All Time</option>
+                </select>
+            </div>
+            <div>
+                <label for="agent_type">Agent Type</label>
+                <input id="agent_type" name="agent_type" value="{{ filters.get('agent_type', '') }}" placeholder="codex">
+            </div>
+            <div>
+                <label for="agent_version">Agent Version</label>
+                <input id="agent_version" name="agent_version" value="{{ filters.get('agent_version', '') }}" placeholder="1.0.0">
+            </div>
+            <div>
+                <label for="model_name">Model</label>
+                <input id="model_name" name="model_name" value="{{ filters.get('model_name', '') }}" placeholder="gpt-5.4">
+            </div>
+            <div>
+                <button class="btn-primary" type="submit">Apply Filters</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <table>
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>User</th>
+                    <th>Total Token</th>
+                    <th>Prompts</th>
+                    <th>Tasks</th>
+                    <th>Total Duration (ms)</th>
+                    <th>Last Active</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    <td>{{ row.rank }}</td>
+                    <td><a href="{{ url_for('user_detail', user_id=row.user_id, window=window, agent_type=filters.get('agent_type', ''), agent_version=filters.get('agent_version', ''), model_name=filters.get('model_name', '')) }}">{{ row.display_name }}</a><div class="muted">{{ row.username }}</div></td>
+                    <td>{{ row.total_token_count }}</td>
+                    <td>{{ row.prompt_count }}</td>
+                    <td>{{ row.task_count }}</td>
+                    <td>{{ row.total_duration_ms }}</td>
+                    <td>{{ row.last_active_at or '-' }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="muted">No usage data has been reported yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
