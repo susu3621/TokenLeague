@@ -303,10 +303,12 @@ def create_user(
     cursor.execute(
         """
         INSERT INTO users (
-            username, display_name, password_hash, role, status, hook_key, hook_key_created_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            username, display_name, password_hash, role, status, hook_key,
+            hook_key_created_at, created_at, updated_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
-        (username, display_name, password_hash, role, status, hook_key, now.replace(tzinfo=None)),
+        (username, display_name, password_hash, role, status, hook_key,
+         now.replace(tzinfo=None), now.replace(tzinfo=None), now.replace(tzinfo=None)),
     )
     conn.commit()
     user_id = cursor.lastrowid
@@ -317,20 +319,21 @@ def create_user(
 
 def update_user_password(user_id: int, new_password: str) -> None:
     password_hash = generate_password_hash(new_password)
+    now = _utcnow()
 
     if use_in_memory_store():
         user = _find_memory_user(lambda item: item["id"] == user_id)
         if not user:
             raise ValueError("User not found")
         user["password_hash"] = password_hash
-        user["updated_at"] = _utcnow()
+        user["updated_at"] = now
         return
 
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "UPDATE users SET password_hash = %s WHERE id = %s",
-        (password_hash, user_id),
+        "UPDATE users SET password_hash = %s, updated_at = %s WHERE id = %s",
+        (password_hash, now.replace(tzinfo=None), user_id),
     )
     conn.commit()
     cursor.close()
@@ -370,17 +373,22 @@ def set_user_status(user_id: int, status: str) -> None:
     if status not in {USER_ACTIVE, USER_DISABLED}:
         raise ValueError("Invalid status")
 
+    now = _utcnow()
+
     if use_in_memory_store():
         user = _find_memory_user(lambda item: item["id"] == user_id)
         if not user:
             raise ValueError("User not found")
         user["status"] = status
-        user["updated_at"] = _utcnow()
+        user["updated_at"] = now
         return
 
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET status = %s WHERE id = %s", (status, user_id))
+    cursor.execute(
+        "UPDATE users SET status = %s, updated_at = %s WHERE id = %s",
+        (status, now.replace(tzinfo=None), user_id),
+    )
     conn.commit()
     cursor.close()
     conn.close()
@@ -407,15 +415,16 @@ def set_setting(key: str, value: str) -> None:
         _memory_settings[key] = value
         return
 
+    now = _utcnow()
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
         """
-        INSERT INTO system_settings (setting_key, setting_value)
-        VALUES (%s, %s)
-        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+        INSERT INTO system_settings (setting_key, setting_value, updated_at)
+        VALUES (%s, %s, %s)
+        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)
         """,
-        (key, value),
+        (key, value, now.replace(tzinfo=None)),
     )
     conn.commit()
     cursor.close()
@@ -483,6 +492,7 @@ def _normalize_task_run(user_id: int, payload: dict[str, Any]) -> dict[str, Any]
 
 def upsert_prompt_event(user_id: int, payload: dict[str, Any]):
     event = _normalize_prompt_event(user_id, payload)
+    now = _utcnow()
 
     if use_in_memory_store():
         for index, existing in enumerate(_memory_prompt_events):
@@ -491,9 +501,11 @@ def upsert_prompt_event(user_id: int, payload: dict[str, Any]):
                 and existing["external_event_id"] == event["external_event_id"]
             ):
                 event["created_at"] = existing["created_at"]
+                event["updated_at"] = now
                 _memory_prompt_events[index] = {**existing, **event}
                 return dict(_memory_prompt_events[index])
-        event["created_at"] = _utcnow()
+        event["created_at"] = now
+        event["updated_at"] = now
         _memory_prompt_events.append(event)
         return dict(event)
 
@@ -504,8 +516,8 @@ def upsert_prompt_event(user_id: int, payload: dict[str, Any]):
         INSERT INTO prompt_events (
             user_id, task_id, external_event_id, project_name, prompt_started_at, prompt_finished_at,
             input_token_count, output_token_count, total_token_count, duration_ms,
-            agent_type, agent_version, model_name, status, metadata_json
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            agent_type, agent_version, model_name, status, metadata_json, created_at, updated_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
             task_id = VALUES(task_id),
             project_name = VALUES(project_name),
@@ -519,7 +531,8 @@ def upsert_prompt_event(user_id: int, payload: dict[str, Any]):
             agent_version = VALUES(agent_version),
             model_name = VALUES(model_name),
             status = VALUES(status),
-            metadata_json = VALUES(metadata_json)
+            metadata_json = VALUES(metadata_json),
+            updated_at = VALUES(updated_at)
         """,
         (
             user_id,
@@ -537,16 +550,20 @@ def upsert_prompt_event(user_id: int, payload: dict[str, Any]):
             event["model_name"],
             event["status"],
             json.dumps(event["metadata"]),
+            now.replace(tzinfo=None),
+            now.replace(tzinfo=None),
         ),
     )
     conn.commit()
     cursor.close()
     conn.close()
+    event["created_at"] = now
     return event
 
 
 def upsert_task_run(user_id: int, payload: dict[str, Any]):
     task_run = _normalize_task_run(user_id, payload)
+    now = _utcnow()
 
     if use_in_memory_store():
         for index, existing in enumerate(_memory_task_runs):
@@ -555,9 +572,11 @@ def upsert_task_run(user_id: int, payload: dict[str, Any]):
                 and existing["external_task_id"] == task_run["external_task_id"]
             ):
                 task_run["created_at"] = existing["created_at"]
+                task_run["updated_at"] = now
                 _memory_task_runs[index] = {**existing, **task_run}
                 return dict(_memory_task_runs[index])
-        task_run["created_at"] = _utcnow()
+        task_run["created_at"] = now
+        task_run["updated_at"] = now
         _memory_task_runs.append(task_run)
         return dict(task_run)
 
@@ -568,8 +587,8 @@ def upsert_task_run(user_id: int, payload: dict[str, Any]):
         INSERT INTO task_runs (
             user_id, task_id, external_task_id, project_name, started_at, finished_at, prompt_count,
             input_token_count, output_token_count, total_token_count, total_duration_ms,
-            agent_type, agent_version, model_name, status, metadata_json
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            agent_type, agent_version, model_name, status, metadata_json, created_at, updated_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
             task_id = VALUES(task_id),
             project_name = VALUES(project_name),
@@ -584,7 +603,8 @@ def upsert_task_run(user_id: int, payload: dict[str, Any]):
             agent_version = VALUES(agent_version),
             model_name = VALUES(model_name),
             status = VALUES(status),
-            metadata_json = VALUES(metadata_json)
+            metadata_json = VALUES(metadata_json),
+            updated_at = VALUES(updated_at)
         """,
         (
             user_id,
@@ -603,11 +623,14 @@ def upsert_task_run(user_id: int, payload: dict[str, Any]):
             task_run["model_name"],
             task_run["status"],
             json.dumps(task_run["metadata"]),
+            now.replace(tzinfo=None),
+            now.replace(tzinfo=None),
         ),
     )
     conn.commit()
     cursor.close()
     conn.close()
+    task_run["created_at"] = now
     return task_run
 
 
@@ -921,3 +944,187 @@ def list_agent_catalog() -> list[dict[str, Any]]:
     rows = list(catalog.values())
     rows.sort(key=lambda item: (item["agent_type"], item["agent_version"], item["model_name"]))
     return rows
+
+
+def get_user_project_breakdown(user_id: int, window: str = "all") -> list[dict[str, Any]]:
+    """Get user token statistics grouped by project."""
+    now = _utcnow()
+
+    if use_in_memory_store():
+        prompt_events = list(_memory_prompt_events)
+        task_runs = list(_memory_task_runs)
+    else:
+        prompt_events = _fetch_prompt_events_from_db()
+        task_runs = _fetch_task_runs_from_db()
+
+    matching_events = [
+        event
+        for event in prompt_events
+        if event["user_id"] == user_id
+        and _within_window(_prompt_event_time(event), window, now)
+    ]
+
+    task_counts: dict[str, int] = defaultdict(int)
+    for task_run in task_runs:
+        if task_run["user_id"] != user_id:
+            continue
+        if not _within_window(_task_run_time(task_run), window, now):
+            continue
+        project = task_run.get("project_name") or ""
+        task_counts[project] += 1
+
+    project_groups: dict[str, dict[str, Any]] = {}
+    for event in matching_events:
+        project = event.get("project_name") or ""
+        group = project_groups.setdefault(
+            project,
+            {
+                "project_name": project or "(unknown)",
+                "total_token_count": 0,
+                "input_token_count": 0,
+                "output_token_count": 0,
+                "prompt_count": 0,
+                "task_count": 0,
+            },
+        )
+        group["total_token_count"] += event["total_token_count"]
+        group["input_token_count"] += event["input_token_count"]
+        group["output_token_count"] += event["output_token_count"]
+        group["prompt_count"] += 1
+
+    for project, count in task_counts.items():
+        if project in project_groups:
+            project_groups[project]["task_count"] = count
+        else:
+            project_groups[project] = {
+                "project_name": project or "(unknown)",
+                "total_token_count": 0,
+                "input_token_count": 0,
+                "output_token_count": 0,
+                "prompt_count": 0,
+                "task_count": count,
+            }
+
+    result = list(project_groups.values())
+    result.sort(key=lambda item: (-item["total_token_count"], item["project_name"]))
+    return result
+
+
+def get_user_model_breakdown(user_id: int, window: str = "all") -> list[dict[str, Any]]:
+    """Get user token statistics grouped by model."""
+    now = _utcnow()
+
+    if use_in_memory_store():
+        prompt_events = list(_memory_prompt_events)
+        task_runs = list(_memory_task_runs)
+    else:
+        prompt_events = _fetch_prompt_events_from_db()
+        task_runs = _fetch_task_runs_from_db()
+
+    matching_events = [
+        event
+        for event in prompt_events
+        if event["user_id"] == user_id
+        and _within_window(_prompt_event_time(event), window, now)
+    ]
+
+    task_counts: dict[str, int] = defaultdict(int)
+    for task_run in task_runs:
+        if task_run["user_id"] != user_id:
+            continue
+        if not _within_window(_task_run_time(task_run), window, now):
+            continue
+        model = task_run.get("model_name") or ""
+        task_counts[model] += 1
+
+    model_groups: dict[str, dict[str, Any]] = {}
+    for event in matching_events:
+        model = event.get("model_name") or ""
+        group = model_groups.setdefault(
+            model,
+            {
+                "model_name": model or "(unknown)",
+                "total_token_count": 0,
+                "input_token_count": 0,
+                "output_token_count": 0,
+                "prompt_count": 0,
+                "task_count": 0,
+            },
+        )
+        group["total_token_count"] += event["total_token_count"]
+        group["input_token_count"] += event["input_token_count"]
+        group["output_token_count"] += event["output_token_count"]
+        group["prompt_count"] += 1
+
+    for model, count in task_counts.items():
+        if model in model_groups:
+            model_groups[model]["task_count"] = count
+        else:
+            model_groups[model] = {
+                "model_name": model or "(unknown)",
+                "total_token_count": 0,
+                "input_token_count": 0,
+                "output_token_count": 0,
+                "prompt_count": 0,
+                "task_count": count,
+            }
+
+    result = list(model_groups.values())
+    result.sort(key=lambda item: (-item["total_token_count"], item["model_name"]))
+    return result
+
+
+def get_user_time_series(
+    user_id: int, window: str = "all", granularity: str = "hour"
+) -> list[dict[str, Any]]:
+    """Get user token usage timeline grouped by time bucket."""
+    now = _utcnow()
+
+    if granularity not in ("hour", "day", "week"):
+        granularity = "hour"
+
+    if use_in_memory_store():
+        prompt_events = list(_memory_prompt_events)
+    else:
+        prompt_events = _fetch_prompt_events_from_db()
+
+    matching_events = [
+        event
+        for event in prompt_events
+        if event["user_id"] == user_id
+        and _within_window(_prompt_event_time(event), window, now)
+    ]
+
+    def _bucket_key(event_time: datetime | None) -> str:
+        if event_time is None:
+            return "unknown"
+        if granularity == "hour":
+            return event_time.strftime("%Y-%m-%d %H:00")
+        elif granularity == "day":
+            return event_time.strftime("%Y-%m-%d")
+        else:  # week
+            iso = event_time.isocalendar()
+            return f"{iso[0]}-W{iso[1]:02d}"
+
+    time_buckets: dict[str, dict[str, Any]] = {}
+    for event in matching_events:
+        event_time = _prompt_event_time(event)
+        bucket = _bucket_key(event_time)
+        group = time_buckets.setdefault(
+            bucket,
+            {
+                "time_bucket": bucket,
+                "total_token_count": 0,
+                "input_token_count": 0,
+                "output_token_count": 0,
+                "prompt_count": 0,
+            },
+        )
+        group["total_token_count"] += event["total_token_count"]
+        group["input_token_count"] += event["input_token_count"]
+        group["output_token_count"] += event["output_token_count"]
+        group["prompt_count"] += 1
+
+    result = list(time_buckets.values())
+    result.sort(key=lambda item: item["time_bucket"])
+    return result

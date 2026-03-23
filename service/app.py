@@ -494,6 +494,55 @@ def api_user_stats(user_id: int):
     return jsonify(stats)
 
 
+@app.route("/api/users/<int:user_id>/projects")
+@auth_module.login_required
+def api_user_projects(user_id: int):
+    """Get user token statistics grouped by project"""
+    window = _requested_window()
+    user = db.get_user_by_id(user_id)
+    if not user:
+        return _json_error("User not found", 404)
+    return jsonify({
+        "success": True,
+        "window": window,
+        "projects": db.get_user_project_breakdown(user_id, window=window),
+    })
+
+
+@app.route("/api/users/<int:user_id>/models")
+@auth_module.login_required
+def api_user_models(user_id: int):
+    """Get user token statistics grouped by model"""
+    window = _requested_window()
+    user = db.get_user_by_id(user_id)
+    if not user:
+        return _json_error("User not found", 404)
+    return jsonify({
+        "success": True,
+        "window": window,
+        "models": db.get_user_model_breakdown(user_id, window=window),
+    })
+
+
+@app.route("/api/users/<int:user_id>/timeline")
+@auth_module.login_required
+def api_user_timeline(user_id: int):
+    """Get user token usage timeline"""
+    window = _requested_window()
+    granularity = (request.args.get("granularity") or "hour").strip().lower()
+    if granularity not in ("hour", "day", "week"):
+        granularity = "hour"
+    user = db.get_user_by_id(user_id)
+    if not user:
+        return _json_error("User not found", 404)
+    return jsonify({
+        "success": True,
+        "window": window,
+        "granularity": granularity,
+        "timeline": db.get_user_time_series(user_id, window=window, granularity=granularity),
+    })
+
+
 @app.route("/api")
 @auth_module.login_required
 def api_list():

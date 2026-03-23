@@ -4,19 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{{ project_title }}{% endblock %}</title>
+    <!-- Manus Style: Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #f4f6fb;
+            /* Manus Color Palette - White, Gray, Black */
+            --bg: #fafafa;
             --panel: #ffffff;
-            --text: #1f2937;
+            --text: #111827;
             --muted: #6b7280;
-            --border: #dbe1ea;
-            --primary: #0f62fe;
+            --border: #e5e7eb;
+            --primary: #1f2937;
+            --accent: #374151;
+
+            /* Manus Typography */
+            --font-serif: 'Libre Baskerville', Georgia, serif;
+            --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
         }
 
         body {
             margin: 0;
-            font-family: "Segoe UI", sans-serif;
+            font-family: var(--font-sans);
             background: var(--bg);
             color: var(--text);
         }
@@ -67,6 +77,11 @@
         .hero-title {
             margin: 0;
             font-size: 2rem;
+            font-family: var(--font-serif);
+        }
+
+        h1, h2, h3 {
+            font-family: var(--font-serif);
         }
 
         .inline-form {
@@ -77,9 +92,8 @@
         .card {
             background: var(--panel);
             border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 20px;
-            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+            border-radius: 12px;
+            padding: 24px;
         }
 
         .btn-primary {

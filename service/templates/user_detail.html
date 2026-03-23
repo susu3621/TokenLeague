@@ -2,20 +2,110 @@
 
 {% block title %}{{ stats.user.display_name }} | {{ project_title }}{% endblock %}
 
+{% block styles %}
+<style>
+    .chart-container {
+        position: relative;
+        height: 300px;
+        width: 100%;
+    }
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 20px;
+    }
+    .stat-card {
+        background: var(--bg);
+        border-radius: 8px;
+        padding: 16px;
+        text-align: center;
+    }
+    .stat-value {
+        font-family: var(--font-serif);
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--text);
+    }
+    .stat-label {
+        color: var(--muted);
+        font-size: 0.875rem;
+        margin-top: 4px;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <section class="stack">
     <div class="card">
         <h1 class="hero-title">{{ stats.user.display_name }}</h1>
         <p class="muted" style="margin-top: 10px;">User detail for {{ stats.user.username }} within the selected {{ window }} window.</p>
-        <table>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">{{ "{:,}".format(stats.summary.total_token_count) }}</div>
+                <div class="stat-label">Total Tokens</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ "{:,}".format(stats.summary.prompt_count) }}</div>
+                <div class="stat-label">Prompts</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ "{:,}".format(stats.summary.task_count) }}</div>
+                <div class="stat-label">Tasks</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ "%.1f"|format(stats.summary.avg_token_per_prompt) }}</div>
+                <div class="stat-label">Avg Tokens / Prompt</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-top: 0;">Project Breakdown</h2>
+        <table id="project-table">
+            <thead>
+                <tr>
+                    <th>Project</th>
+                    <th>Total Token</th>
+                    <th>Input</th>
+                    <th>Output</th>
+                    <th>Prompts</th>
+                    <th>Tasks</th>
+                </tr>
+            </thead>
             <tbody>
-                <tr><th>Total Token</th><td>{{ stats.summary.total_token_count }}</td></tr>
-                <tr><th>Prompt Count</th><td>{{ stats.summary.prompt_count }}</td></tr>
-                <tr><th>Task Count</th><td>{{ stats.summary.task_count }}</td></tr>
-                <tr><th>Average Token / Prompt</th><td>{{ "%.2f"|format(stats.summary.avg_token_per_prompt) }}</td></tr>
-                <tr><th>Last Active</th><td>{{ stats.summary.last_active_at or '-' }}</td></tr>
+                <tr><td colspan="6" class="muted">Loading...</td></tr>
             </tbody>
         </table>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-top: 0;">Model Breakdown</h2>
+        <div class="chart-container">
+            <canvas id="model-chart"></canvas>
+        </div>
+        <table id="model-table" style="margin-top: 20px;">
+            <thead>
+                <tr>
+                    <th>Model</th>
+                    <th>Total Token</th>
+                    <th>Input</th>
+                    <th>Output</th>
+                    <th>Prompts</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td colspan="5" class="muted">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-top: 0;">Usage Timeline</h2>
+        <div class="chart-container">
+            <canvas id="timeline-chart"></canvas>
+        </div>
     </div>
 
     <div class="card">
@@ -37,9 +127,9 @@
                     <td>{{ row.agent_type }}</td>
                     <td>{{ row.agent_version }}</td>
                     <td>{{ row.model_name }}</td>
-                    <td>{{ row.total_token_count }}</td>
-                    <td>{{ row.prompt_count }}</td>
-                    <td>{{ row.task_count }}</td>
+                    <td>{{ "{:,}".format(row.total_token_count) }}</td>
+                    <td>{{ "{:,}".format(row.prompt_count) }}</td>
+                    <td>{{ "{:,}".format(row.task_count) }}</td>
                 </tr>
                 {% else %}
                 <tr>
@@ -56,6 +146,7 @@
             <thead>
                 <tr>
                     <th>Event</th>
+                    <th>Project</th>
                     <th>Task</th>
                     <th>Total Token</th>
                     <th>Model</th>
@@ -65,19 +156,183 @@
             <tbody>
                 {% for row in stats.recent_prompt_events %}
                 <tr>
-                    <td>{{ row.external_event_id }}</td>
-                    <td>{{ row.task_id }}</td>
-                    <td>{{ row.total_token_count }}</td>
+                    <td style="font-family: monospace; font-size: 0.875rem;">{{ row.external_event_id[:16] }}...</td>
+                    <td>{{ row.project_name }}</td>
+                    <td style="font-family: monospace; font-size: 0.875rem;">{{ row.task_id[:16] }}...</td>
+                    <td>{{ "{:,}".format(row.total_token_count) }}</td>
                     <td>{{ row.model_name }}</td>
-                    <td>{{ row.prompt_finished_at or '-' }}</td>
+                    <td data-utc-time="{{ row.prompt_finished_at or '' }}">{{ row.prompt_finished_at or '-' }}</td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="5" class="muted">No prompt events recorded.</td>
+                    <td colspan="6" class="muted">No prompt events recorded.</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </section>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+(function() {
+    const userId = {{ stats.user.id }};
+    const windowParam = '{{ window }}';
+
+    // Format number with commas
+    function formatNum(n) {
+        return n.toLocaleString();
+    }
+
+    // Convert UTC ISO string to local timezone string
+    function formatLocalTime(isoString) {
+        if (!isoString) return '-';
+        try {
+            const date = new Date(isoString);
+            if (isNaN(date.getTime())) return isoString;
+            return date.toLocaleString(navigator.language || 'en-US', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+        } catch {
+            return isoString;
+        }
+    }
+
+    // Convert all elements with data-utc-time attribute to local time
+    function convertUtcTimesToLocal() {
+        document.querySelectorAll('[data-utc-time]').forEach(el => {
+            const utcTime = el.getAttribute('data-utc-time');
+            if (utcTime) {
+                el.textContent = formatLocalTime(utcTime);
+            }
+        });
+    }
+
+    // Run conversion on page load
+    document.addEventListener('DOMContentLoaded', convertUtcTimesToLocal);
+
+    // Fetch project breakdown
+    fetch(`/api/users/${userId}/projects?window=${windowParam}`)
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.querySelector('#project-table tbody');
+            if (!data.projects || data.projects.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="muted">No project data.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.projects.map(p => `
+                <tr>
+                    <td>${p.project_name}</td>
+                    <td>${formatNum(p.total_token_count)}</td>
+                    <td>${formatNum(p.input_token_count)}</td>
+                    <td>${formatNum(p.output_token_count)}</td>
+                    <td>${formatNum(p.prompt_count)}</td>
+                    <td>${formatNum(p.task_count)}</td>
+                </tr>
+            `).join('');
+        });
+
+    // Fetch model breakdown and render chart
+    fetch(`/api/users/${userId}/models?window=${windowParam}`)
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.querySelector('#model-table tbody');
+            if (!data.models || data.models.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="muted">No model data.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.models.map(m => `
+                <tr>
+                    <td>${m.model_name}</td>
+                    <td>${formatNum(m.total_token_count)}</td>
+                    <td>${formatNum(m.input_token_count)}</td>
+                    <td>${formatNum(m.output_token_count)}</td>
+                    <td>${formatNum(m.prompt_count)}</td>
+                </tr>
+            `).join('');
+
+            // Render model chart
+            const ctx = document.getElementById('model-chart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.models.map(m => m.model_name),
+                    datasets: [
+                        {
+                            label: 'Input Tokens',
+                            data: data.models.map(m => m.input_token_count),
+                            backgroundColor: '#374151',
+                        },
+                        {
+                            label: 'Output Tokens',
+                            data: data.models.map(m => m.output_token_count),
+                            backgroundColor: '#9ca3af',
+                        }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    },
+                    scales: {
+                        x: { beginAtZero: true }
+                    }
+                }
+            });
+        });
+
+    // Fetch timeline and render chart
+    fetch(`/api/users/${userId}/timeline?window=${windowParam}&granularity=hour`)
+        .then(r => r.json())
+        .then(data => {
+            const ctx = document.getElementById('timeline-chart').getContext('2d');
+            if (!data.timeline || data.timeline.length === 0) {
+                ctx.font = '14px DM Sans';
+                ctx.fillStyle = '#6b7280';
+                ctx.textAlign = 'center';
+                ctx.fillText('No timeline data available', ctx.canvas.width / 2, ctx.canvas.height / 2);
+                return;
+            }
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.timeline.map(t => t.time_bucket),
+                    datasets: [{
+                        label: 'Total Tokens',
+                        data: data.timeline.map(t => t.total_token_count),
+                        borderColor: '#1f2937',
+                        backgroundColor: 'rgba(31, 41, 55, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        });
+})();
+</script>
 {% endblock %}
