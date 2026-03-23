@@ -1,8 +1,100 @@
-# Template Project Foundation
+# TokenLeague
 
-这个目录承载的是从当前项目抽取出来的、可复用于新项目的基础骨架，不包含当前仓库里已经绑定业务语义的模块。
+Token League 是一个 AI 助手 Token 使用量排行榜应用，用于追踪 Claude Code 和 Codex CLI 的使用统计。
 
-This directory packages a reusable foundation extracted from the current project without carrying over its business-specific modules.
+TokenLeague is a token usage leaderboard application for tracking AI assistant usage.
+
+## 功能特性
+
+- Token 使用量排行榜
+- 多用户支持
+- 支持 Claude Code 和 Codex CLI 统计
+- Web 管理界面
+
+## 快速开始
+
+### 1. 安装依赖
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. 配置环境变量
+
+复制 `.env.example` 到 `.env` 并配置：
+
+```bash
+cp .env.example .env
+```
+
+### 3. 初始化数据库
+
+```bash
+python3 scripts/init_db.py --admin-password <your-password>
+```
+
+### 4. 启动服务
+
+```bash
+python -m service.app
+```
+
+访问 `http://localhost:5006/login`
+
+默认测试账号：
+- username: `admin`
+- password: `admin123`
+
+## Hooks 安装
+
+TokenLeague 提供统计 hooks，自动追踪 Claude Code 和 Codex CLI 的 token 使用量。
+
+### 安装 Hooks
+
+```bash
+# 全局安装（推荐，所有项目生效）
+./scripts/install_hooks.sh --both --global
+
+# 仅安装 Claude Code hooks
+./scripts/install_hooks.sh --claude --global
+
+# 仅安装 Codex CLI hooks
+./scripts/install_hooks.sh --codex --global
+
+# 项目级安装（仅当前项目）
+./scripts/install_hooks.sh --both --local
+```
+
+### 配置环境变量
+
+安装后，在 `~/.bashrc` 或 `~/.zshrc` 中添加：
+
+```bash
+# 必需：你的 TokenLeague hook key（从管理面板获取）
+export TOKENLEAGUE_HOOK_KEY="your-hook-key-here"
+
+# 可选：API URL（默认 http://localhost:5006）
+export TOKENLEAGUE_API_URL="http://localhost:5006"
+```
+
+### 卸载 Hooks
+
+```bash
+# 卸载全局 hooks
+./scripts/install_hooks.sh --both --global --uninstall
+
+# 仅卸载 Claude Code hooks
+./scripts/install_hooks.sh --claude --global --uninstall
+
+# 仅卸载 Codex CLI hooks
+./scripts/install_hooks.sh --codex --global --uninstall
+```
+
+更多详情请参考 [docs/HOOKS.md](docs/HOOKS.md)。
+
+---
+
+## 模板说明 (Template Foundation)
 
 ## What this template keeps
 
