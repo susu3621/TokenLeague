@@ -36,6 +36,92 @@ INSTALL_GLOBAL=false
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
+write_codex_hooks_config() {
+    local target_path="$1"
+    local command_path="$2"
+
+    python3 - "$target_path" "$command_path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+target_path = Path(sys.argv[1])
+command_path = sys.argv[2]
+payload = {
+    "hooks": {
+        "UserPromptSubmit": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": command_path,
+                        "timeoutSec": 10,
+                        "statusMessage": "tracking TokenLeague usage",
+                    }
+                ]
+            }
+        ],
+        "Stop": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": command_path,
+                        "timeoutSec": 10,
+                    }
+                ]
+            }
+        ],
+    }
+}
+target_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
+ensure_codex_feature_flag() {
+    local config_dir="$HOME/.codex"
+    local config_path="$config_dir/config.toml"
+
+    mkdir -p "$config_dir"
+
+    python3 - "$config_path" <<'PY'
+import sys
+from pathlib import Path
+
+config_path = Path(sys.argv[1])
+lines = config_path.read_text(encoding="utf-8").splitlines() if config_path.exists() else []
+
+features_start = None
+features_end = len(lines)
+for index, line in enumerate(lines):
+    if line.strip() == "[features]":
+        features_start = index
+        features_end = len(lines)
+        for scan in range(index + 1, len(lines)):
+            stripped = lines[scan].strip()
+            if stripped.startswith("[") and stripped.endswith("]"):
+                features_end = scan
+                break
+        break
+
+if features_start is None:
+    if lines and lines[-1].strip():
+        lines.append("")
+    lines.extend(["[features]", "codex_hooks = true"])
+else:
+    updated = False
+    for index in range(features_start + 1, features_end):
+        if lines[index].strip().startswith("codex_hooks"):
+            lines[index] = "codex_hooks = true"
+            updated = True
+            break
+    if not updated:
+        lines.insert(features_end, "codex_hooks = true")
+
+config_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+PY
+}
+
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -146,13 +232,16 @@ install_codex_hooks() {
     # Copy env example
     cp "$PROJECT_ROOT/.codex/hooks/tokenleague.env.example" "$target_dir/hooks/tokenleague.env.example"
 
-    # Create or merge settings.json
-    if [[ -f "$target_dir/settings.json" ]]; then
-        echo -e "${YELLOW}  → Merging with existing settings.json${NC}"
-        echo -e "${YELLOW}  → Please manually merge hooks configuration if needed${NC}"
+    local command_path
+    local hooks_config_path="$target_dir/hooks.json"
+    if [[ "$INSTALL_GLOBAL" == "true" ]]; then
+        command_path="python3 $target_dir/hooks/tokenleague.py"
     else
-        cp "$PROJECT_ROOT/.codex/settings.json" "$target_dir/settings.json"
+        command_path="python3 .codex/hooks/tokenleague.py"
     fi
+
+    write_codex_hooks_config "$hooks_config_path" "$command_path"
+    ensure_codex_feature_flag
 
     echo -e "${GREEN}✓ Codex CLI hooks installed successfully${NC}"
 }
@@ -199,7 +288,7 @@ fi
 if [[ "$INSTALL_CODEX" == "true" ]]; then
     echo -e "To test Codex CLI hooks:"
     echo "  1. Start TokenLeague: cd $PROJECT_ROOT && python -m service.app"
-    echo "  2. Run: codex -c features.codex_hooks=true"
+    echo "  2. Run: codex"
     echo "  3. Send a prompt and check the leaderboard"
     echo ""
 fi

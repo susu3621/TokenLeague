@@ -41,9 +41,9 @@ Get your hook key from the TokenLeague admin panel.
 claude
 ```
 
-**Codex CLI (beta hooks required):**
+**Codex CLI:**
 ```bash
-codex -c features.codex_hooks=true
+codex
 ```
 
 ## How It Works
@@ -53,8 +53,8 @@ codex -c features.codex_hooks=true
 | Event | Trigger | Action |
 |-------|---------|--------|
 | `SessionStart` | When Claude Code/Codex starts | Initialize session tracking |
-| `UserPromptSubmit` | When you send a prompt | Record prompt usage to TokenLeague |
-| `Stop` | When Claude Code/Codex stops | Finalize session and send aggregated data |
+| `UserPromptSubmit` | When you send a prompt | Cache Codex session/transcript metadata |
+| `Stop` | When Claude Code/Codex stops | Parse Codex transcript and upload token usage |
 
 ### Data Flow
 
@@ -110,16 +110,22 @@ codex -c features.codex_hooks=true
 
 ### Settings File
 
-Hooks are configured in `.claude/settings.json` or `.codex/settings.json`:
+Claude hooks are configured in `.claude/settings.json`.
+
+Codex hooks are configured in `.codex/hooks.json`, and the hook engine must be enabled in `~/.codex/config.toml`:
 
 ```json
 {
   "hooks": {
-    "SessionStart": [...],
     "UserPromptSubmit": [...],
     "Stop": [...]
   }
 }
+```
+
+```toml
+[features]
+codex_hooks = true
 ```
 
 ## Privacy
@@ -166,12 +172,15 @@ The hooks **do NOT collect**:
 
 ### Codex CLI Hooks Not Working
 
-1. Ensure you're using the beta hooks feature:
-   ```bash
-   codex -c features.codex_hooks=true
+1. Check Codex CLI version (`0.116.0+` recommended)
+
+2. Ensure `~/.codex/config.toml` contains:
+   ```toml
+   [features]
+   codex_hooks = true
    ```
 
-2. Check Codex CLI version (0.115.0+)
+3. Ensure hooks are configured in `~/.codex/hooks.json` or `<repo>/.codex/hooks.json`
 
 ## Manual Installation
 
@@ -197,10 +206,17 @@ mkdir -p .codex/hooks
 
 # Copy files
 cp /path/to/TokenLeague/.codex/hooks/tokenleague.py .codex/hooks/
-cp /path/to/TokenLeague/.codex/settings.json .
+cp /path/to/TokenLeague/.codex/hooks.json .
 
 # Make executable
 chmod +x .codex/hooks/tokenleague.py
+```
+
+Add or update `~/.codex/config.toml`:
+
+```toml
+[features]
+codex_hooks = true
 ```
 
 ## Uninstalling
@@ -214,7 +230,7 @@ rm -rf .claude/hooks/tokenleague.py
 
 # For Codex CLI
 rm -rf .codex/hooks/tokenleague.py
-# Edit .codex/settings.json to remove TokenLeague hooks
+# Edit .codex/hooks.json to remove TokenLeague hooks
 ```
 
 Remove environment variables from your shell profile.
@@ -236,7 +252,7 @@ Body:
   "prompt_finished_at": "2026-03-23T10:00:05+00:00",
   "input_token_count": 100,
   "output_token_count": 200,
-  "agent_type": "claude-code",
+  "agent_type": "codex",
   "agent_version": "2.1.80",
   "model_name": "claude-sonnet-4-6"
 }
@@ -257,7 +273,7 @@ Body:
   "prompt_count": 5,
   "input_token_count": 500,
   "output_token_count": 1000,
-  "agent_type": "claude-code",
+  "agent_type": "codex",
   "agent_version": "2.1.80",
   "model_name": "claude-sonnet-4-6"
 }
