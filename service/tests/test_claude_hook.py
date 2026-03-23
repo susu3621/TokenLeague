@@ -113,6 +113,7 @@ def test_handle_stop_parses_transcript_and_uploads_prompt_and_task_usage(tmp_pat
             {
                 "external_event_id": "msg-1",
                 "task_id": "session-1",
+                "project_name": "TokenLeague",
                 "prompt_started_at": "2026-03-23T08:26:37.824Z",
                 "prompt_finished_at": "2026-03-23T08:26:56.851Z",
                 "input_token_count": 34521,
@@ -126,6 +127,7 @@ def test_handle_stop_parses_transcript_and_uploads_prompt_and_task_usage(tmp_pat
             "/api/ingest/task-run",
             {
                 "external_task_id": "session-1",
+                "project_name": "TokenLeague",
                 "started_at": "2026-03-23T08:26:37.824Z",
                 "finished_at": "2026-03-23T08:26:56.851Z",
                 "prompt_count": 1,

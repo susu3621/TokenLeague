@@ -48,6 +48,28 @@ def _get_hook_log_file() -> Path:
     return _get_temp_dir() / HOOK_LOG_FILE_NAME
 
 
+def _detect_project_name(cwd: str | None = None) -> str:
+    raw_cwd = str(cwd or "").strip()
+    candidate = Path(raw_cwd or os.getcwd()).expanduser()
+    try:
+        candidate = candidate.resolve()
+    except OSError:
+        pass
+
+    if candidate.is_file():
+        candidate = candidate.parent
+
+    search_roots = [candidate, *candidate.parents]
+    for root in search_roots:
+        if (root / ".git").exists():
+            return root.name
+
+    normalized = str(candidate).rstrip("/\\")
+    if not normalized:
+        return ""
+    return normalized.split("/")[-1].split("\\")[-1]
+
+
 def _sanitize_session_id(session_id: str) -> str:
     return "".join(char if char.isalnum() or char in "-_" else "_" for char in session_id)
 
@@ -255,6 +277,7 @@ def _normalize_session_state(session_state: dict[str, Any]) -> dict[str, Any]:
         "transcript_path": str(payload.get("transcript_path") or ""),
         "model_name": str(payload.get("model_name") or "unknown"),
         "cwd": str(payload.get("cwd") or ""),
+        "project_name": str(payload.get("project_name") or ""),
         "baseline_completed_turn_count": baseline_completed_turn_count,
         "processed_turn_ids": [str(turn_id) for turn_id in processed_turn_ids if turn_id],
         "task_run": _normalize_task_run_state(payload.get("task_run")),
@@ -327,11 +350,13 @@ def _extract_session_metadata(entries: list[dict[str, Any]]) -> dict[str, str]:
         return {
             "session_id": str(payload.get("id") or ""),
             "started_at": str(payload.get("timestamp") or entry.get("timestamp") or ""),
+            "cwd": str(payload.get("cwd") or ""),
             "agent_version": str(payload.get("cli_version") or payload.get("agent_version") or "unknown"),
         }
     return {
         "session_id": "",
         "started_at": "",
+        "cwd": "",
         "agent_version": "unknown",
     }
 
@@ -389,6 +414,7 @@ def _build_prompt_event(
     *,
     session_id: str,
     turn: dict[str, Any],
+    project_name: str,
     model_name: str,
     agent_version: str,
 ) -> dict[str, Any]:
@@ -396,6 +422,7 @@ def _build_prompt_event(
     return {
         "external_event_id": f"{session_id}:turn:{turn_id}",
         "task_id": session_id,
+        "project_name": project_name,
         "prompt_started_at": str(turn["started_at"]),
         "prompt_finished_at": str(turn["finished_at"]),
         "input_token_count": int(turn["input_token_count"]),
@@ -426,6 +453,7 @@ def _build_task_run_payload(
     *,
     session_id: str,
     task_run_state: dict[str, Any],
+    project_name: str,
     model_name: str,
     agent_version: str,
 ) -> dict[str, Any] | None:
@@ -433,6 +461,7 @@ def _build_task_run_payload(
         return None
     return {
         "external_task_id": session_id,
+        "project_name": project_name,
         "started_at": task_run_state["started_at"],
         "finished_at": task_run_state["finished_at"],
         "prompt_count": int(task_run_state["prompt_count"]),
@@ -472,6 +501,7 @@ def _handle_user_prompt_submit(event_data: dict[str, Any]) -> None:
             "transcript_path": transcript_path,
             "model_name": str(event_data.get("model") or session_state.get("model_name") or "unknown"),
             "cwd": str(event_data.get("cwd") or session_state.get("cwd") or ""),
+            "project_name": _detect_project_name(event_data.get("cwd") or session_state.get("cwd")),
             "baseline_completed_turn_count": baseline_completed_turn_count,
         }
         _save_session_state(session_id, updated_state)
@@ -545,10 +575,16 @@ def _handle_stop(event_data: dict[str, Any]) -> None:
 
         model_name = str(event_data.get("model") or session_state.get("model_name") or "unknown")
         agent_version = session_metadata["agent_version"] or "unknown"
+        project_name = (
+            str(session_state.get("project_name") or "")
+            or _detect_project_name(session_metadata.get("cwd"))
+            or _detect_project_name(event_data.get("cwd"))
+        )
         prompt_events = [
             _build_prompt_event(
                 session_id=session_id,
                 turn=turn,
+                project_name=project_name,
                 model_name=model_name,
                 agent_version=agent_version,
             )
@@ -562,6 +598,7 @@ def _handle_stop(event_data: dict[str, Any]) -> None:
         task_run = _build_task_run_payload(
             session_id=session_id,
             task_run_state=next_task_run_state,
+            project_name=project_name,
             model_name=model_name,
             agent_version=agent_version,
         )
@@ -604,6 +641,7 @@ def _handle_stop(event_data: dict[str, Any]) -> None:
         session_state["task_run"] = next_task_run_state
         session_state["transcript_path"] = transcript_path
         session_state["model_name"] = model_name
+        session_state["project_name"] = project_name
         _save_session_state(session_id, session_state)
 
 

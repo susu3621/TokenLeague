@@ -47,3 +47,14 @@ def test_db_scripts_support_kmm_env_aliases():
         content = path.read_text(encoding="utf-8")
         for token in expected_tokens:
             assert token in content, f"{token} missing in {path.name}"
+
+
+def test_project_name_schema_assets_exist():
+    db_content = (PROJECT_ROOT / "service" / "db.py").read_text(encoding="utf-8")
+    init_schema = (PROJECT_ROOT / "scripts" / "migrations" / "001_init_schema.py").read_text(encoding="utf-8")
+    add_project_name = PROJECT_ROOT / "scripts" / "migrations" / "002_add_project_name.py"
+
+    assert "project_name" in db_content
+    assert "project_name" in init_schema
+    assert add_project_name.exists()
+    assert "project_name" in add_project_name.read_text(encoding="utf-8")

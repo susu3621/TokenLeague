@@ -9,6 +9,7 @@ def _prompt_payload(event_id, started_at, *, task_id="task-1", input_tokens=10, 
     return {
         "external_event_id": event_id,
         "task_id": task_id,
+        "project_name": "TokenLeague",
         "prompt_started_at": _iso(started_at),
         "prompt_finished_at": _iso(started_at + timedelta(seconds=12)),
         "input_token_count": input_tokens,
@@ -23,6 +24,7 @@ def _prompt_payload(event_id, started_at, *, task_id="task-1", input_tokens=10, 
 def _task_payload(task_id, started_at, *, prompt_count=1, input_tokens=10, output_tokens=5):
     return {
         "external_task_id": task_id,
+        "project_name": "TokenLeague",
         "started_at": _iso(started_at),
         "finished_at": _iso(started_at + timedelta(minutes=2)),
         "prompt_count": prompt_count,
@@ -154,6 +156,7 @@ def test_leaderboard_handles_naive_datetimes_from_db(monkeypatch):
                 "agent_type": "claude-code",
                 "agent_version": "2.1.81",
                 "model_name": "glm-5",
+                "project_name": "TokenLeague",
                 "status": "completed",
                 "metadata": {},
             }
@@ -249,6 +252,14 @@ def test_ingest_events_feed_leaderboard_filters_and_user_stats(auth_session):
     assert payload["summary"]["task_count"] == 1
     assert payload["agent_breakdown"][0]["agent_type"] == "codex"
     assert payload["agent_breakdown"][0]["model_name"] == "gpt-5.4"
+    assert any(
+        row["project_name"] == "TokenLeague"
+        for row in payload["recent_prompt_events"]
+    )
+    assert any(
+        row["project_name"] == "TokenLeague"
+        for row in payload["recent_task_runs"]
+    )
 
     leaderboard_page = auth_session.get("/leaderboard")
     assert leaderboard_page.status_code == 200
@@ -277,6 +288,7 @@ def test_ingest_clamps_negative_prompt_and_task_durations(auth_session):
             "prompt_finished_at": _iso(finished_at),
             "input_token_count": 10,
             "output_token_count": 5,
+            "project_name": "TokenLeague",
             "agent_type": "codex",
             "agent_version": "0.116.0",
             "model_name": "gpt-5.4",
@@ -291,6 +303,7 @@ def test_ingest_clamps_negative_prompt_and_task_durations(auth_session):
             "prompt_count": 1,
             "input_token_count": 10,
             "output_token_count": 5,
+            "project_name": "TokenLeague",
             "agent_type": "codex",
             "agent_version": "0.116.0",
             "model_name": "gpt-5.4",
@@ -299,3 +312,5 @@ def test_ingest_clamps_negative_prompt_and_task_durations(auth_session):
 
     assert prompt["duration_ms"] == 0
     assert task["total_duration_ms"] == 0
+    assert prompt["project_name"] == "TokenLeague"
+    assert task["project_name"] == "TokenLeague"

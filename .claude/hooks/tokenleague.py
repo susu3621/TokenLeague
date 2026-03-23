@@ -60,6 +60,29 @@ def _get_hook_log_file() -> Path:
     return temp_dir / HOOK_LOG_FILE_NAME
 
 
+def _detect_project_name(cwd: str | None = None) -> str:
+    """Detect a stable project name from the repo root or working directory."""
+    raw_cwd = str(cwd or "").strip()
+    candidate = Path(raw_cwd or os.getcwd()).expanduser()
+    try:
+        candidate = candidate.resolve()
+    except OSError:
+        pass
+
+    if candidate.is_file():
+        candidate = candidate.parent
+
+    search_roots = [candidate, *candidate.parents]
+    for root in search_roots:
+        if (root / ".git").exists():
+            return root.name
+
+    normalized = str(candidate).rstrip("/\\")
+    if not normalized:
+        return ""
+    return normalized.split("/")[-1].split("\\")[-1]
+
+
 def _utcnow() -> datetime:
     """Get current UTC time."""
     return datetime.now(timezone.utc).replace(microsecond=0)
@@ -413,6 +436,7 @@ def _build_usage_payloads_from_transcript(
         if isinstance(entry.get("uuid"), str)
     }
     session_id = str(event_data.get("session_id") or uuid.uuid4())
+    project_name = _detect_project_name(event_data.get("cwd"))
     fallback_model_name, fallback_agent_version = _extract_model_info(event_data)
     prompt_events: list[dict[str, Any]] = []
 
@@ -439,6 +463,7 @@ def _build_usage_payloads_from_transcript(
             {
                 "external_event_id": str(external_event_id),
                 "task_id": session_id,
+                "project_name": project_name,
                 "prompt_started_at": prompt_started_at,
                 "prompt_finished_at": prompt_finished_at,
                 "input_token_count": input_tokens,
@@ -454,6 +479,7 @@ def _build_usage_payloads_from_transcript(
 
     task_run = {
         "external_task_id": session_id,
+        "project_name": project_name,
         "started_at": prompt_events[0]["prompt_started_at"],
         "finished_at": prompt_events[-1]["prompt_finished_at"],
         "prompt_count": len(prompt_events),

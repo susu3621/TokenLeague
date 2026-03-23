@@ -93,6 +93,7 @@ def test_handle_user_prompt_submit_persists_session_state(tmp_path, monkeypatch)
     assert state["transcript_path"] == "/tmp/session-1.jsonl"
     assert state["model_name"] == "gpt-5.4"
     assert state["cwd"] == "/Users/juns/project/TokenLeague"
+    assert state["project_name"] == "TokenLeague"
     assert state["processed_turn_ids"] == []
     assert state["task_run"]["prompt_count"] == 0
     assert state["task_run"]["input_token_count"] == 0
@@ -175,6 +176,7 @@ def test_handle_stop_uploads_latest_completed_turn_and_accumulates_task_run(tmp_
             {
                 "external_event_id": "session-1:turn:turn-2",
                 "task_id": "session-1",
+                "project_name": "TokenLeague",
                 "prompt_started_at": "2026-03-23T08:01:01.000Z",
                 "prompt_finished_at": "2026-03-23T08:01:15.000Z",
                 "input_token_count": 85,
@@ -188,6 +190,7 @@ def test_handle_stop_uploads_latest_completed_turn_and_accumulates_task_run(tmp_
             "/api/ingest/task-run",
             {
                 "external_task_id": "session-1",
+                "project_name": "TokenLeague",
                 "started_at": "2026-03-23T08:01:01.000Z",
                 "finished_at": "2026-03-23T08:01:15.000Z",
                 "prompt_count": 1,
@@ -249,6 +252,7 @@ def test_handle_stop_uploads_latest_completed_turn_and_accumulates_task_run(tmp_
             {
                 "external_event_id": "session-1:turn:turn-3",
                 "task_id": "session-1",
+                "project_name": "TokenLeague",
                 "prompt_started_at": "2026-03-23T08:02:01.000Z",
                 "prompt_finished_at": "2026-03-23T08:02:07.000Z",
                 "input_token_count": 30,
@@ -262,6 +266,7 @@ def test_handle_stop_uploads_latest_completed_turn_and_accumulates_task_run(tmp_
             "/api/ingest/task-run",
             {
                 "external_task_id": "session-1",
+                "project_name": "TokenLeague",
                 "started_at": "2026-03-23T08:01:01.000Z",
                 "finished_at": "2026-03-23T08:02:07.000Z",
                 "prompt_count": 2,

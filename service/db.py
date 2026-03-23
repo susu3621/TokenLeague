@@ -73,6 +73,10 @@ def _normalize_metadata(metadata: Any) -> dict[str, Any]:
     return {}
 
 
+def _normalize_project_name(value: Any) -> str:
+    return str(value or "").strip()
+
+
 def _non_negative_duration_ms(started_at: datetime | None, finished_at: datetime | None) -> int:
     if not started_at or not finished_at:
         return 0
@@ -431,6 +435,7 @@ def _normalize_prompt_event(user_id: int, payload: dict[str, Any]) -> dict[str, 
         "user_id": user_id,
         "task_id": (payload.get("task_id") or "").strip(),
         "external_event_id": (payload.get("external_event_id") or "").strip(),
+        "project_name": _normalize_project_name(payload.get("project_name")),
         "prompt_started_at": started_at,
         "prompt_finished_at": finished_at,
         "input_token_count": input_token_count,
@@ -459,6 +464,7 @@ def _normalize_task_run(user_id: int, payload: dict[str, Any]) -> dict[str, Any]
         "user_id": user_id,
         "task_id": (payload.get("task_id") or payload.get("external_task_id") or "").strip(),
         "external_task_id": (payload.get("external_task_id") or "").strip(),
+        "project_name": _normalize_project_name(payload.get("project_name")),
         "started_at": started_at,
         "finished_at": finished_at,
         "prompt_count": int(payload.get("prompt_count") or 0),
@@ -496,12 +502,13 @@ def upsert_prompt_event(user_id: int, payload: dict[str, Any]):
     cursor.execute(
         """
         INSERT INTO prompt_events (
-            user_id, task_id, external_event_id, prompt_started_at, prompt_finished_at,
+            user_id, task_id, external_event_id, project_name, prompt_started_at, prompt_finished_at,
             input_token_count, output_token_count, total_token_count, duration_ms,
             agent_type, agent_version, model_name, status, metadata_json
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
             task_id = VALUES(task_id),
+            project_name = VALUES(project_name),
             prompt_started_at = VALUES(prompt_started_at),
             prompt_finished_at = VALUES(prompt_finished_at),
             input_token_count = VALUES(input_token_count),
@@ -518,6 +525,7 @@ def upsert_prompt_event(user_id: int, payload: dict[str, Any]):
             user_id,
             event["task_id"],
             event["external_event_id"],
+            event["project_name"],
             event["prompt_started_at"].replace(tzinfo=None) if event["prompt_started_at"] else None,
             event["prompt_finished_at"].replace(tzinfo=None) if event["prompt_finished_at"] else None,
             event["input_token_count"],
@@ -558,12 +566,13 @@ def upsert_task_run(user_id: int, payload: dict[str, Any]):
     cursor.execute(
         """
         INSERT INTO task_runs (
-            user_id, task_id, external_task_id, started_at, finished_at, prompt_count,
+            user_id, task_id, external_task_id, project_name, started_at, finished_at, prompt_count,
             input_token_count, output_token_count, total_token_count, total_duration_ms,
             agent_type, agent_version, model_name, status, metadata_json
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
             task_id = VALUES(task_id),
+            project_name = VALUES(project_name),
             started_at = VALUES(started_at),
             finished_at = VALUES(finished_at),
             prompt_count = VALUES(prompt_count),
@@ -581,6 +590,7 @@ def upsert_task_run(user_id: int, payload: dict[str, Any]):
             user_id,
             task_run["task_id"],
             task_run["external_task_id"],
+            task_run["project_name"],
             task_run["started_at"].replace(tzinfo=None) if task_run["started_at"] else None,
             task_run["finished_at"].replace(tzinfo=None) if task_run["finished_at"] else None,
             task_run["prompt_count"],
@@ -703,7 +713,7 @@ def _fetch_prompt_events_from_db() -> list[dict[str, Any]]:
     cursor.execute(
         """
         SELECT user_id, task_id, external_event_id, prompt_started_at, prompt_finished_at,
-               input_token_count, output_token_count, total_token_count, duration_ms,
+               input_token_count, output_token_count, total_token_count, duration_ms, project_name,
                agent_type, agent_version, model_name, status, metadata_json
         FROM prompt_events
         """
@@ -723,7 +733,7 @@ def _fetch_task_runs_from_db() -> list[dict[str, Any]]:
     cursor.execute(
         """
         SELECT user_id, task_id, external_task_id, started_at, finished_at, prompt_count,
-               input_token_count, output_token_count, total_token_count, total_duration_ms,
+               input_token_count, output_token_count, total_token_count, total_duration_ms, project_name,
                agent_type, agent_version, model_name, status, metadata_json
         FROM task_runs
         """
@@ -857,6 +867,7 @@ def get_user_stats(user_id: int, window: str = "all", filters: dict[str, str] | 
                 "input_token_count": event["input_token_count"],
                 "output_token_count": event["output_token_count"],
                 "duration_ms": event["duration_ms"],
+                "project_name": event["project_name"],
                 "agent_type": event["agent_type"],
                 "agent_version": event["agent_version"],
                 "model_name": event["model_name"],
@@ -872,6 +883,7 @@ def get_user_stats(user_id: int, window: str = "all", filters: dict[str, str] | 
                 "total_token_count": task_run["total_token_count"],
                 "prompt_count": task_run["prompt_count"],
                 "total_duration_ms": task_run["total_duration_ms"],
+                "project_name": task_run["project_name"],
                 "agent_type": task_run["agent_type"],
                 "agent_version": task_run["agent_version"],
                 "model_name": task_run["model_name"],

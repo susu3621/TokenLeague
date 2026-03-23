@@ -119,6 +119,7 @@ def _log_ingest(
     if payload:
         external_event_id = (payload.get("external_event_id") or "").strip()
         external_task_id = (payload.get("external_task_id") or "").strip()
+        project_name = (payload.get("project_name") or "").strip()
         agent_type = (payload.get("agent_type") or "").strip()
         agent_version = (payload.get("agent_version") or "").strip()
         model_name = (payload.get("model_name") or "").strip()
@@ -126,6 +127,8 @@ def _log_ingest(
             parts.append(f"external_event_id={external_event_id}")
         if external_task_id:
             parts.append(f"external_task_id={external_task_id}")
+        if project_name:
+            parts.append(f"project_name={project_name}")
         if agent_type:
             parts.append(f"agent_type={agent_type}")
         if agent_version:
@@ -397,6 +400,7 @@ def api_ingest_prompt_event():
         (
             "external_event_id",
             "task_id",
+            "project_name",
             "prompt_started_at",
             "prompt_finished_at",
             "input_token_count",
@@ -435,6 +439,7 @@ def api_ingest_task_run():
         data,
         (
             "external_task_id",
+            "project_name",
             "started_at",
             "finished_at",
             "prompt_count",
