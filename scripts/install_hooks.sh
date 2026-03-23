@@ -67,7 +67,7 @@ payload = {
                     {
                         "type": "command",
                         "command": command_path,
-                        "timeoutSec": 10,
+                        "timeoutSec": 30,
                     }
                 ]
             }

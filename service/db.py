@@ -73,6 +73,12 @@ def _normalize_metadata(metadata: Any) -> dict[str, Any]:
     return {}
 
 
+def _non_negative_duration_ms(started_at: datetime | None, finished_at: datetime | None) -> int:
+    if not started_at or not finished_at:
+        return 0
+    return max(0, int((finished_at - started_at).total_seconds() * 1000))
+
+
 def _normalize_datetime_fields(record: dict[str, Any], *fields: str) -> dict[str, Any]:
     for field in fields:
         record[field] = _parse_datetime(record.get(field))
@@ -419,11 +425,7 @@ def _normalize_prompt_event(user_id: int, payload: dict[str, Any]) -> dict[str, 
     output_token_count = int(payload.get("output_token_count") or 0)
     duration_ms = int(
         payload.get("duration_ms")
-        or (
-            (finished_at - started_at).total_seconds() * 1000
-            if started_at and finished_at
-            else 0
-        )
+        or _non_negative_duration_ms(started_at, finished_at)
     )
     return {
         "user_id": user_id,
@@ -451,11 +453,7 @@ def _normalize_task_run(user_id: int, payload: dict[str, Any]) -> dict[str, Any]
     output_token_count = int(payload.get("output_token_count") or 0)
     total_duration_ms = int(
         payload.get("total_duration_ms")
-        or (
-            (finished_at - started_at).total_seconds() * 1000
-            if started_at and finished_at
-            else 0
-        )
+        or _non_negative_duration_ms(started_at, finished_at)
     )
     return {
         "user_id": user_id,

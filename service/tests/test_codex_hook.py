@@ -16,12 +16,52 @@ def _load_hook_module():
     return module
 
 
+def _task_started(timestamp: str, turn_id: str) -> dict:
+    return {
+        "timestamp": timestamp,
+        "type": "event_msg",
+        "payload": {
+            "type": "task_started",
+            "turn_id": turn_id,
+        },
+    }
+
+
+def _token_count(timestamp: str, input_tokens: int, output_tokens: int) -> dict:
+    return {
+        "timestamp": timestamp,
+        "type": "event_msg",
+        "payload": {
+            "type": "token_count",
+            "info": {
+                "last_token_usage": {
+                    "input_tokens": input_tokens,
+                    "cached_input_tokens": 0,
+                    "output_tokens": output_tokens,
+                    "total_tokens": input_tokens + output_tokens,
+                }
+            },
+        },
+    }
+
+
+def _task_complete(timestamp: str, turn_id: str) -> dict:
+    return {
+        "timestamp": timestamp,
+        "type": "event_msg",
+        "payload": {
+            "type": "task_complete",
+            "turn_id": turn_id,
+        },
+    }
+
+
 def test_codex_hooks_json_registers_user_prompt_submit_and_stop_hooks():
     payload = json.loads(HOOKS_CONFIG_PATH.read_text(encoding="utf-8"))
 
     assert set(payload["hooks"]) == {"UserPromptSubmit", "Stop"}
     assert payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]["timeoutSec"] == 10
-    assert payload["hooks"]["Stop"][0]["hooks"][0]["timeoutSec"] == 10
+    assert payload["hooks"]["Stop"][0]["hooks"][0]["timeoutSec"] == 30
 
 
 def test_install_script_uses_codex_hooks_json_and_enables_feature_flag():
@@ -37,7 +77,6 @@ def test_install_script_uses_codex_hooks_json_and_enables_feature_flag():
 def test_handle_user_prompt_submit_persists_session_state(tmp_path, monkeypatch):
     hook = _load_hook_module()
     monkeypatch.setenv("TMPDIR", str(tmp_path))
-    monkeypatch.setattr(hook, "_iso_timestamp", lambda dt=None: "2026-03-23T08:00:00+00:00")
 
     hook._handle_user_prompt_submit(
         {
@@ -50,27 +89,21 @@ def test_handle_user_prompt_submit_persists_session_state(tmp_path, monkeypatch)
     )
 
     state = hook._load_session_state("session-1")
-    assert state == {
-        "session_id": "session-1",
-        "transcript_path": "/tmp/session-1.jsonl",
-        "model_name": "gpt-5.4",
-        "cwd": "/Users/juns/project/TokenLeague",
-        "prompt_started_ats": ["2026-03-23T08:00:00+00:00"],
-    }
+    assert state["session_id"] == "session-1"
+    assert state["transcript_path"] == "/tmp/session-1.jsonl"
+    assert state["model_name"] == "gpt-5.4"
+    assert state["cwd"] == "/Users/juns/project/TokenLeague"
+    assert state["processed_turn_ids"] == []
+    assert state["task_run"]["prompt_count"] == 0
+    assert state["task_run"]["input_token_count"] == 0
+    assert state["task_run"]["output_token_count"] == 0
 
 
-def test_handle_stop_parses_transcript_and_uploads_prompt_and_task_usage(tmp_path, monkeypatch):
+def test_handle_stop_uploads_latest_completed_turn_and_accumulates_task_run(tmp_path, monkeypatch):
     hook = _load_hook_module()
     monkeypatch.setenv("TMPDIR", str(tmp_path))
 
     monkeypatch.setattr(hook, "_write_hook_log", lambda *args, **kwargs: None)
-    timestamps = iter(
-        [
-            "2026-03-23T08:00:00+00:00",
-            "2026-03-23T08:01:00+00:00",
-        ]
-    )
-    monkeypatch.setattr(hook, "_iso_timestamp", lambda dt=None: next(timestamps))
 
     transcript_path = tmp_path / "session.jsonl"
     transcript_path.write_text(
@@ -88,64 +121,15 @@ def test_handle_stop_parses_transcript_and_uploads_prompt_and_task_usage(tmp_pat
                         },
                     }
                 ),
-                json.dumps(
-                    {
-                        "timestamp": "2026-03-23T08:00:01.000Z",
-                        "type": "event_msg",
-                        "payload": {
-                            "type": "token_count",
-                            "info": None,
-                        },
-                    }
-                ),
-                json.dumps(
-                    {
-                        "timestamp": "2026-03-23T08:00:05.000Z",
-                        "type": "event_msg",
-                        "payload": {
-                            "type": "token_count",
-                            "info": {
-                                "last_token_usage": {
-                                    "input_tokens": 100,
-                                    "cached_input_tokens": 20,
-                                    "output_tokens": 40,
-                                    "total_tokens": 140,
-                                }
-                            },
-                        },
-                    }
-                ),
-                json.dumps(
-                    {
-                        "timestamp": "2026-03-23T08:01:15.000Z",
-                        "type": "event_msg",
-                        "payload": {
-                            "type": "token_count",
-                            "info": {
-                                "last_token_usage": {
-                                    "input_tokens": 80,
-                                    "cached_input_tokens": 10,
-                                    "output_tokens": 30,
-                                    "total_tokens": 110,
-                                }
-                            },
-                        },
-                    }
-                ),
+                json.dumps(_task_started("2026-03-23T08:00:01.000Z", "turn-1")),
+                json.dumps(_token_count("2026-03-23T08:00:05.000Z", 100, 40)),
+                json.dumps(_token_count("2026-03-23T08:00:08.000Z", 20, 10)),
+                json.dumps(_task_complete("2026-03-23T08:00:09.000Z", "turn-1")),
             ]
         ),
         encoding="utf-8",
     )
 
-    hook._handle_user_prompt_submit(
-        {
-            "session_id": "session-1",
-            "transcript_path": str(transcript_path),
-            "cwd": "/Users/juns/project/TokenLeague",
-            "hook_event_name": "UserPromptSubmit",
-            "model": "gpt-5.4",
-        }
-    )
     hook._handle_user_prompt_submit(
         {
             "session_id": "session-1",
@@ -164,6 +148,20 @@ def test_handle_stop_parses_transcript_and_uploads_prompt_and_task_usage(tmp_pat
 
     monkeypatch.setattr(hook, "_send_api_request", fake_send_api_request)
 
+    transcript_path.write_text(
+        transcript_path.read_text(encoding="utf-8")
+        + "\n"
+        + "\n".join(
+            [
+                json.dumps(_task_started("2026-03-23T08:01:01.000Z", "turn-2")),
+                json.dumps(_token_count("2026-03-23T08:01:05.000Z", 80, 30)),
+                json.dumps(_token_count("2026-03-23T08:01:10.000Z", 5, 2)),
+                json.dumps(_task_complete("2026-03-23T08:01:15.000Z", "turn-2")),
+            ]
+        ),
+        encoding="utf-8",
+    )
+
     hook._handle_stop(
         {
             "session_id": "session-1",
@@ -175,26 +173,12 @@ def test_handle_stop_parses_transcript_and_uploads_prompt_and_task_usage(tmp_pat
         (
             "/api/ingest/prompt-event",
             {
-                "external_event_id": "session-1:prompt:1",
+                "external_event_id": "session-1:turn:turn-2",
                 "task_id": "session-1",
-                "prompt_started_at": "2026-03-23T08:00:00+00:00",
-                "prompt_finished_at": "2026-03-23T08:00:05.000Z",
-                "input_token_count": 100,
-                "output_token_count": 40,
-                "agent_type": "codex",
-                "agent_version": "0.116.0",
-                "model_name": "gpt-5.4",
-            },
-        ),
-        (
-            "/api/ingest/prompt-event",
-            {
-                "external_event_id": "session-1:prompt:2",
-                "task_id": "session-1",
-                "prompt_started_at": "2026-03-23T08:01:00+00:00",
+                "prompt_started_at": "2026-03-23T08:01:01.000Z",
                 "prompt_finished_at": "2026-03-23T08:01:15.000Z",
-                "input_token_count": 80,
-                "output_token_count": 30,
+                "input_token_count": 85,
+                "output_token_count": 32,
                 "agent_type": "codex",
                 "agent_version": "0.116.0",
                 "model_name": "gpt-5.4",
@@ -204,15 +188,88 @@ def test_handle_stop_parses_transcript_and_uploads_prompt_and_task_usage(tmp_pat
             "/api/ingest/task-run",
             {
                 "external_task_id": "session-1",
-                "started_at": "2026-03-23T08:00:00+00:00",
+                "started_at": "2026-03-23T08:01:01.000Z",
                 "finished_at": "2026-03-23T08:01:15.000Z",
-                "prompt_count": 2,
-                "input_token_count": 180,
-                "output_token_count": 70,
+                "prompt_count": 1,
+                "input_token_count": 85,
+                "output_token_count": 32,
                 "agent_type": "codex",
                 "agent_version": "0.116.0",
                 "model_name": "gpt-5.4",
             },
         ),
     ]
-    assert hook._load_session_state("session-1") == {}
+    state = hook._load_session_state("session-1")
+    assert state["processed_turn_ids"] == ["turn-2"]
+    assert state["task_run"]["prompt_count"] == 1
+    assert state["task_run"]["input_token_count"] == 85
+    assert state["task_run"]["output_token_count"] == 32
+
+    uploads.clear()
+    hook._handle_stop(
+        {
+            "session_id": "session-1",
+            "hook_event_name": "Stop",
+        }
+    )
+    assert uploads == []
+
+    transcript_path.write_text(
+        transcript_path.read_text(encoding="utf-8")
+        + "\n"
+        + "\n".join(
+            [
+                json.dumps(_task_started("2026-03-23T08:02:01.000Z", "turn-3")),
+                json.dumps(_token_count("2026-03-23T08:02:05.000Z", 30, 12)),
+                json.dumps(_task_complete("2026-03-23T08:02:07.000Z", "turn-3")),
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    hook._handle_user_prompt_submit(
+        {
+            "session_id": "session-1",
+            "transcript_path": str(transcript_path),
+            "cwd": "/Users/juns/project/TokenLeague",
+            "hook_event_name": "UserPromptSubmit",
+            "model": "gpt-5.4",
+        }
+    )
+    hook._handle_stop(
+        {
+            "session_id": "session-1",
+            "hook_event_name": "Stop",
+        }
+    )
+
+    assert uploads == [
+        (
+            "/api/ingest/prompt-event",
+            {
+                "external_event_id": "session-1:turn:turn-3",
+                "task_id": "session-1",
+                "prompt_started_at": "2026-03-23T08:02:01.000Z",
+                "prompt_finished_at": "2026-03-23T08:02:07.000Z",
+                "input_token_count": 30,
+                "output_token_count": 12,
+                "agent_type": "codex",
+                "agent_version": "0.116.0",
+                "model_name": "gpt-5.4",
+            },
+        ),
+        (
+            "/api/ingest/task-run",
+            {
+                "external_task_id": "session-1",
+                "started_at": "2026-03-23T08:01:01.000Z",
+                "finished_at": "2026-03-23T08:02:07.000Z",
+                "prompt_count": 2,
+                "input_token_count": 115,
+                "output_token_count": 44,
+                "agent_type": "codex",
+                "agent_version": "0.116.0",
+                "model_name": "gpt-5.4",
+            },
+        ),
+    ]

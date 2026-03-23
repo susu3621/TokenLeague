@@ -259,3 +259,43 @@ def test_ingest_events_feed_leaderboard_filters_and_user_stats(auth_session):
     agent_html = agent_page.get_data(as_text=True)
     assert "claude-code" in agent_html
     assert "claude-sonnet-4" in agent_html
+
+
+def test_ingest_clamps_negative_prompt_and_task_durations(auth_session):
+    from db import create_user, upsert_prompt_event, upsert_task_run
+
+    alice = create_user("alice-negative", "secret123", display_name="Alice Negative")
+    started_at = datetime(2026, 3, 23, 9, 18, 0, tzinfo=timezone.utc)
+    finished_at = datetime(2026, 3, 23, 9, 2, 36, tzinfo=timezone.utc)
+
+    prompt = upsert_prompt_event(
+        alice["id"],
+        {
+            "external_event_id": "negative-prompt",
+            "task_id": "negative-task",
+            "prompt_started_at": _iso(started_at),
+            "prompt_finished_at": _iso(finished_at),
+            "input_token_count": 10,
+            "output_token_count": 5,
+            "agent_type": "codex",
+            "agent_version": "0.116.0",
+            "model_name": "gpt-5.4",
+        },
+    )
+    task = upsert_task_run(
+        alice["id"],
+        {
+            "external_task_id": "negative-task",
+            "started_at": _iso(started_at),
+            "finished_at": _iso(finished_at),
+            "prompt_count": 1,
+            "input_token_count": 10,
+            "output_token_count": 5,
+            "agent_type": "codex",
+            "agent_version": "0.116.0",
+            "model_name": "gpt-5.4",
+        },
+    )
+
+    assert prompt["duration_ms"] == 0
+    assert task["total_duration_ms"] == 0
