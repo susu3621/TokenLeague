@@ -375,6 +375,13 @@ def _detect_openclaw_version_from_command(binary_path: str | None) -> str | None
     return None
 
 
+def _get_openclaw_binary_path() -> str | None:
+    explicit = _get_env("OPENCLAW_BIN_PATH")
+    if explicit:
+        return explicit
+    return shutil.which("openclaw")
+
+
 def _detect_installed_openclaw_version() -> str | None:
     global _OPENCLAW_VERSION_CACHE
 
@@ -387,7 +394,7 @@ def _detect_installed_openclaw_version() -> str | None:
             _OPENCLAW_VERSION_CACHE = version
             return version
 
-    binary_path = shutil.which("openclaw")
+    binary_path = _get_openclaw_binary_path()
     version = _detect_openclaw_version_from_command(binary_path)
     if not version:
         version = _detect_openclaw_version_from_binary(binary_path)

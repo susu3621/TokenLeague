@@ -8,6 +8,7 @@ ConditionPathExists={{COLLECTOR_PATH}}
 Type=oneshot
 User={{OPENCLAW_USER}}
 Environment=HOME={{OPENCLAW_HOME}}
-Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=OPENCLAW_BIN_PATH={{OPENCLAW_BIN_PATH}}
+Environment=PATH={{OPENCLAW_BIN_DIR}}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 WorkingDirectory={{OPENCLAW_HOME}}
 ExecStart={{PYTHON_BIN}} {{COLLECTOR_PATH}}

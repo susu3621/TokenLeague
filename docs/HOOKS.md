@@ -83,7 +83,7 @@ export TOKENLEAGUE_OPENCLAW_VERSION="0.1.0"
 
 For OpenClaw service deployments, prefer putting these variables in `~/.openclaw/.env` and restarting the service. This is more reliable than relying on interactive shell startup files. The collector reads this file directly and accepts both plain `.env` lines and `export KEY=VALUE` lines.
 
-When you run `./scripts/install_hooks.sh --openclaw --global`, the installer also installs and enables a system-level `systemd` timer named `tokenleague-openclaw-collector.timer`. It runs the collector every 1 minute and writes the unit files into `/etc/systemd/system/`, so `sudo` privileges are typically required.
+When you run `./scripts/install_hooks.sh --openclaw --global`, the installer also installs and enables a system-level `systemd` timer named `tokenleague-openclaw-collector.timer`. It runs the collector every 1 minute, writes the unit files into `/etc/systemd/system/`, and renders the current `openclaw` binary path into the service environment so version detection still works under systemd. `sudo` privileges are typically required.
 
 Get your hook key from the TokenLeague admin panel.
 

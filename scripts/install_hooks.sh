@@ -79,8 +79,10 @@ render_openclaw_systemd_template() {
     local install_home="$4"
     local collector_path="$5"
     local python_bin="$6"
+    local openclaw_bin_path="$7"
+    local openclaw_bin_dir="$8"
 
-    python3 - "$template_path" "$output_path" "$install_user" "$install_home" "$collector_path" "$python_bin" <<'PY'
+    python3 - "$template_path" "$output_path" "$install_user" "$install_home" "$collector_path" "$python_bin" "$openclaw_bin_path" "$openclaw_bin_dir" <<'PY'
 from pathlib import Path
 import sys
 
@@ -90,6 +92,8 @@ install_user = sys.argv[3]
 install_home = sys.argv[4]
 collector_path = sys.argv[5]
 python_bin = sys.argv[6]
+openclaw_bin_path = sys.argv[7]
+openclaw_bin_dir = sys.argv[8]
 
 content = template_path.read_text(encoding="utf-8")
 for placeholder, value in {
@@ -97,6 +101,8 @@ for placeholder, value in {
     "{{OPENCLAW_HOME}}": install_home,
     "{{COLLECTOR_PATH}}": collector_path,
     "{{PYTHON_BIN}}": python_bin,
+    "{{OPENCLAW_BIN_PATH}}": openclaw_bin_path,
+    "{{OPENCLAW_BIN_DIR}}": openclaw_bin_dir,
 }.items():
     content = content.replace(placeholder, value)
 
@@ -727,6 +733,13 @@ install_openclaw_systemd_timer() {
     if [[ -z "$python_bin" ]]; then
         python_bin="/usr/bin/python3"
     fi
+    local openclaw_bin_path
+    openclaw_bin_path="$(command -v openclaw || true)"
+    if [[ -z "$openclaw_bin_path" ]]; then
+        openclaw_bin_path="$install_home/.npm-global/bin/openclaw"
+    fi
+    local openclaw_bin_dir
+    openclaw_bin_dir="$(dirname "$openclaw_bin_path")"
 
     local service_template="$PROJECT_ROOT/hooks/openclaw/$OPENCLAW_SYSTEMD_SERVICE_NAME"
     local timer_template="$PROJECT_ROOT/hooks/openclaw/$OPENCLAW_SYSTEMD_TIMER_NAME"
@@ -735,8 +748,8 @@ install_openclaw_systemd_timer() {
     local rendered_timer
     rendered_timer="$(mktemp)"
 
-    render_openclaw_systemd_template "$service_template" "$rendered_service" "$install_user" "$install_home" "$collector_path" "$python_bin"
-    render_openclaw_systemd_template "$timer_template" "$rendered_timer" "$install_user" "$install_home" "$collector_path" "$python_bin"
+    render_openclaw_systemd_template "$service_template" "$rendered_service" "$install_user" "$install_home" "$collector_path" "$python_bin" "$openclaw_bin_path" "$openclaw_bin_dir"
+    render_openclaw_systemd_template "$timer_template" "$rendered_timer" "$install_user" "$install_home" "$collector_path" "$python_bin" "$openclaw_bin_path" "$openclaw_bin_dir"
 
     run_privileged_command install -m 0644 "$rendered_service" "$OPENCLAW_SYSTEMD_UNIT_DIR/$OPENCLAW_SYSTEMD_SERVICE_NAME"
     run_privileged_command install -m 0644 "$rendered_timer" "$OPENCLAW_SYSTEMD_UNIT_DIR/$OPENCLAW_SYSTEMD_TIMER_NAME"

@@ -207,6 +207,8 @@ def test_openclaw_systemd_templates_exist_and_poll_every_minute():
     assert "User={{OPENCLAW_USER}}" in service_template
     assert "ExecStart={{PYTHON_BIN}} {{COLLECTOR_PATH}}" in service_template
     assert "Environment=HOME={{OPENCLAW_HOME}}" in service_template
+    assert "Environment=OPENCLAW_BIN_PATH={{OPENCLAW_BIN_PATH}}" in service_template
+    assert "Environment=PATH={{OPENCLAW_BIN_DIR}}:" in service_template
     assert "OnUnitActiveSec=1min" in timer_template
     assert "WantedBy=timers.target" in timer_template
 
@@ -421,6 +423,30 @@ def test_get_openclaw_version_prefers_openclaw_command_output(monkeypatch):
 
     assert hook._get_openclaw_version() == "2026.3.13"
     assert calls == [["/usr/local/bin/openclaw", "--version"]]
+
+
+def test_get_openclaw_version_uses_explicit_binary_env_when_path_missing(monkeypatch):
+    hook = _load_hook_module()
+    monkeypatch.delenv("TOKENLEAGUE_OPENCLAW_VERSION", raising=False)
+    monkeypatch.setenv("OPENCLAW_BIN_PATH", "/home/ubuntu/.npm-global/bin/openclaw")
+    monkeypatch.setattr(hook.shutil, "which", lambda name: None)
+    if hasattr(hook, "_OPENCLAW_VERSION_CACHE"):
+        monkeypatch.setattr(hook, "_OPENCLAW_VERSION_CACHE", None)
+
+    calls = []
+
+    class _CompletedProcess:
+        stdout = "OpenClaw 2026.3.13 (61d171a)\n"
+
+    def fake_run(args, capture_output, text, timeout, check):
+        calls.append(args)
+        return _CompletedProcess()
+
+    monkeypatch.setattr(hook, "subprocess", type("_SubprocessModule", (), {"run": staticmethod(fake_run)}), raising=False)
+    monkeypatch.setattr(hook, "_detect_openclaw_version_from_binary", lambda binary_path: None)
+
+    assert hook._get_openclaw_version() == "2026.3.13"
+    assert calls == [["/home/ubuntu/.npm-global/bin/openclaw", "--version"]]
 
 
 def test_collect_session_writes_summary_log_when_no_sessions_found(tmp_path, monkeypatch):
