@@ -1,6 +1,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import urllib.request
 
 
 HOOK_PATH = Path(__file__).resolve().parents[2] / "hooks" / "openclaw" / "tokenleague_collect.py"
@@ -79,6 +80,99 @@ def _write_openclaw_session(
         + "\n",
         encoding="utf-8",
     )
+
+
+def _write_openclaw_gateway_session(
+    root: Path,
+    *,
+    agent_id: str = "main",
+    session_id: str = "session-1",
+    project_name: str = "TokenLeague",
+) -> Path:
+    repo_root = root / "repos" / project_name
+    (repo_root / ".git").mkdir(parents=True)
+
+    sessions_dir = root / "agents" / agent_id / "sessions"
+    sessions_dir.mkdir(parents=True)
+    transcript_path = sessions_dir / f"{session_id}.jsonl"
+    transcript_path.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "session",
+                        "version": 3,
+                        "id": session_id,
+                        "timestamp": "2026-03-24T09:00:00.000Z",
+                        "cwd": str(repo_root),
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "model_change",
+                        "id": "model-1",
+                        "parentId": None,
+                        "timestamp": "2026-03-24T09:00:00.100Z",
+                        "provider": "zai",
+                        "modelId": "glm-5",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "message",
+                        "id": "turn-1-user",
+                        "parentId": "model-1",
+                        "timestamp": "2026-03-24T09:00:01.000Z",
+                        "message": {
+                            "role": "user",
+                            "content": [{"type": "text", "text": "帮我搜一下今天的热搜"}],
+                            "timestamp": 1774342801000,
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "message",
+                        "id": "turn-1-assistant",
+                        "parentId": "turn-1-user",
+                        "timestamp": "2026-03-24T09:00:15.000Z",
+                        "message": {
+                            "role": "assistant",
+                            "model": "glm-5",
+                            "content": [{"type": "text", "text": "我来帮你搜一下今天的热搜。"}],
+                            "usage": {
+                                "input": 5338,
+                                "output": 187,
+                                "cacheRead": 4096,
+                                "cacheWrite": 0,
+                                "totalTokens": 9621,
+                            },
+                            "timestamp": 1774342815000,
+                        },
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (sessions_dir / "sessions.json").write_text(
+        json.dumps(
+            {
+                f"agent:{agent_id}:{agent_id}": {
+                    "sessionId": session_id,
+                    "updatedAt": 1774342815000,
+                    "sessionFile": str(transcript_path),
+                    "chatType": "direct",
+                }
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return transcript_path
 
 
 def test_install_script_supports_openclaw_assets():
@@ -163,3 +257,115 @@ def test_collect_session_skips_previously_processed_turns(tmp_path, monkeypatch)
     uploads.clear()
     assert hook.collect_and_upload() == 0
     assert uploads == []
+
+
+def test_collect_session_uploads_prompt_and_task_usage_from_gateway_schema(tmp_path, monkeypatch):
+    hook = _load_hook_module()
+    openclaw_root = tmp_path / ".openclaw"
+    _write_openclaw_gateway_session(openclaw_root)
+    monkeypatch.setenv("TOKENLEAGUE_OPENCLAW_ROOT", str(openclaw_root))
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+    monkeypatch.setattr(hook, "_write_hook_log", lambda *args, **kwargs: None)
+
+    uploads = []
+
+    def fake_send_api_request(endpoint, payload):
+        uploads.append((endpoint, payload))
+        return True
+
+    monkeypatch.setattr(hook, "_send_api_request", fake_send_api_request)
+
+    assert hook.collect_and_upload() == 0
+    assert uploads == [
+        (
+            "/api/ingest/prompt-event",
+            {
+                "external_event_id": "turn-1-assistant",
+                "task_id": "session-1",
+                "project_name": "TokenLeague",
+                "prompt_started_at": "2026-03-24T09:00:01.000Z",
+                "prompt_finished_at": "2026-03-24T09:00:15.000Z",
+                "input_token_count": 5338,
+                "output_token_count": 187,
+                "agent_type": "openclaw",
+                "agent_version": "unknown",
+                "model_name": "glm-5",
+            },
+        ),
+        (
+            "/api/ingest/task-run",
+            {
+                "external_task_id": "session-1",
+                "project_name": "TokenLeague",
+                "started_at": "2026-03-24T09:00:00.000Z",
+                "finished_at": "2026-03-24T09:00:15.000Z",
+                "prompt_count": 1,
+                "input_token_count": 5338,
+                "output_token_count": 187,
+                "agent_type": "openclaw",
+                "agent_version": "unknown",
+                "model_name": "glm-5",
+            },
+        ),
+    ]
+
+
+def test_collect_session_reads_openclaw_env_file_with_export_prefix(tmp_path, monkeypatch):
+    hook = _load_hook_module()
+    openclaw_root = tmp_path / ".openclaw"
+    _write_openclaw_gateway_session(openclaw_root)
+    (openclaw_root / ".env").write_text(
+        "export TOKENLEAGUE_HOOK_KEY=test-hook-key\n"
+        "export TOKENLEAGUE_API_URL=http://192.168.9.11:5006\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("TOKENLEAGUE_OPENCLAW_ROOT", str(openclaw_root))
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+    monkeypatch.delenv("TOKENLEAGUE_HOOK_KEY", raising=False)
+    monkeypatch.delenv("TOKENLEAGUE_API_URL", raising=False)
+
+    requests = []
+
+    class _Response:
+        def __init__(self, status: int):
+            self.status = status
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int = 5):
+        headers = {key.lower(): value for key, value in request.header_items()}
+        requests.append(
+            {
+                "url": request.full_url,
+                "hook_key": headers.get("x-hook-key"),
+            }
+        )
+        return _Response(200)
+
+    monkeypatch.setattr(hook.urllib.request, "urlopen", fake_urlopen)
+
+    assert hook.collect_and_upload() == 0
+    assert requests
+    assert requests[0]["url"].startswith("http://192.168.9.11:5006/")
+    assert requests[0]["hook_key"] == "test-hook-key"
+
+
+def test_collect_session_writes_summary_log_when_no_sessions_found(tmp_path, monkeypatch):
+    hook = _load_hook_module()
+    openclaw_root = tmp_path / ".openclaw"
+    openclaw_root.mkdir()
+    monkeypatch.setenv("TOKENLEAGUE_OPENCLAW_ROOT", str(openclaw_root))
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+
+    assert hook.collect_and_upload() == 0
+
+    log_path = tmp_path / hook.HOOK_LOG_FILE_NAME
+    assert log_path.exists()
+    log_text = log_path.read_text(encoding="utf-8")
+    assert "collector_started" in log_text
+    assert "collector_finished" in log_text
+    assert '"discovered_session_count": 0' in log_text

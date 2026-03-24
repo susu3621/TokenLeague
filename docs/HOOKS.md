@@ -81,7 +81,7 @@ export TOKENLEAGUE_GEMINI_CLI_VERSION="0.34.0"
 export TOKENLEAGUE_OPENCLAW_VERSION="0.1.0"
 ```
 
-For OpenClaw service deployments, prefer putting these variables in `~/.openclaw/.env` and restarting the service. This is more reliable than relying on interactive shell startup files.
+For OpenClaw service deployments, prefer putting these variables in `~/.openclaw/.env` and restarting the service. This is more reliable than relying on interactive shell startup files. The collector reads this file directly and accepts both plain `.env` lines and `export KEY=VALUE` lines.
 
 Get your hook key from the TokenLeague admin panel.
 
@@ -296,6 +296,10 @@ The hooks **do NOT collect**:
 3. Restart the OpenClaw service after changing `.env`
 
 4. If OpenClaw still cannot see shell-provided variables, use `env.shellEnv.enabled` only as a fallback
+
+5. Check collector diagnostics:
+   - log: `/tmp/.tokenleague_openclaw_hook.log`
+   - cursor: `/tmp/.tokenleague_openclaw_cursor.json`
 
 ## Manual Installation
 

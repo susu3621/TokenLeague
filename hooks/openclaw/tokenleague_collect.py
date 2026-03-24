@@ -28,10 +28,66 @@ HOOK_LOG_FILE_NAME = ".tokenleague_openclaw_hook.log"
 CURSOR_FILE_NAME = ".tokenleague_openclaw_cursor.json"
 CURSOR_LOCK_FILE_NAME = ".tokenleague_openclaw_cursor.lock"
 AGENT_TYPE = "openclaw"
+_OPENCLAW_ENV_CACHE: dict[str, str] | None = None
+
+
+def _get_process_env(key: str, default: str | None = None) -> str | None:
+    return os.getenv(key, default)
+
+
+def _get_openclaw_env_file() -> Path:
+    configured = _get_process_env("TOKENLEAGUE_OPENCLAW_ENV_FILE")
+    if configured:
+        return Path(configured).expanduser()
+    return _get_openclaw_root() / ".env"
+
+
+def _parse_dotenv_line(line: str) -> tuple[str, str] | None:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        return None
+    if stripped.startswith("export "):
+        stripped = stripped[len("export "):].strip()
+    if "=" not in stripped:
+        return None
+
+    key, value = stripped.split("=", 1)
+    key = key.strip()
+    value = value.strip()
+    if not key:
+        return None
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        value = value[1:-1]
+    return key, value
+
+
+def _load_openclaw_env_values() -> dict[str, str]:
+    global _OPENCLAW_ENV_CACHE
+    if _OPENCLAW_ENV_CACHE is not None:
+        return _OPENCLAW_ENV_CACHE
+
+    env_file = _get_openclaw_env_file()
+    values: dict[str, str] = {}
+    if env_file.exists():
+        try:
+            for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+                parsed = _parse_dotenv_line(raw_line)
+                if parsed is None:
+                    continue
+                key, value = parsed
+                values[key] = value
+        except OSError:
+            values = {}
+
+    _OPENCLAW_ENV_CACHE = values
+    return values
 
 
 def _get_env(key: str, default: str | None = None) -> str | None:
-    return os.getenv(key, default)
+    process_value = _get_process_env(key)
+    if process_value is not None:
+        return process_value
+    return _load_openclaw_env_values().get(key, default)
 
 
 def _get_api_url() -> str:
@@ -43,14 +99,14 @@ def _get_hook_key() -> str | None:
 
 
 def _get_openclaw_root() -> Path:
-    configured = _get_env("TOKENLEAGUE_OPENCLAW_ROOT")
+    configured = _get_process_env("TOKENLEAGUE_OPENCLAW_ROOT")
     if configured:
         return Path(configured).expanduser()
     return Path.home() / ".openclaw"
 
 
 def _get_temp_dir() -> Path:
-    return Path(_get_env("TMPDIR", "/tmp") or "/tmp")
+    return Path(_get_process_env("TMPDIR", "/tmp") or "/tmp")
 
 
 def _get_hook_log_file() -> Path:
@@ -277,6 +333,91 @@ def _coerce_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
+def _normalize_timestamp(value: Any) -> str:
+    if value in (None, ""):
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float)):
+        timestamp = float(value)
+        if timestamp > 1_000_000_000_000:
+            timestamp /= 1000.0
+        dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        return dt.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    return str(value)
+
+
+def _extract_usage(value: Any) -> tuple[int, int]:
+    usage = _coerce_dict(value)
+    input_count = (
+        usage.get("inputTokens")
+        or usage.get("input_tokens")
+        or usage.get("promptTokenCount")
+        or usage.get("input")
+        or 0
+    )
+    output_count = (
+        usage.get("outputTokens")
+        or usage.get("output_tokens")
+        or usage.get("candidatesTokenCount")
+        or usage.get("output")
+        or 0
+    )
+    return int(input_count), int(output_count)
+
+
+def _extract_message(record: dict[str, Any]) -> dict[str, Any]:
+    return _coerce_dict(record.get("message"))
+
+
+def _extract_record_role(record: dict[str, Any]) -> str:
+    record_type = str(record.get("type") or "")
+    if record_type in {"user", "assistant"}:
+        return record_type
+    if record_type == "message":
+        return str(_extract_message(record).get("role") or "")
+    return ""
+
+
+def _extract_record_usage(record: dict[str, Any]) -> tuple[int, int]:
+    direct_usage = _coerce_dict(record.get("usage"))
+    if direct_usage:
+        return _extract_usage(direct_usage)
+    return _extract_usage(_extract_message(record).get("usage"))
+
+
+def _extract_record_model_name(record: dict[str, Any]) -> str:
+    message = _extract_message(record)
+    return str(
+        message.get("model")
+        or record.get("model")
+        or record.get("modelId")
+        or _coerce_dict(record.get("data")).get("modelId")
+        or ""
+    )
+
+
+def _canonical_session_record(
+    value: Any,
+    *,
+    agent_id: str,
+    session_key: str = "",
+) -> dict[str, Any]:
+    record = _coerce_dict(value)
+    if not record:
+        return {}
+
+    enriched = dict(record)
+    enriched.setdefault("agentId", agent_id)
+    enriched.setdefault("sessionKey", session_key)
+    enriched["id"] = str(enriched.get("id") or enriched.get("sessionId") or "")
+    if not enriched.get("sessionFile"):
+        session_file = enriched.get("session_path") or enriched.get("transcriptPath")
+        if session_file:
+            enriched["sessionFile"] = str(session_file)
+    return enriched
+
+
 def _load_sessions_index(root: Path) -> list[dict[str, Any]]:
     sessions: list[dict[str, Any]] = []
     agents_root = root / "agents"
@@ -295,19 +436,42 @@ def _load_sessions_index(root: Path) -> list[dict[str, Any]]:
             _write_hook_log("sessions_parse_failed", path=str(sessions_path), error=str(exc))
             continue
 
-        for session in _coerce_list(payload.get("sessions")):
-            record = _coerce_dict(session)
-            if not record:
-                continue
-            enriched = dict(record)
-            enriched.setdefault("agentId", agent_dir.name)
-            sessions.append(enriched)
+        sessions_value = payload.get("sessions") if isinstance(payload, dict) else None
+        if isinstance(sessions_value, list):
+            for session in sessions_value:
+                enriched = _canonical_session_record(session, agent_id=agent_dir.name)
+                if enriched:
+                    sessions.append(enriched)
+            continue
+
+        if isinstance(payload, dict):
+            for session_key, session in payload.items():
+                enriched = _canonical_session_record(
+                    session,
+                    agent_id=agent_dir.name,
+                    session_key=str(session_key),
+                )
+                if enriched:
+                    sessions.append(enriched)
 
     return sessions
 
 
-def _load_session_transcript(root: Path, agent_id: str, session_id: str) -> list[dict[str, Any]]:
-    transcript_path = root / "agents" / agent_id / "sessions" / f"{session_id}.jsonl"
+def _resolve_session_transcript_path(root: Path, session_record: dict[str, Any]) -> Path:
+    session_file = str(session_record.get("sessionFile") or "")
+    if session_file:
+        transcript_path = Path(session_file).expanduser()
+        if not transcript_path.is_absolute():
+            transcript_path = (root / transcript_path).resolve()
+        return transcript_path
+
+    agent_id = str(session_record.get("agentId") or "")
+    session_id = str(session_record.get("id") or "")
+    return root / "agents" / agent_id / "sessions" / f"{session_id}.jsonl"
+
+
+def _load_session_transcript(root: Path, session_record: dict[str, Any]) -> list[dict[str, Any]]:
+    transcript_path = _resolve_session_transcript_path(root, session_record)
     if not transcript_path.exists():
         return []
 
@@ -359,92 +523,147 @@ def _build_prompt_event_payload(
     assistant_record: dict[str, Any],
     user_record: dict[str, Any],
     project_name: str,
+    model_name: str,
 ) -> dict[str, Any]:
-    usage = _coerce_dict(assistant_record.get("usage"))
+    input_token_count, output_token_count = _extract_record_usage(assistant_record)
     return {
         "external_event_id": str(assistant_record.get("id") or ""),
         "task_id": str(session_record.get("id") or ""),
         "project_name": project_name,
-        "prompt_started_at": str(user_record.get("timestamp") or ""),
-        "prompt_finished_at": str(assistant_record.get("timestamp") or ""),
-        "input_token_count": int(usage.get("inputTokens") or 0),
-        "output_token_count": int(usage.get("outputTokens") or 0),
+        "prompt_started_at": _normalize_timestamp(user_record.get("timestamp") or _extract_message(user_record).get("timestamp")),
+        "prompt_finished_at": _normalize_timestamp(assistant_record.get("timestamp") or _extract_message(assistant_record).get("timestamp")),
+        "input_token_count": input_token_count,
+        "output_token_count": output_token_count,
         "agent_type": AGENT_TYPE,
         "agent_version": _get_openclaw_version(),
-        "model_name": str(session_record.get("model") or "unknown"),
+        "model_name": model_name or str(session_record.get("model") or "unknown"),
     }
 
 
-def _extract_prompt_events(
+def _summarize_transcript(
     session_record: dict[str, Any], transcript_records: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     records_by_id = {
         str(record.get("id") or ""): record
         for record in transcript_records
         if isinstance(record, dict) and record.get("id")
     }
-    project_name = _detect_project_name(session_record.get("cwd"))
+    cwd = str(session_record.get("cwd") or "")
+    started_at = _normalize_timestamp(session_record.get("startedAt"))
+    finished_at = _normalize_timestamp(session_record.get("finishedAt") or session_record.get("updatedAt"))
+    current_model = str(session_record.get("model") or "")
+    discovered_model_name = current_model
+    last_user_record: dict[str, Any] = {}
+    project_name = _detect_project_name(cwd or session_record.get("cwd"))
     prompt_events: list[dict[str, Any]] = []
+
     for record in transcript_records:
-        if not isinstance(record, dict) or record.get("type") != "assistant":
+        if not isinstance(record, dict):
             continue
-        assistant_id = str(record.get("id") or "")
-        parent_id = str(record.get("parentId") or "")
-        user_record = records_by_id.get(parent_id, {})
-        if not assistant_id or user_record.get("type") != "user":
-            continue
-        prompt_events.append(
-            _build_prompt_event_payload(
-                session_record=session_record,
-                assistant_record=record,
-                user_record=user_record,
-                project_name=project_name,
+        record_type = str(record.get("type") or "")
+        record_timestamp = _normalize_timestamp(record.get("timestamp") or _extract_message(record).get("timestamp"))
+        if record_type == "session":
+            if not started_at and record_timestamp:
+                started_at = record_timestamp
+            if not cwd:
+                cwd = str(record.get("cwd") or "")
+        if record_type == "model_change":
+            current_model = str(record.get("modelId") or current_model)
+        if record_type == "custom":
+            current_model = str(_coerce_dict(record.get("data")).get("modelId") or current_model)
+
+        role = _extract_record_role(record)
+        if role == "user":
+            last_user_record = record
+        elif role == "assistant":
+            model_name = _extract_record_model_name(record) or current_model or discovered_model_name or "unknown"
+            discovered_model_name = model_name
+            assistant_id = str(record.get("id") or "")
+            parent_id = str(record.get("parentId") or "")
+            user_record = records_by_id.get(parent_id) or last_user_record
+            if not assistant_id or _extract_record_role(user_record) != "user":
+                continue
+            prompt_events.append(
+                _build_prompt_event_payload(
+                    session_record=session_record,
+                    assistant_record=record,
+                    user_record=user_record,
+                    project_name=project_name,
+                    model_name=model_name,
+                )
             )
-        )
-    return prompt_events
+
+        if record_timestamp:
+            finished_at = record_timestamp
+
+    return {
+        "cwd": cwd,
+        "project_name": project_name,
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "model_name": discovered_model_name or current_model or "unknown",
+        "prompt_events": prompt_events,
+    }
 
 
-def _build_task_run_payload(session_record: dict[str, Any], project_name: str) -> dict[str, Any]:
+def _build_task_run_payload(
+    session_record: dict[str, Any],
+    summary: dict[str, Any],
+) -> dict[str, Any]:
     usage = _coerce_dict(session_record.get("usage"))
-    prompt_count = 0
-    transcript_records = _load_session_transcript(
-        _get_openclaw_root(),
-        str(session_record.get("agentId") or ""),
-        str(session_record.get("id") or ""),
-    )
-    for record in transcript_records:
-        if isinstance(record, dict) and record.get("type") == "assistant":
-            prompt_count += 1
+    prompt_events = _coerce_list(summary.get("prompt_events"))
+    usage_input, usage_output = _extract_usage(usage)
+    if usage_input == 0 and usage_output == 0:
+        usage_input = sum(int(event.get("input_token_count") or 0) for event in prompt_events)
+        usage_output = sum(int(event.get("output_token_count") or 0) for event in prompt_events)
 
     return {
         "external_task_id": str(session_record.get("id") or ""),
-        "project_name": project_name,
-        "started_at": str(session_record.get("startedAt") or ""),
-        "finished_at": str(session_record.get("updatedAt") or session_record.get("finishedAt") or ""),
-        "prompt_count": prompt_count,
-        "input_token_count": int(usage.get("inputTokens") or 0),
-        "output_token_count": int(usage.get("outputTokens") or 0),
+        "project_name": str(summary.get("project_name") or _detect_project_name(session_record.get("cwd"))),
+        "started_at": str(summary.get("started_at") or _normalize_timestamp(session_record.get("startedAt"))),
+        "finished_at": str(
+            summary.get("finished_at")
+            or _normalize_timestamp(session_record.get("updatedAt") or session_record.get("finishedAt"))
+        ),
+        "prompt_count": len(prompt_events),
+        "input_token_count": usage_input,
+        "output_token_count": usage_output,
         "agent_type": AGENT_TYPE,
         "agent_version": _get_openclaw_version(),
-        "model_name": str(session_record.get("model") or "unknown"),
+        "model_name": str(summary.get("model_name") or session_record.get("model") or "unknown"),
     }
 
 
 def collect_and_upload() -> int:
     root = _get_openclaw_root()
+    _write_hook_log("collector_started", openclaw_root=str(root))
     with _cursor_lock():
         state = _load_cursor_state()
         session_state = _coerce_dict(state.get("sessions"))
+        session_records = _load_sessions_index(root)
+        _write_hook_log(
+            "collector_sessions_discovered",
+            openclaw_root=str(root),
+            discovered_session_count=len(session_records),
+        )
+        processed_session_count = 0
+        uploaded_prompt_event_count = 0
+        uploaded_task_run_count = 0
 
-        for session_record in _load_sessions_index(root):
+        for session_record in session_records:
             session_id = str(session_record.get("id") or "")
             agent_id = str(session_record.get("agentId") or "")
             if not session_id or not agent_id:
+                _write_hook_log(
+                    "session_skipped",
+                    reason="missing_identifiers",
+                    session_key=str(session_record.get("sessionKey") or ""),
+                )
                 continue
 
-            project_name = _detect_project_name(session_record.get("cwd"))
-            transcript_records = _load_session_transcript(root, agent_id, session_id)
-            prompt_events = _extract_prompt_events(session_record, transcript_records)
+            transcript_records = _load_session_transcript(root, session_record)
+            summary = _summarize_transcript(session_record, transcript_records)
+            prompt_events = _coerce_list(summary.get("prompt_events"))
             current_session_state = _coerce_dict(session_state.get(session_id))
             processed_event_ids = {
                 str(value)
@@ -454,6 +673,7 @@ def collect_and_upload() -> int:
 
             new_processed_ids = set(processed_event_ids)
             prompt_uploads_succeeded = True
+            session_uploaded_prompt_event_count = 0
             for payload in prompt_events:
                 event_id = str(payload.get("external_event_id") or "")
                 if not event_id or event_id in processed_event_ids:
@@ -462,27 +682,60 @@ def collect_and_upload() -> int:
                     prompt_uploads_succeeded = False
                     break
                 new_processed_ids.add(event_id)
+                session_uploaded_prompt_event_count += 1
+                uploaded_prompt_event_count += 1
 
             if not prompt_uploads_succeeded:
                 session_state[session_id] = current_session_state
+                _write_hook_log(
+                    "session_processed",
+                    session_id=session_id,
+                    transcript_record_count=len(transcript_records),
+                    discovered_prompt_event_count=len(prompt_events),
+                    uploaded_prompt_event_count=session_uploaded_prompt_event_count,
+                    task_run_uploaded=False,
+                    status="prompt_upload_failed",
+                )
                 continue
 
             aggregate_timestamp = str(
-                session_record.get("updatedAt") or session_record.get("finishedAt") or ""
+                summary.get("finished_at")
+                or _normalize_timestamp(session_record.get("updatedAt") or session_record.get("finishedAt"))
             )
+            task_run_uploaded = False
             if aggregate_timestamp and aggregate_timestamp != str(
                 current_session_state.get("last_task_finished_at") or ""
             ):
-                task_payload = _build_task_run_payload(session_record, project_name)
+                task_payload = _build_task_run_payload(session_record, summary)
                 if _send_api_request("/api/ingest/task-run", task_payload):
                     current_session_state["last_task_finished_at"] = aggregate_timestamp
+                    uploaded_task_run_count += 1
+                    task_run_uploaded = True
 
             current_session_state["processed_event_ids"] = sorted(new_processed_ids)
             session_state[session_id] = current_session_state
+            processed_session_count += 1
+            _write_hook_log(
+                "session_processed",
+                session_id=session_id,
+                transcript_record_count=len(transcript_records),
+                discovered_prompt_event_count=len(prompt_events),
+                uploaded_prompt_event_count=session_uploaded_prompt_event_count,
+                task_run_uploaded=task_run_uploaded,
+                model_name=str(summary.get("model_name") or "unknown"),
+            )
 
         state["sessions"] = session_state
         _save_cursor_state(state)
 
+    _write_hook_log(
+        "collector_finished",
+        openclaw_root=str(root),
+        discovered_session_count=len(session_records),
+        processed_session_count=processed_session_count,
+        uploaded_prompt_event_count=uploaded_prompt_event_count,
+        uploaded_task_run_count=uploaded_task_run_count,
+    )
     return 0
 
 
