@@ -1,6 +1,6 @@
 # TokenLeague Hooks
 
-TokenLeague provides statistics hooks for Claude Code and Codex CLI to automatically track token usage and send it to the TokenLeague leaderboard.
+TokenLeague provides statistics hooks for Claude Code, Codex CLI, and Gemini CLI to automatically track token usage and send it to the TokenLeague leaderboard.
 
 ## Quick Start
 
@@ -10,7 +10,7 @@ Run the installation script:
 
 ```bash
 cd /path/to/TokenLeague
-./scripts/install_hooks.sh --both --global
+./scripts/install_hooks.sh --both --gemini --global
 ```
 
 **Options:**
@@ -18,33 +18,40 @@ cd /path/to/TokenLeague
 |--------|-------------|
 | `--claude` | Install only Claude Code hooks |
 | `--codex` | Install only Codex CLI hooks |
-| `--both` | Install both (default) |
-| `--global` | Install to `~/.claude` and `~/.codex` |
+| `--gemini` | Install only Gemini CLI hooks |
+| `--both` | Install Claude Code and Codex CLI hooks |
+| `--global` | Install to `~/.claude`, `~/.codex`, and/or `~/.gemini` depending on flags |
 | `--local` | Install to project directory (default) |
 
 **Examples:**
 ```bash
-# Install globally for all projects (recommended)
-./scripts/install_hooks.sh --both --global
+# Install all supported hooks globally
+./scripts/install_hooks.sh --both --gemini --global
 
 # Install only Claude Code hooks globally
 ./scripts/install_hooks.sh --claude --global
 
+# Install only Gemini CLI hooks globally
+./scripts/install_hooks.sh --gemini --global
+
 # Install to current project directory only
-./scripts/install_hooks.sh --both --local
+./scripts/install_hooks.sh --both --gemini --local
 ```
 
 ### Uninstall Hooks
 
 ```bash
-# Uninstall global hooks
-./scripts/install_hooks.sh --both --global --uninstall
+# Uninstall all supported hooks globally
+./scripts/install_hooks.sh --both --gemini --global --uninstall
 
 # Uninstall only Claude Code hooks
 ./scripts/install_hooks.sh --claude --global --uninstall
 
 # Uninstall only Codex CLI hooks
 ./scripts/install_hooks.sh --codex --global --uninstall
+
+# Uninstall only Gemini CLI hooks
+./scripts/install_hooks.sh --gemini --global --uninstall
 ```
 
 ### Configure Environment Variables
@@ -57,6 +64,9 @@ export TOKENLEAGUE_HOOK_KEY="your-hook-key-here"
 
 # Optional: TokenLeague API URL (default: http://localhost:5006)
 export TOKENLEAGUE_API_URL="http://localhost:5006"
+
+# Optional: Override Gemini CLI version detection when needed
+export TOKENLEAGUE_GEMINI_CLI_VERSION="0.34.0"
 ```
 
 Get your hook key from the TokenLeague admin panel.
@@ -73,22 +83,31 @@ claude
 codex
 ```
 
+**Gemini CLI:**
+```bash
+gemini
+```
+
 ## How It Works
 
 ### Hook Events
 
 | Event | Trigger | Action |
 |-------|---------|--------|
-| `SessionStart` | When Claude Code/Codex starts | Initialize session tracking |
-| `UserPromptSubmit` | When you send a prompt | Cache Codex session/transcript metadata |
-| `Stop` | When Claude Code/Codex stops | Parse Codex transcript and upload token usage |
+| `SessionStart` | When Claude Code or Gemini CLI starts | Initialize session tracking or display startup status |
+| `UserPromptSubmit` | When you send a prompt in Codex CLI | Cache Codex session/transcript metadata |
+| `BeforeAgent` | When you send a prompt in Gemini CLI | Start tracking the pending Gemini turn |
+| `AfterModel` | After a Gemini model response arrives | Cache Gemini usage metadata for the pending turn |
+| `AfterAgent` | After Gemini finishes a turn | Upload prompt usage and update task aggregate |
+| `Stop` | When Claude Code or Codex CLI stops | Parse transcript or finalized turn usage and upload |
+| `SessionEnd` | When Claude Code or Gemini CLI exits | Cleanup or final fallback handling |
 
 ### Data Flow
 
 ```
 ┌─────────────────┐
-│  Claude Code /  │
-│   Codex CLI     │
+│ Claude / Codex /│
+│   Gemini CLI    │
 └────────┬────────┘
          │ Hook Events
          ▼
@@ -134,6 +153,7 @@ codex
 |----------|----------|---------|-------------|
 | `TOKENLEAGUE_HOOK_KEY` | Yes | - | Your authentication key |
 | `TOKENLEAGUE_API_URL` | No | `http://localhost:5006` | TokenLeague API URL |
+| `TOKENLEAGUE_GEMINI_CLI_VERSION` | No | auto-detect | Override Gemini CLI version if automatic detection is unavailable |
 
 ### Settings File
 
@@ -153,6 +173,20 @@ Codex hooks are configured in `.codex/hooks.json`, and the hook engine must be e
 ```toml
 [features]
 codex_hooks = true
+```
+
+Gemini hooks are configured in `.gemini/settings.json` or `~/.gemini/settings.json`:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [...],
+    "BeforeAgent": [...],
+    "AfterModel": [...],
+    "AfterAgent": [...],
+    "SessionEnd": [...]
+  }
+}
 ```
 
 ## Privacy
@@ -189,7 +223,7 @@ The hooks **do NOT collect**:
 
 4. **Check hook logs:**
    - Hooks run asynchronously and silently
-   - Errors don't block Claude Code/Codex
+   - Errors don't block Claude Code/Codex/Gemini CLI
 
 ### Session Data Not Appearing
 
@@ -208,6 +242,19 @@ The hooks **do NOT collect**:
    ```
 
 3. Ensure hooks are configured in `~/.codex/hooks.json` or `<repo>/.codex/hooks.json`
+
+### Gemini CLI Hooks Not Working
+
+1. Ensure hooks are configured in `~/.gemini/settings.json` or `<repo>/.gemini/settings.json`
+
+2. Open Gemini CLI and check `/hooks panel` to verify TokenLeague hooks are enabled
+
+3. Confirm your environment variables are available in the shell that launches `gemini`
+
+4. If Gemini CLI version still shows as unknown, set:
+   ```bash
+   export TOKENLEAGUE_GEMINI_CLI_VERSION="0.34.0"
+   ```
 
 ## Manual Installation
 
@@ -246,12 +293,26 @@ Add or update `~/.codex/config.toml`:
 codex_hooks = true
 ```
 
+### Gemini CLI
+
+```bash
+# Create directories
+mkdir -p .gemini/hooks
+
+# Copy files
+cp /path/to/TokenLeague/.gemini/hooks/tokenleague.py .gemini/hooks/
+cp /path/to/TokenLeague/.gemini/settings.json .gemini/
+
+# Make executable
+chmod +x .gemini/hooks/tokenleague.py
+```
+
 ## Uninstalling
 
 Run the uninstall command:
 
 ```bash
-./scripts/install_hooks.sh --both --global --uninstall
+./scripts/install_hooks.sh --both --gemini --global --uninstall
 ```
 
 The uninstaller will:

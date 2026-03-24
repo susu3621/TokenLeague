@@ -1,6 +1,6 @@
 # TokenLeague
 
-Token League 是一个 AI 助手 Token 使用量排行榜应用，用于追踪 Claude Code 和 Codex CLI 的使用统计。
+Token League 是一个 AI 助手 Token 使用量排行榜应用，用于追踪 Claude Code、Codex CLI 和 Gemini CLI 的使用统计。
 
 TokenLeague is a token usage leaderboard application for tracking AI assistant usage.
 
@@ -8,7 +8,7 @@ TokenLeague is a token usage leaderboard application for tracking AI assistant u
 
 - Token 使用量排行榜
 - 多用户支持
-- 支持 Claude Code 和 Codex CLI 统计
+- 支持 Claude Code、Codex CLI 和 Gemini CLI 统计
 - Web 管理界面
 
 ## 快速开始
@@ -47,13 +47,13 @@ python -m service.app
 
 ## Hooks 安装
 
-TokenLeague 提供统计 hooks，自动追踪 Claude Code 和 Codex CLI 的 token 使用量。
+TokenLeague 提供统计 hooks，自动追踪 Claude Code、Codex CLI 和 Gemini CLI 的 token 使用量。
 
 ### 安装 Hooks
 
 ```bash
-# 全局安装（推荐，所有项目生效）
-./scripts/install_hooks.sh --both --global
+# 全局安装全部已支持 hooks
+./scripts/install_hooks.sh --both --gemini --global
 
 # 仅安装 Claude Code hooks
 ./scripts/install_hooks.sh --claude --global
@@ -61,8 +61,11 @@ TokenLeague 提供统计 hooks，自动追踪 Claude Code 和 Codex CLI 的 toke
 # 仅安装 Codex CLI hooks
 ./scripts/install_hooks.sh --codex --global
 
+# 仅安装 Gemini CLI hooks
+./scripts/install_hooks.sh --gemini --global
+
 # 项目级安装（仅当前项目）
-./scripts/install_hooks.sh --both --local
+./scripts/install_hooks.sh --both --gemini --local
 ```
 
 ### 配置环境变量
@@ -75,19 +78,25 @@ export TOKENLEAGUE_HOOK_KEY="your-hook-key-here"
 
 # 可选：API URL（默认 http://localhost:5006）
 export TOKENLEAGUE_API_URL="http://localhost:5006"
+
+# 可选：手动指定 Gemini CLI 版本
+export TOKENLEAGUE_GEMINI_CLI_VERSION="0.34.0"
 ```
 
 ### 卸载 Hooks
 
 ```bash
-# 卸载全局 hooks
-./scripts/install_hooks.sh --both --global --uninstall
+# 卸载全部已支持 hooks
+./scripts/install_hooks.sh --both --gemini --global --uninstall
 
 # 仅卸载 Claude Code hooks
 ./scripts/install_hooks.sh --claude --global --uninstall
 
 # 仅卸载 Codex CLI hooks
 ./scripts/install_hooks.sh --codex --global --uninstall
+
+# 仅卸载 Gemini CLI hooks
+./scripts/install_hooks.sh --gemini --global --uninstall
 ```
 
 更多详情请参考 [docs/HOOKS.md](docs/HOOKS.md)。

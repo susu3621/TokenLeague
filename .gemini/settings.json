@@ -1,0 +1,69 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "name": "tokenleague-session-start",
+            "type": "command",
+            "command": "python3 .gemini/hooks/tokenleague.py",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "BeforeAgent": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "tokenleague-before-agent",
+            "type": "command",
+            "command": "python3 .gemini/hooks/tokenleague.py",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "AfterModel": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "tokenleague-after-model",
+            "type": "command",
+            "command": "python3 .gemini/hooks/tokenleague.py",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "AfterAgent": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "tokenleague-after-agent",
+            "type": "command",
+            "command": "python3 .gemini/hooks/tokenleague.py",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "exit",
+        "hooks": [
+          {
+            "name": "tokenleague-session-end",
+            "type": "command",
+            "command": "python3 .gemini/hooks/tokenleague.py",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  }
+}

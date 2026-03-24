@@ -10,6 +10,7 @@
 # Options:
 #   --claude    Install/uninstall hooks for Claude Code only
 #   --codex     Install/uninstall hooks for Codex CLI only
+#   --gemini    Install/uninstall hooks for Gemini CLI only
 #   --both      Install/uninstall hooks for both (default)
 #   --global    Install/uninstall to user's global config directory (~/.claude, ~/.codex)
 #   --local     Install/uninstall to current project directory (default)
@@ -32,6 +33,7 @@ NC='\033[0m' # No Color
 # Default settings
 INSTALL_CLAUDE=false
 INSTALL_CODEX=false
+INSTALL_GEMINI=false
 INSTALL_GLOBAL=false
 MODE_UNINSTALL=false
 
@@ -166,6 +168,121 @@ for event_name, event_hooks in tokenleague_hooks.items():
 settings["hooks"] = existing_hooks
 
 # Write back
+target_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+print(f"  → Merged hooks configuration into {target_path}")
+PY
+}
+
+merge_gemini_settings() {
+    local target_path="$1"
+    local command_path="$2"
+
+    python3 - "$target_path" "$command_path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+target_path = Path(sys.argv[1])
+command_path = sys.argv[2]
+
+tokenleague_hooks = {
+    "SessionStart": [
+        {
+            "matcher": "startup",
+            "hooks": [
+                {
+                    "name": "tokenleague-session-start",
+                    "type": "command",
+                    "command": command_path,
+                    "timeout": 5000,
+                }
+            ],
+        }
+    ],
+    "BeforeAgent": [
+        {
+            "matcher": "*",
+            "hooks": [
+                {
+                    "name": "tokenleague-before-agent",
+                    "type": "command",
+                    "command": command_path,
+                    "timeout": 5000,
+                }
+            ],
+        }
+    ],
+    "AfterModel": [
+        {
+            "matcher": "*",
+            "hooks": [
+                {
+                    "name": "tokenleague-after-model",
+                    "type": "command",
+                    "command": command_path,
+                    "timeout": 5000,
+                }
+            ],
+        }
+    ],
+    "AfterAgent": [
+        {
+            "matcher": "*",
+            "hooks": [
+                {
+                    "name": "tokenleague-after-agent",
+                    "type": "command",
+                    "command": command_path,
+                    "timeout": 5000,
+                }
+            ],
+        }
+    ],
+    "SessionEnd": [
+        {
+            "matcher": "exit",
+            "hooks": [
+                {
+                    "name": "tokenleague-session-end",
+                    "type": "command",
+                    "command": command_path,
+                    "timeout": 5000,
+                }
+            ],
+        }
+    ],
+}
+
+if target_path.exists():
+    try:
+        settings = json.loads(target_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, IOError):
+        settings = {}
+else:
+    settings = {}
+
+existing_hooks = settings.get("hooks", {})
+for event_name, event_hooks in tokenleague_hooks.items():
+    if event_name not in existing_hooks:
+        existing_hooks[event_name] = event_hooks
+        continue
+
+    existing_events = existing_hooks[event_name]
+    tokenleague_exists = False
+    for event_config in existing_events:
+        hooks_list = event_config.get("hooks", [])
+        for hook in hooks_list:
+            if "tokenleague" in hook.get("command", ""):
+                hook["command"] = command_path
+                hook["timeout"] = 5000
+                tokenleague_exists = True
+                break
+        if tokenleague_exists:
+            break
+    if not tokenleague_exists:
+        existing_hooks[event_name] = existing_events + tokenleague_hooks[event_name]
+
+settings["hooks"] = existing_hooks
 target_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 print(f"  → Merged hooks configuration into {target_path}")
 PY
@@ -328,6 +445,59 @@ print(f"  → Removed {removed_count} TokenLeague hook(s) from {target_path}")
 PY
 }
 
+remove_gemini_hooks() {
+    local target_path="$1"
+
+    python3 - "$target_path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+target_path = Path(sys.argv[1])
+
+if not target_path.exists():
+    print(f"  → Settings file not found: {target_path}")
+    sys.exit(0)
+
+try:
+    settings = json.loads(target_path.read_text(encoding="utf-8"))
+except (json.JSONDecodeError, IOError) as exc:
+    print(f"  → Failed to read settings: {exc}")
+    sys.exit(1)
+
+hooks = settings.get("hooks", {})
+if not hooks:
+    print(f"  → No hooks configured in {target_path}")
+    sys.exit(0)
+
+removed_count = 0
+for event_name in list(hooks.keys()):
+    event_configs = hooks[event_name]
+    new_configs = []
+    for config in event_configs:
+        hooks_list = config.get("hooks", [])
+        new_hooks_list = [h for h in hooks_list if "tokenleague" not in h.get("command", "")]
+        if new_hooks_list:
+            new_config = dict(config)
+            new_config["hooks"] = new_hooks_list
+            new_configs.append(new_config)
+        removed_count += len(hooks_list) - len(new_hooks_list)
+
+    if new_configs:
+        hooks[event_name] = new_configs
+    else:
+        del hooks[event_name]
+
+if not hooks:
+    del settings["hooks"]
+else:
+    settings["hooks"] = hooks
+
+target_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+print(f"  → Removed {removed_count} TokenLeague hook(s) from {target_path}")
+PY
+}
+
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -337,6 +507,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --codex)
             INSTALL_CODEX=true
+            shift
+            ;;
+        --gemini)
+            INSTALL_GEMINI=true
             shift
             ;;
         --both)
@@ -364,6 +538,7 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --claude    Install/uninstall hooks for Claude Code only"
             echo "  --codex     Install/uninstall hooks for Codex CLI only"
+            echo "  --gemini    Install/uninstall hooks for Gemini CLI only"
             echo "  --both      Install/uninstall hooks for both (default)"
             echo "  --global    Install/uninstall to user's global config (~/.claude, ~/.codex)"
             echo "  --local     Install/uninstall to current project directory (default)"
@@ -419,6 +594,34 @@ install_claude_hooks() {
     echo -e "${GREEN}✓ Claude Code hooks installed successfully${NC}"
 }
 
+# Function to install Gemini CLI hooks
+install_gemini_hooks() {
+    local target_dir
+    local command_path
+    if [[ "$INSTALL_GLOBAL" == "true" ]]; then
+        target_dir="$HOME/.gemini"
+        command_path="python3 $target_dir/hooks/tokenleague.py"
+    else
+        target_dir="$PROJECT_ROOT/.gemini"
+        command_path="python3 .gemini/hooks/tokenleague.py"
+    fi
+
+    echo -e "${YELLOW}Installing Gemini CLI hooks to: $target_dir${NC}"
+
+    mkdir -p "$target_dir/hooks"
+
+    cp "$PROJECT_ROOT/.gemini/hooks/tokenleague.py" "$target_dir/hooks/tokenleague.py"
+    chmod +x "$target_dir/hooks/tokenleague.py"
+
+    cp "$PROJECT_ROOT/.gemini/hooks/tokenleague.env.example" "$target_dir/hooks/tokenleague.env.example"
+
+    # Create or merge .gemini/settings.json
+    local settings_path="$target_dir/settings.json"
+    merge_gemini_settings "$settings_path" "$command_path"
+
+    echo -e "${GREEN}✓ Gemini CLI hooks installed successfully${NC}"
+}
+
 # Function to install Codex CLI hooks
 install_codex_hooks() {
     local target_dir
@@ -452,6 +655,34 @@ install_codex_hooks() {
     ensure_codex_feature_flag
 
     echo -e "${GREEN}✓ Codex CLI hooks installed successfully${NC}"
+}
+
+# Function to uninstall Gemini CLI hooks
+uninstall_gemini_hooks() {
+    local target_dir
+    if [[ "$INSTALL_GLOBAL" == "true" ]]; then
+        target_dir="$HOME/.gemini"
+    else
+        target_dir="$PROJECT_ROOT/.gemini"
+    fi
+
+    echo -e "${YELLOW}Uninstalling Gemini CLI hooks from: $target_dir${NC}"
+
+    if [[ -f "$target_dir/hooks/tokenleague.py" ]]; then
+        rm -f "$target_dir/hooks/tokenleague.py"
+        echo -e "${GREEN}  ✓ Removed tokenleague.py${NC}"
+    else
+        echo -e "${YELLOW}  → tokenleague.py not found${NC}"
+    fi
+
+    if [[ -f "$target_dir/hooks/tokenleague.env.example" ]]; then
+        rm -f "$target_dir/hooks/tokenleague.env.example"
+        echo -e "${GREEN}  ✓ Removed tokenleague.env.example${NC}"
+    fi
+
+    remove_gemini_hooks "$target_dir/settings.json"
+
+    echo -e "${GREEN}✓ Gemini CLI hooks uninstalled${NC}"
 }
 
 # Function to uninstall Claude Code hooks
@@ -533,6 +764,11 @@ if [[ "$MODE_UNINSTALL" == "true" ]]; then
         echo ""
     fi
 
+    if [[ "$INSTALL_GEMINI" == "true" ]]; then
+        uninstall_gemini_hooks
+        echo ""
+    fi
+
     echo -e "${GREEN}Uninstallation complete!${NC}"
 else
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
@@ -548,6 +784,11 @@ else
 
     if [[ "$INSTALL_CODEX" == "true" ]]; then
         install_codex_hooks
+        echo ""
+    fi
+
+    if [[ "$INSTALL_GEMINI" == "true" ]]; then
+        install_gemini_hooks
         echo ""
     fi
 
@@ -583,6 +824,13 @@ else
         echo -e "To test Codex CLI hooks:"
         echo "  1. Start TokenLeague: cd $PROJECT_ROOT && python -m service.app"
         echo "  2. Run: codex"
+        echo "  3. Send a prompt and check the leaderboard"
+        echo ""
+    fi
+    if [[ "$INSTALL_GEMINI" == "true" ]]; then
+        echo -e "To test Gemini CLI hooks:"
+        echo "  1. Start TokenLeague: cd $PROJECT_ROOT && python -m service.app"
+        echo "  2. Run: gemini"
         echo "  3. Send a prompt and check the leaderboard"
         echo ""
     fi
