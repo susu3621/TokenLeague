@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal, ROUND_HALF_UP
 import inspect
 import os
 from pathlib import Path
@@ -18,6 +19,7 @@ DOCS_DIR = BASE_DIR.parent / "docs"
 API_DOC_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 FILTER_FIELDS = ("agent_type", "agent_version", "model_name")
 VALID_WINDOWS = {"day", "week", "all"}
+VALID_TIMELINE_WINDOWS = {"week", "month"}
 
 
 app = Flask(__name__)
@@ -61,9 +63,10 @@ def _is_origin_valid_for_state_change() -> bool:
     return True
 
 
-def _requested_window() -> str:
-    window = (request.args.get("window") or "all").strip().lower()
-    return window if window in VALID_WINDOWS else "all"
+def _requested_window(valid_windows: set[str] | None = None, default: str = "all") -> str:
+    allowed = valid_windows or VALID_WINDOWS
+    window = (request.args.get("window") or default).strip().lower()
+    return window if window in allowed else default
 
 
 def _requested_filters() -> dict[str, str]:
@@ -167,6 +170,7 @@ def inject_shell_context():
     return {
         "project_title": db.get_setting("project_title") or db.DEFAULT_PROJECT_TITLE,
         "project_subtitle": db.get_setting("project_subtitle") or db.DEFAULT_PROJECT_SUBTITLE,
+        "format_token_count": format_token_count,
     }
 
 
@@ -187,6 +191,36 @@ def _format_api_resource_name(route_path: str) -> str:
             continue
         parts.append(segment.replace("-", " ").replace("_", " "))
     return " / ".join(parts) if parts else "Dynamic resource"
+
+
+def _trim_trailing_decimal(value: float) -> str:
+    rounded = Decimal(str(value)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+    text = format(rounded, "f")
+    return text[:-2] if text.endswith(".0") else text
+
+
+def format_token_count(value: int | float | None) -> str:
+    if value is None:
+        return "0"
+
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+
+    sign = "-" if number < 0 else ""
+    abs_value = abs(number)
+    for divisor, suffix in (
+        (1_000_000_000, "B"),
+        (1_000_000, "M"),
+        (1_000, "K"),
+    ):
+        if abs_value >= divisor:
+            return f"{sign}{_trim_trailing_decimal(abs_value / divisor)}{suffix}"
+
+    if abs_value.is_integer():
+        return f"{sign}{int(abs_value)}"
+    return f"{sign}{_trim_trailing_decimal(abs_value)}"
 
 
 def _infer_api_description(rule, methods, view_func):
@@ -528,7 +562,7 @@ def api_user_models(user_id: int):
 @auth_module.login_required
 def api_user_timeline(user_id: int):
     """Get user token usage timeline"""
-    window = _requested_window()
+    window = _requested_window(VALID_TIMELINE_WINDOWS, default="week")
     granularity = (request.args.get("granularity") or "hour").strip().lower()
     if granularity not in ("hour", "day", "week"):
         granularity = "hour"

@@ -32,6 +32,42 @@
         font-size: 0.875rem;
         margin-top: 4px;
     }
+    .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+    .section-header h2 {
+        margin: 0;
+    }
+    .timeline-range {
+        display: inline-flex;
+        gap: 8px;
+        padding: 4px;
+        background: #f3f4f6;
+        border-radius: 999px;
+    }
+    .timeline-range-button {
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        border-radius: 999px;
+        padding: 8px 12px;
+        cursor: pointer;
+        font: inherit;
+    }
+    .timeline-range-button.is-active {
+        background: var(--primary);
+        color: #fff;
+    }
+    @media (max-width: 640px) {
+        .section-header {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -43,7 +79,7 @@
 
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-value">{{ "{:,}".format(stats.summary.total_token_count) }}</div>
+                <div class="stat-value">{{ format_token_count(stats.summary.total_token_count) }}</div>
                 <div class="stat-label">Total Tokens</div>
             </div>
             <div class="stat-card">
@@ -55,7 +91,7 @@
                 <div class="stat-label">Tasks</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">{{ "%.1f"|format(stats.summary.avg_token_per_prompt) }}</div>
+                <div class="stat-value">{{ format_token_count(stats.summary.avg_token_per_prompt) }}</div>
                 <div class="stat-label">Avg Tokens / Prompt</div>
             </div>
         </div>
@@ -102,7 +138,13 @@
     </div>
 
     <div class="card">
-        <h2 style="margin-top: 0;">Usage Timeline</h2>
+        <div class="section-header">
+            <h2>Usage Timeline</h2>
+            <div class="timeline-range" aria-label="Timeline range selector">
+                <button type="button" class="timeline-range-button is-active" data-timeline-window="week">过去7天</button>
+                <button type="button" class="timeline-range-button" data-timeline-window="month">过去30天</button>
+            </div>
+        </div>
         <div class="chart-container">
             <canvas id="timeline-chart"></canvas>
         </div>
@@ -127,7 +169,7 @@
                     <td>{{ row.agent_type }}</td>
                     <td>{{ row.agent_version }}</td>
                     <td>{{ row.model_name }}</td>
-                    <td>{{ "{:,}".format(row.total_token_count) }}</td>
+                    <td>{{ format_token_count(row.total_token_count) }}</td>
                     <td>{{ "{:,}".format(row.prompt_count) }}</td>
                     <td>{{ "{:,}".format(row.task_count) }}</td>
                 </tr>
@@ -159,7 +201,7 @@
                     <td style="font-family: monospace; font-size: 0.875rem;">{{ row.external_event_id[:16] }}...</td>
                     <td>{{ row.project_name }}</td>
                     <td style="font-family: monospace; font-size: 0.875rem;">{{ row.task_id[:16] }}...</td>
-                    <td>{{ "{:,}".format(row.total_token_count) }}</td>
+                    <td>{{ format_token_count(row.total_token_count) }}</td>
                     <td>{{ row.model_name }}</td>
                     <td data-utc-time="{{ row.prompt_finished_at or '' }}">{{ row.prompt_finished_at or '-' }}</td>
                 </tr>
@@ -178,10 +220,43 @@
 (function() {
     const userId = {{ stats.user.id }};
     const windowParam = '{{ window }}';
+    let timelineChart = null;
+    const timelineColorCache = new Map();
 
-    // Format number with commas
-    function formatNum(n) {
-        return n.toLocaleString();
+    function trimTrailingDecimal(value) {
+        const rounded = Math.round((value + Number.EPSILON) * 10) / 10;
+        const text = rounded.toFixed(1);
+        return text.endsWith('.0') ? text.slice(0, -2) : text;
+    }
+
+    function formatTokenCount(value) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) {
+            return '0';
+        }
+
+        const sign = number < 0 ? '-' : '';
+        const absValue = Math.abs(number);
+        const units = [
+            [1_000_000_000, 'B'],
+            [1_000_000, 'M'],
+            [1_000, 'K'],
+        ];
+
+        for (const [divisor, suffix] of units) {
+            if (absValue >= divisor) {
+                return `${sign}${trimTrailingDecimal(absValue / divisor)}${suffix}`;
+            }
+        }
+
+        if (Number.isInteger(absValue)) {
+            return `${sign}${absValue.toLocaleString()}`;
+        }
+        return `${sign}${trimTrailingDecimal(absValue)}`;
+    }
+
+    function formatCount(value) {
+        return Number(value).toLocaleString();
     }
 
     // Convert UTC ISO string to local timezone string
@@ -228,11 +303,11 @@
             tbody.innerHTML = data.projects.map(p => `
                 <tr>
                     <td>${p.project_name}</td>
-                    <td>${formatNum(p.total_token_count)}</td>
-                    <td>${formatNum(p.input_token_count)}</td>
-                    <td>${formatNum(p.output_token_count)}</td>
-                    <td>${formatNum(p.prompt_count)}</td>
-                    <td>${formatNum(p.task_count)}</td>
+                    <td>${formatTokenCount(p.total_token_count)}</td>
+                    <td>${formatTokenCount(p.input_token_count)}</td>
+                    <td>${formatTokenCount(p.output_token_count)}</td>
+                    <td>${formatCount(p.prompt_count)}</td>
+                    <td>${formatCount(p.task_count)}</td>
                 </tr>
             `).join('');
         });
@@ -249,10 +324,10 @@
             tbody.innerHTML = data.models.map(m => `
                 <tr>
                     <td>${m.model_name}</td>
-                    <td>${formatNum(m.total_token_count)}</td>
-                    <td>${formatNum(m.input_token_count)}</td>
-                    <td>${formatNum(m.output_token_count)}</td>
-                    <td>${formatNum(m.prompt_count)}</td>
+                    <td>${formatTokenCount(m.total_token_count)}</td>
+                    <td>${formatTokenCount(m.input_token_count)}</td>
+                    <td>${formatTokenCount(m.output_token_count)}</td>
+                    <td>${formatCount(m.prompt_count)}</td>
                 </tr>
             `).join('');
 
@@ -280,59 +355,150 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { position: 'bottom' }
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: context => `${context.dataset.label}: ${formatTokenCount(context.parsed.x)}`
+                            }
+                        }
                     },
                     scales: {
-                        x: { beginAtZero: true }
-                    }
-                }
-            });
-        });
-
-    // Fetch timeline and render chart
-    fetch(`/api/users/${userId}/timeline?window=${windowParam}&granularity=hour`)
-        .then(r => r.json())
-        .then(data => {
-            const ctx = document.getElementById('timeline-chart').getContext('2d');
-            if (!data.timeline || data.timeline.length === 0) {
-                ctx.font = '14px DM Sans';
-                ctx.fillStyle = '#6b7280';
-                ctx.textAlign = 'center';
-                ctx.fillText('No timeline data available', ctx.canvas.width / 2, ctx.canvas.height / 2);
-                return;
-            }
-
-            new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: data.timeline.map(t => t.time_bucket),
-                    datasets: [{
-                        label: 'Total Tokens',
-                        data: data.timeline.map(t => t.total_token_count),
-                        borderColor: '#1f2937',
-                        backgroundColor: 'rgba(31, 41, 55, 0.1)',
-                        fill: true,
-                        tension: 0.3,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false }
-                    },
-                    scales: {
-                        y: { beginAtZero: true },
                         x: {
+                            beginAtZero: true,
                             ticks: {
-                                maxRotation: 45,
-                                minRotation: 45
+                                callback: value => formatTokenCount(value)
                             }
                         }
                     }
                 }
             });
         });
+
+    function setTimelineWindow(windowValue) {
+        document.querySelectorAll('[data-timeline-window]').forEach(button => {
+            button.classList.toggle('is-active', button.dataset.timelineWindow === windowValue);
+        });
+    }
+
+    function renderEmptyTimeline(ctx) {
+        if (timelineChart) {
+            timelineChart.destroy();
+            timelineChart = null;
+        }
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        ctx.font = '14px DM Sans';
+        ctx.fillStyle = '#6b7280';
+        ctx.textAlign = 'center';
+        ctx.fillText('No timeline data available', ctx.canvas.width / 2, ctx.canvas.height / 2);
+    }
+
+    function hashString(value) {
+        let hash = 0;
+        for (let i = 0; i < value.length; i += 1) {
+            hash = ((hash << 5) - hash) + value.charCodeAt(i);
+            hash |= 0;
+        }
+        return Math.abs(hash);
+    }
+
+    function colorForProject(projectName) {
+        if (!timelineColorCache.has(projectName)) {
+            const hue = hashString(projectName) % 360;
+            timelineColorCache.set(projectName, `hsl(${hue}, 62%, 52%)`);
+        }
+        return timelineColorCache.get(projectName);
+    }
+
+    function getProjectNames(timeline) {
+        const projectNames = new Set();
+        timeline.forEach(bucket => {
+            (bucket.project_breakdown || []).forEach(project => {
+                projectNames.add(project.project_name);
+            });
+        });
+        return Array.from(projectNames).sort((left, right) => left.localeCompare(right));
+    }
+
+    function tokenCountForProject(bucket, projectName) {
+        const row = (bucket.project_breakdown || []).find(project => project.project_name === projectName);
+        return row ? row.total_token_count : 0;
+    }
+
+    function buildTimelineDatasets(timeline) {
+        return getProjectNames(timeline).map(projectName => {
+            const color = colorForProject(projectName);
+            return {
+                label: projectName,
+                data: timeline.map(bucket => tokenCountForProject(bucket, projectName)),
+                backgroundColor: color,
+                borderColor: color,
+                borderWidth: 1,
+            };
+        });
+    }
+
+    function fetchTimeline(windowValue) {
+        setTimelineWindow(windowValue);
+        fetch(`/api/users/${userId}/timeline?window=${windowValue}&granularity=day`)
+        .then(r => r.json())
+        .then(data => {
+            const ctx = document.getElementById('timeline-chart').getContext('2d');
+            const datasets = buildTimelineDatasets(data.timeline || []);
+            if (!data.timeline || data.timeline.length === 0 || datasets.length === 0) {
+                renderEmptyTimeline(ctx);
+                return;
+            }
+
+            if (timelineChart) {
+                timelineChart.destroy();
+            }
+            timelineChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.timeline.map(t => t.time_bucket),
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: context => `${context.dataset.label}: ${formatTokenCount(context.parsed.y)}`
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            stacked: true,
+                            ticks: {
+                                callback: value => formatTokenCount(value)
+                            }
+                        },
+                        x: {
+                            stacked: true,
+                            ticks: {
+                                autoSkip: true,
+                                maxRotation: 0,
+                                minRotation: 0,
+                                maxTicksLimit: 8
+                            }
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+    document.querySelectorAll('[data-timeline-window]').forEach(button => {
+        button.addEventListener('click', () => {
+            fetchTimeline(button.dataset.timelineWindow);
+        });
+    });
+
+    fetchTimeline('week');
 })();
 </script>
 {% endblock %}

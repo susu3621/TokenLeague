@@ -272,6 +272,121 @@ def test_ingest_events_feed_leaderboard_filters_and_user_stats(auth_session):
     assert "claude-sonnet-4" in agent_html
 
 
+def test_user_timeline_api_supports_month_daily_range(auth_session, monkeypatch):
+    import db
+    from db import upsert_prompt_event
+
+    fixed_now = datetime(2026, 3, 24, 12, 0, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(db, "_utcnow", lambda: fixed_now)
+
+    upsert_prompt_event(
+        1,
+        _prompt_payload(
+            "timeline-month-1",
+            fixed_now - timedelta(days=4),
+            task_id="task-alpha",
+            input_tokens=30,
+            output_tokens=10,
+        ),
+    )
+    upsert_prompt_event(
+        1,
+        {
+            **_prompt_payload(
+                "timeline-month-1b",
+                fixed_now - timedelta(days=4),
+                task_id="task-beta",
+                input_tokens=8,
+                output_tokens=7,
+            ),
+            "project_name": "SideQuest",
+        },
+    )
+    upsert_prompt_event(
+        1,
+        {
+            **_prompt_payload(
+                "timeline-month-2",
+                fixed_now,
+                input_tokens=20,
+                output_tokens=5,
+            ),
+            "project_name": "TokenLeague",
+        },
+    )
+
+    response = auth_session.get("/api/users/1/timeline?window=month&granularity=day")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["window"] == "month"
+    assert payload["granularity"] == "day"
+    assert len(payload["timeline"]) == 30
+    assert payload["timeline"][0]["time_bucket"] == "2026-02-23"
+    assert payload["timeline"][-1]["time_bucket"] == "2026-03-24"
+
+    timeline = {row["time_bucket"]: row for row in payload["timeline"]}
+    assert timeline["2026-03-20"]["total_token_count"] == 55
+    assert timeline["2026-03-24"]["total_token_count"] == 25
+    assert timeline["2026-03-19"]["total_token_count"] == 0
+    assert timeline["2026-03-19"]["project_breakdown"] == []
+    assert timeline["2026-03-20"]["project_breakdown"] == [
+        {"project_name": "TokenLeague", "total_token_count": 40},
+        {"project_name": "SideQuest", "total_token_count": 15},
+    ]
+    assert timeline["2026-03-24"]["project_breakdown"] == [
+        {"project_name": "TokenLeague", "total_token_count": 25},
+    ]
+
+
+def test_user_detail_page_renders_timeline_range_selector(auth_session):
+    response = auth_session.get("/users/1")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "过去7天" in html
+    assert "过去30天" in html
+    assert "granularity=day" in html
+    assert "project_breakdown" in html
+    assert "stacked: true" in html
+
+
+def test_compact_token_count_formats_human_readable_suffixes():
+    from app import format_token_count
+
+    assert format_token_count(950) == "950"
+    assert format_token_count(1250) == "1.3K"
+    assert format_token_count(15000) == "15K"
+    assert format_token_count(2300000) == "2.3M"
+    assert format_token_count(1000000000) == "1B"
+    assert format_token_count(123.4) == "123.4"
+
+
+def test_user_detail_page_renders_compact_token_counts(auth_session):
+    from db import upsert_prompt_event
+
+    upsert_prompt_event(
+        1,
+        _prompt_payload(
+            "compact-user-detail",
+            datetime(2026, 3, 24, 12, 0, 0, tzinfo=timezone.utc),
+            input_tokens=1200,
+            output_tokens=50,
+        ),
+    )
+
+    response = auth_session.get("/users/1?window=all")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "1.3K" in html
+    assert "1,250" not in html
+    assert "function formatTokenCount(value)" in html
+    assert "formatTokenCount(p.total_token_count)" in html
+    assert "formatTokenCount(m.total_token_count)" in html
+    assert "callback: value => formatTokenCount(value)" in html
+
+
 def test_ingest_clamps_negative_prompt_and_task_durations(auth_session):
     from db import create_user, upsert_prompt_event, upsert_task_run
 

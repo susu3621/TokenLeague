@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 import json
 import os
 import secrets
@@ -653,6 +653,8 @@ def _within_window(event_time: datetime | None, window: str, now: datetime) -> b
         return event_time >= start
     if window == "week":
         return event_time >= now.astimezone(UTC) - timedelta(days=7)
+    if window == "month":
+        return event_time >= now.astimezone(UTC) - timedelta(days=30)
     raise ValueError("Unsupported window")
 
 
@@ -1088,12 +1090,27 @@ def get_user_time_series(
     else:
         prompt_events = _fetch_prompt_events_from_db()
 
-    matching_events = [
-        event
-        for event in prompt_events
-        if event["user_id"] == user_id
-        and _within_window(_prompt_event_time(event), window, now)
-    ]
+    daily_bucket_range: tuple[date, date] | None = None
+    if granularity == "day" and window in ("week", "month"):
+        end_date = now.astimezone(UTC).date()
+        day_count = 7 if window == "week" else 30
+        start_date = end_date - timedelta(days=day_count - 1)
+        daily_bucket_range = (start_date, end_date)
+
+    matching_events = []
+    for event in prompt_events:
+        if event["user_id"] != user_id:
+            continue
+        event_time = _prompt_event_time(event)
+        if daily_bucket_range is not None:
+            if event_time is None:
+                continue
+            event_date = _to_storage_datetime(event_time).date()
+            if daily_bucket_range[0] <= event_date <= daily_bucket_range[1]:
+                matching_events.append(event)
+            continue
+        if _within_window(event_time, window, now):
+            matching_events.append(event)
 
     def _bucket_key(event_time: datetime | None) -> str:
         if event_time is None:
@@ -1118,13 +1135,49 @@ def get_user_time_series(
                 "input_token_count": 0,
                 "output_token_count": 0,
                 "prompt_count": 0,
+                "project_breakdown": [],
+                "_project_totals": {},
             },
         )
         group["total_token_count"] += event["total_token_count"]
         group["input_token_count"] += event["input_token_count"]
         group["output_token_count"] += event["output_token_count"]
         group["prompt_count"] += 1
+        project_name = (event.get("project_name") or "").strip() or "(unknown)"
+        project_totals = group["_project_totals"]
+        project_totals[project_name] = project_totals.get(project_name, 0) + event["total_token_count"]
 
     result = list(time_buckets.values())
+    if daily_bucket_range is not None:
+        current_date = daily_bucket_range[0]
+        while current_date <= daily_bucket_range[1]:
+            bucket = current_date.strftime("%Y-%m-%d")
+            time_buckets.setdefault(
+                bucket,
+                {
+                    "time_bucket": bucket,
+                    "total_token_count": 0,
+                    "input_token_count": 0,
+                    "output_token_count": 0,
+                    "prompt_count": 0,
+                    "project_breakdown": [],
+                    "_project_totals": {},
+                },
+            )
+            current_date += timedelta(days=1)
+        result = list(time_buckets.values())
+
+    for item in result:
+        project_totals = item.pop("_project_totals", {})
+        item["project_breakdown"] = [
+            {
+                "project_name": project_name,
+                "total_token_count": total_token_count,
+            }
+            for project_name, total_token_count in sorted(
+                project_totals.items(),
+                key=lambda project: (-project[1], project[0]),
+            )
+        ]
     result.sort(key=lambda item: item["time_bucket"])
     return result
