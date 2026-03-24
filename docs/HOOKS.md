@@ -174,7 +174,7 @@ python3 ~/.openclaw/tokenleague_collect.py
 | `TOKENLEAGUE_HOOK_KEY` | Yes | - | Your authentication key |
 | `TOKENLEAGUE_API_URL` | No | `http://localhost:5006` | TokenLeague API URL |
 | `TOKENLEAGUE_GEMINI_CLI_VERSION` | No | auto-detect | Override Gemini CLI version if automatic detection is unavailable |
-| `TOKENLEAGUE_OPENCLAW_VERSION` | No | auto-detect / `unknown` | Override OpenClaw version when automatic detection is unavailable |
+| `TOKENLEAGUE_OPENCLAW_VERSION` | No | auto-detect / `unknown` | Override OpenClaw version when automatic detection from `openclaw --version` or installed CLI metadata is unavailable |
 
 ### Settings File
 
@@ -360,6 +360,8 @@ cp /path/to/TokenLeague/hooks/openclaw/tokenleague_collect.py ~/.openclaw/
 cp /path/to/TokenLeague/hooks/openclaw/tokenleague.env.example ~/.openclaw/
 chmod +x ~/.openclaw/tokenleague_collect.py
 ```
+
+OpenClaw uploads are recorded with `project_name=OpenClaw`. The collector treats Gateway sessions as workspace-agnostic and does not derive a repository name from the current `cwd`.
 
 ## Uninstalling
 

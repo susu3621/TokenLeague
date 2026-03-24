@@ -207,7 +207,7 @@ def test_collect_session_uploads_prompt_and_task_usage(tmp_path, monkeypatch):
             {
                 "external_event_id": "turn-1-assistant",
                 "task_id": "session-1",
-                "project_name": "TokenLeague",
+                "project_name": "OpenClaw",
                 "prompt_started_at": "2026-03-24T09:00:01.000Z",
                 "prompt_finished_at": "2026-03-24T09:00:15.000Z",
                 "input_token_count": 120,
@@ -221,7 +221,7 @@ def test_collect_session_uploads_prompt_and_task_usage(tmp_path, monkeypatch):
             "/api/ingest/task-run",
             {
                 "external_task_id": "session-1",
-                "project_name": "TokenLeague",
+                "project_name": "OpenClaw",
                 "started_at": "2026-03-24T09:00:00.000Z",
                 "finished_at": "2026-03-24T09:00:15.000Z",
                 "prompt_count": 1,
@@ -282,7 +282,7 @@ def test_collect_session_uploads_prompt_and_task_usage_from_gateway_schema(tmp_p
             {
                 "external_event_id": "turn-1-assistant",
                 "task_id": "session-1",
-                "project_name": "TokenLeague",
+                "project_name": "OpenClaw",
                 "prompt_started_at": "2026-03-24T09:00:01.000Z",
                 "prompt_finished_at": "2026-03-24T09:00:15.000Z",
                 "input_token_count": 5338,
@@ -296,7 +296,7 @@ def test_collect_session_uploads_prompt_and_task_usage_from_gateway_schema(tmp_p
             "/api/ingest/task-run",
             {
                 "external_task_id": "session-1",
-                "project_name": "TokenLeague",
+                "project_name": "OpenClaw",
                 "started_at": "2026-03-24T09:00:00.000Z",
                 "finished_at": "2026-03-24T09:00:15.000Z",
                 "prompt_count": 1,
@@ -352,6 +352,48 @@ def test_collect_session_reads_openclaw_env_file_with_export_prefix(tmp_path, mo
     assert requests
     assert requests[0]["url"].startswith("http://192.168.9.11:5006/")
     assert requests[0]["hook_key"] == "test-hook-key"
+
+
+def test_get_openclaw_version_detects_installed_cli_from_binary_package_json(tmp_path, monkeypatch):
+    hook = _load_hook_module()
+    package_root = tmp_path / "lib" / "node_modules" / "openclaw"
+    binary_dir = package_root / "bin"
+    binary_dir.mkdir(parents=True)
+    (package_root / "package.json").write_text(
+        json.dumps({"name": "openclaw", "version": "2026.3.13"}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    binary_path = binary_dir / "openclaw"
+    binary_path.write_text("#!/usr/bin/env node\n", encoding="utf-8")
+    monkeypatch.delenv("TOKENLEAGUE_OPENCLAW_VERSION", raising=False)
+    monkeypatch.setattr(hook.shutil, "which", lambda name: str(binary_path) if name == "openclaw" else None)
+    if hasattr(hook, "_OPENCLAW_VERSION_CACHE"):
+        monkeypatch.setattr(hook, "_OPENCLAW_VERSION_CACHE", None)
+
+    assert hook._get_openclaw_version() == "2026.3.13"
+
+
+def test_get_openclaw_version_prefers_openclaw_command_output(monkeypatch):
+    hook = _load_hook_module()
+    monkeypatch.delenv("TOKENLEAGUE_OPENCLAW_VERSION", raising=False)
+    monkeypatch.setattr(hook.shutil, "which", lambda name: "/usr/local/bin/openclaw" if name == "openclaw" else None)
+    if hasattr(hook, "_OPENCLAW_VERSION_CACHE"):
+        monkeypatch.setattr(hook, "_OPENCLAW_VERSION_CACHE", None)
+
+    calls = []
+
+    class _CompletedProcess:
+        stdout = "OpenClaw 2026.3.13 (61d171a)\n"
+
+    def fake_run(args, capture_output, text, timeout, check):
+        calls.append(args)
+        return _CompletedProcess()
+
+    monkeypatch.setattr(hook, "subprocess", type("_SubprocessModule", (), {"run": staticmethod(fake_run)}), raising=False)
+    monkeypatch.setattr(hook, "_detect_openclaw_version_from_binary", lambda binary_path: "2025.1.1")
+
+    assert hook._get_openclaw_version() == "2026.3.13"
+    assert calls == [["/usr/local/bin/openclaw", "--version"]]
 
 
 def test_collect_session_writes_summary_log_when_no_sessions_found(tmp_path, monkeypatch):

@@ -13,7 +13,10 @@ import fcntl
 import ipaddress
 import json
 import os
+import re
+import shutil
 import socket
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,6 +32,7 @@ CURSOR_FILE_NAME = ".tokenleague_openclaw_cursor.json"
 CURSOR_LOCK_FILE_NAME = ".tokenleague_openclaw_cursor.lock"
 AGENT_TYPE = "openclaw"
 _OPENCLAW_ENV_CACHE: dict[str, str] | None = None
+_OPENCLAW_VERSION_CACHE: str | None = None
 
 
 def _get_process_env(key: str, default: str | None = None) -> str | None:
@@ -298,31 +302,97 @@ def _resolve_worktree_repo_root(root: Path) -> Path | None:
     return None
 
 
-def _detect_project_name(cwd: str | None = None) -> str:
-    raw_cwd = str(cwd or "").strip()
-    candidate = Path(raw_cwd or os.getcwd()).expanduser()
+def _get_project_name() -> str:
+    return "OpenClaw"
+
+
+def _extract_semver(value: str | None) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    match = re.search(r"\b\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?\b", text)
+    if not match:
+        return None
+    return match.group(0)
+
+
+def _detect_openclaw_version_from_binary(binary_path: str | None) -> str | None:
+    if not binary_path:
+        return None
+
     try:
-        candidate = candidate.resolve()
+        resolved = Path(binary_path).expanduser().resolve()
     except OSError:
-        pass
+        return None
 
-    if candidate.is_file():
-        candidate = candidate.parent
+    parts = resolved.parts
+    for index, part in enumerate(parts):
+        if part != "Cellar" or index + 2 >= len(parts):
+            continue
+        if parts[index + 1] != "openclaw":
+            continue
+        return _extract_semver(parts[index + 2])
 
-    search_roots = [candidate, *candidate.parents]
-    for root in search_roots:
-        if (root / ".git").is_dir():
-            return root.name
+    for directory in [resolved.parent, *resolved.parents]:
+        package_json = directory / "package.json"
+        if not package_json.exists():
+            continue
+        try:
+            payload = json.loads(package_json.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
 
-    for root in search_roots:
-        repo_root = _resolve_worktree_repo_root(root)
-        if repo_root is not None:
-            return repo_root.name
+        package_name = str(payload.get("name") or "")
+        if "openclaw" not in package_name:
+            continue
 
-    normalized = str(candidate).rstrip("/\\")
-    if not normalized:
-        return ""
-    return normalized.split("/")[-1].split("\\")[-1]
+        version = _extract_semver(str(payload.get("version") or ""))
+        if version:
+            return version
+
+    return None
+
+
+def _detect_openclaw_version_from_command(binary_path: str | None) -> str | None:
+    if not binary_path:
+        return None
+
+    try:
+        completed = subprocess.run(
+            [binary_path, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+    for candidate in (completed.stdout, getattr(completed, "stderr", "")):
+        version = _extract_semver(candidate)
+        if version:
+            return version
+    return None
+
+
+def _detect_installed_openclaw_version() -> str | None:
+    global _OPENCLAW_VERSION_CACHE
+
+    if _OPENCLAW_VERSION_CACHE is not None:
+        return _OPENCLAW_VERSION_CACHE or None
+
+    for env_name in ("TOKENLEAGUE_OPENCLAW_VERSION", "OPENCLAW_VERSION"):
+        version = _extract_semver(_get_env(env_name))
+        if version:
+            _OPENCLAW_VERSION_CACHE = version
+            return version
+
+    binary_path = shutil.which("openclaw")
+    version = _detect_openclaw_version_from_command(binary_path)
+    if not version:
+        version = _detect_openclaw_version_from_binary(binary_path)
+    _OPENCLAW_VERSION_CACHE = version or ""
+    return version
 
 
 def _coerce_dict(value: Any) -> dict[str, Any]:
@@ -514,7 +584,7 @@ def _save_cursor_state(state: dict[str, Any]) -> None:
 
 
 def _get_openclaw_version() -> str:
-    return str(_get_env("TOKENLEAGUE_OPENCLAW_VERSION") or "unknown")
+    return str(_detect_installed_openclaw_version() or "unknown")
 
 
 def _build_prompt_event_payload(
@@ -554,7 +624,7 @@ def _summarize_transcript(
     current_model = str(session_record.get("model") or "")
     discovered_model_name = current_model
     last_user_record: dict[str, Any] = {}
-    project_name = _detect_project_name(cwd or session_record.get("cwd"))
+    project_name = _get_project_name()
     prompt_events: list[dict[str, Any]] = []
 
     for record in transcript_records:
@@ -619,7 +689,7 @@ def _build_task_run_payload(
 
     return {
         "external_task_id": str(session_record.get("id") or ""),
-        "project_name": str(summary.get("project_name") or _detect_project_name(session_record.get("cwd"))),
+        "project_name": str(summary.get("project_name") or _get_project_name()),
         "started_at": str(summary.get("started_at") or _normalize_timestamp(session_record.get("startedAt"))),
         "finished_at": str(
             summary.get("finished_at")

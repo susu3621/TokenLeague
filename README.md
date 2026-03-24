@@ -91,7 +91,7 @@ export TOKENLEAGUE_GEMINI_CLI_VERSION="0.34.0"
 export TOKENLEAGUE_OPENCLAW_VERSION="0.1.0"
 ```
 
-如果你使用 OpenClaw service 启动，优先把这些变量写入 `~/.openclaw/.env`，不要只放在 shell profile 里。service 进程通常不会继承交互式 shell 环境。OpenClaw collector 会直接读取这个文件，兼容 `.env` 和 `export KEY=VALUE` 两种写法。
+如果你使用 OpenClaw service 启动，优先把这些变量写入 `~/.openclaw/.env`，不要只放在 shell profile 里。service 进程通常不会继承交互式 shell 环境。OpenClaw collector 会直接读取这个文件，兼容 `.env` 和 `export KEY=VALUE` 两种写法。未显式设置 `TOKENLEAGUE_OPENCLAW_VERSION` 时，collector 会优先执行 `openclaw --version` 读取版本，取不到时再回退到已安装 CLI 的元数据探测；OpenClaw 上报的 `project_name` 固定为 `OpenClaw`，不再从当前 workspace 推导仓库名。
 
 ### 卸载 Hooks
 
