@@ -6,6 +6,18 @@ import urllib.request
 
 HOOK_PATH = Path(__file__).resolve().parents[2] / "hooks" / "openclaw" / "tokenleague_collect.py"
 INSTALL_SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "install_hooks.sh"
+SYSTEMD_SERVICE_TEMPLATE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "hooks"
+    / "openclaw"
+    / "tokenleague-openclaw-collector.service"
+)
+SYSTEMD_TIMER_TEMPLATE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "hooks"
+    / "openclaw"
+    / "tokenleague-openclaw-collector.timer"
+)
 
 
 def _load_hook_module():
@@ -182,6 +194,21 @@ def test_install_script_supports_openclaw_assets():
     assert "install_openclaw_hooks" in content
     assert "uninstall_openclaw_hooks" in content
     assert ".openclaw/tokenleague_collect.py" in content
+    assert "tokenleague-openclaw-collector.service" in content
+    assert "tokenleague-openclaw-collector.timer" in content
+    assert "systemctl daemon-reload" in content
+    assert "systemctl enable --now tokenleague-openclaw-collector.timer" in content
+
+
+def test_openclaw_systemd_templates_exist_and_poll_every_minute():
+    service_template = SYSTEMD_SERVICE_TEMPLATE_PATH.read_text(encoding="utf-8")
+    timer_template = SYSTEMD_TIMER_TEMPLATE_PATH.read_text(encoding="utf-8")
+
+    assert "User={{OPENCLAW_USER}}" in service_template
+    assert "ExecStart={{PYTHON_BIN}} {{COLLECTOR_PATH}}" in service_template
+    assert "Environment=HOME={{OPENCLAW_HOME}}" in service_template
+    assert "OnUnitActiveSec=1min" in timer_template
+    assert "WantedBy=timers.target" in timer_template
 
 
 def test_collect_session_uploads_prompt_and_task_usage(tmp_path, monkeypatch):

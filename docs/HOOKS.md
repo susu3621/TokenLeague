@@ -83,6 +83,8 @@ export TOKENLEAGUE_OPENCLAW_VERSION="0.1.0"
 
 For OpenClaw service deployments, prefer putting these variables in `~/.openclaw/.env` and restarting the service. This is more reliable than relying on interactive shell startup files. The collector reads this file directly and accepts both plain `.env` lines and `export KEY=VALUE` lines.
 
+When you run `./scripts/install_hooks.sh --openclaw --global`, the installer also installs and enables a system-level `systemd` timer named `tokenleague-openclaw-collector.timer`. It runs the collector every 1 minute and writes the unit files into `/etc/systemd/system/`, so `sudo` privileges are typically required.
+
 Get your hook key from the TokenLeague admin panel.
 
 ### 3. Start Using
@@ -103,6 +105,11 @@ gemini
 ```
 
 **OpenClaw:**
+```bash
+sudo systemctl status tokenleague-openclaw-collector.timer
+```
+
+Optional manual run:
 ```bash
 python3 ~/.openclaw/tokenleague_collect.py
 ```
@@ -220,6 +227,14 @@ OpenClaw installs a collector script and env example into `.openclaw/` or `~/.op
 └── tokenleague.env.example
 ```
 
+Global OpenClaw installs also create:
+
+```text
+/etc/systemd/system/
+├── tokenleague-openclaw-collector.service
+└── tokenleague-openclaw-collector.timer
+```
+
 ## Privacy
 
 The hooks only collect **statistical data**:
@@ -295,9 +310,15 @@ The hooks **do NOT collect**:
 
 3. Restart the OpenClaw service after changing `.env`
 
-4. If OpenClaw still cannot see shell-provided variables, use `env.shellEnv.enabled` only as a fallback
+4. Check the system timer:
+   ```bash
+   sudo systemctl status tokenleague-openclaw-collector.timer
+   sudo systemctl list-timers tokenleague-openclaw-collector.timer
+   ```
 
-5. Check collector diagnostics:
+5. If OpenClaw still cannot see shell-provided variables, use `env.shellEnv.enabled` only as a fallback
+
+6. Check collector diagnostics:
    - log: `/tmp/.tokenleague_openclaw_hook.log`
    - cursor: `/tmp/.tokenleague_openclaw_cursor.json`
 
@@ -362,6 +383,12 @@ chmod +x ~/.openclaw/tokenleague_collect.py
 ```
 
 OpenClaw uploads are recorded with `project_name=OpenClaw`. The collector treats Gateway sessions as workspace-agnostic and does not derive a repository name from the current `cwd`.
+
+For 1-minute automatic uploads with systemd, use the installer so the templates are rendered with the correct user, home directory, and collector path:
+
+```bash
+./scripts/install_hooks.sh --openclaw --global
+```
 
 ## Uninstalling
 

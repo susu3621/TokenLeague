@@ -42,6 +42,67 @@ MODE_UNINSTALL=false
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 HOOKS_SOURCE_DIR="$PROJECT_ROOT/hooks"
+OPENCLAW_SYSTEMD_SERVICE_NAME="tokenleague-openclaw-collector.service"
+OPENCLAW_SYSTEMD_TIMER_NAME="tokenleague-openclaw-collector.timer"
+OPENCLAW_SYSTEMD_UNIT_DIR="/etc/systemd/system"
+
+run_privileged_command() {
+    if [[ "$EUID" -eq 0 ]]; then
+        "$@"
+    else
+        sudo "$@"
+    fi
+}
+
+resolve_openclaw_install_user() {
+    if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+        printf '%s\n' "$SUDO_USER"
+        return
+    fi
+    id -un
+}
+
+resolve_openclaw_install_home() {
+    local install_user="$1"
+    python3 - "$install_user" <<'PY'
+import pwd
+import sys
+
+print(pwd.getpwnam(sys.argv[1]).pw_dir)
+PY
+}
+
+render_openclaw_systemd_template() {
+    local template_path="$1"
+    local output_path="$2"
+    local install_user="$3"
+    local install_home="$4"
+    local collector_path="$5"
+    local python_bin="$6"
+
+    python3 - "$template_path" "$output_path" "$install_user" "$install_home" "$collector_path" "$python_bin" <<'PY'
+from pathlib import Path
+import sys
+
+template_path = Path(sys.argv[1])
+output_path = Path(sys.argv[2])
+install_user = sys.argv[3]
+install_home = sys.argv[4]
+collector_path = sys.argv[5]
+python_bin = sys.argv[6]
+
+content = template_path.read_text(encoding="utf-8")
+for placeholder, value in {
+    "{{OPENCLAW_USER}}": install_user,
+    "{{OPENCLAW_HOME}}": install_home,
+    "{{COLLECTOR_PATH}}": collector_path,
+    "{{PYTHON_BIN}}": python_bin,
+}.items():
+    content = content.replace(placeholder, value)
+
+output_path.write_text(content, encoding="utf-8")
+PY
+}
 
 write_codex_hooks_config() {
     local target_path="$1"
@@ -634,7 +695,7 @@ install_gemini_hooks() {
 install_openclaw_hooks() {
     local target_dir
     if [[ "$INSTALL_GLOBAL" == "true" ]]; then
-        target_dir="$HOME/.openclaw"
+        target_dir="$(resolve_openclaw_install_home "$(resolve_openclaw_install_user)")/.openclaw"
     else
         target_dir="$PROJECT_ROOT/.openclaw"
     fi
@@ -648,7 +709,44 @@ install_openclaw_hooks() {
 
     cp "$PROJECT_ROOT/hooks/openclaw/tokenleague.env.example" "$target_dir/tokenleague.env.example"
 
+    if [[ "$INSTALL_GLOBAL" == "true" ]]; then
+        install_openclaw_systemd_timer
+    fi
+
     echo -e "${GREEN}✓ OpenClaw collector assets installed successfully${NC}"
+}
+
+install_openclaw_systemd_timer() {
+    local install_user
+    install_user="$(resolve_openclaw_install_user)"
+    local install_home
+    install_home="$(resolve_openclaw_install_home "$install_user")"
+    local collector_path="$install_home/.openclaw/tokenleague_collect.py"
+    local python_bin
+    python_bin="$(command -v python3 || true)"
+    if [[ -z "$python_bin" ]]; then
+        python_bin="/usr/bin/python3"
+    fi
+
+    local service_template="$PROJECT_ROOT/hooks/openclaw/$OPENCLAW_SYSTEMD_SERVICE_NAME"
+    local timer_template="$PROJECT_ROOT/hooks/openclaw/$OPENCLAW_SYSTEMD_TIMER_NAME"
+    local rendered_service
+    rendered_service="$(mktemp)"
+    local rendered_timer
+    rendered_timer="$(mktemp)"
+
+    render_openclaw_systemd_template "$service_template" "$rendered_service" "$install_user" "$install_home" "$collector_path" "$python_bin"
+    render_openclaw_systemd_template "$timer_template" "$rendered_timer" "$install_user" "$install_home" "$collector_path" "$python_bin"
+
+    run_privileged_command install -m 0644 "$rendered_service" "$OPENCLAW_SYSTEMD_UNIT_DIR/$OPENCLAW_SYSTEMD_SERVICE_NAME"
+    run_privileged_command install -m 0644 "$rendered_timer" "$OPENCLAW_SYSTEMD_UNIT_DIR/$OPENCLAW_SYSTEMD_TIMER_NAME"
+    rm -f "$rendered_service" "$rendered_timer"
+
+    run_privileged_command systemctl daemon-reload
+    run_privileged_command systemctl enable --now tokenleague-openclaw-collector.timer
+    run_privileged_command systemctl restart tokenleague-openclaw-collector.timer
+
+    echo -e "${GREEN}  ✓ Installed systemd timer: $OPENCLAW_SYSTEMD_TIMER_NAME${NC}"
 }
 
 # Function to install Codex CLI hooks
@@ -690,7 +788,7 @@ install_codex_hooks() {
 uninstall_openclaw_hooks() {
     local target_dir
     if [[ "$INSTALL_GLOBAL" == "true" ]]; then
-        target_dir="$HOME/.openclaw"
+        target_dir="$(resolve_openclaw_install_home "$(resolve_openclaw_install_user)")/.openclaw"
     else
         target_dir="$PROJECT_ROOT/.openclaw"
     fi
@@ -709,7 +807,23 @@ uninstall_openclaw_hooks() {
         echo -e "${GREEN}  ✓ Removed tokenleague.env.example${NC}"
     fi
 
+    if [[ "$INSTALL_GLOBAL" == "true" ]]; then
+        uninstall_openclaw_systemd_timer
+    fi
+
     echo -e "${GREEN}✓ OpenClaw collector assets uninstalled${NC}"
+}
+
+uninstall_openclaw_systemd_timer() {
+    if run_privileged_command test -f "$OPENCLAW_SYSTEMD_UNIT_DIR/$OPENCLAW_SYSTEMD_TIMER_NAME"; then
+        run_privileged_command systemctl disable --now tokenleague-openclaw-collector.timer || true
+        run_privileged_command rm -f "$OPENCLAW_SYSTEMD_UNIT_DIR/$OPENCLAW_SYSTEMD_SERVICE_NAME"
+        run_privileged_command rm -f "$OPENCLAW_SYSTEMD_UNIT_DIR/$OPENCLAW_SYSTEMD_TIMER_NAME"
+        run_privileged_command systemctl daemon-reload
+        echo -e "${GREEN}  ✓ Removed systemd timer: $OPENCLAW_SYSTEMD_TIMER_NAME${NC}"
+    else
+        echo -e "${YELLOW}  → systemd timer not found${NC}"
+    fi
 }
 
 # Function to uninstall Gemini CLI hooks
@@ -871,8 +985,13 @@ else
     echo "  export TOKENLEAGUE_API_URL=\"http://localhost:5006\""
     echo ""
     if [[ "$INSTALL_OPENCLAW" == "true" ]]; then
-        echo -e "${YELLOW}For OpenClaw service installs, put these variables in ~/.openclaw/.env and restart the service.${NC}"
-        echo -e "${YELLOW}Use shell profile exports only as a fallback for terminal-started agents.${NC}"
+        if [[ "$INSTALL_GLOBAL" == "true" ]]; then
+            echo -e "${YELLOW}For OpenClaw service installs, put these variables in ~/.openclaw/.env and restart the service.${NC}"
+            echo -e "${YELLOW}The installer also enables a systemd timer that runs the collector every minute.${NC}"
+            echo -e "${YELLOW}Use shell profile exports only as a fallback for terminal-started agents.${NC}"
+        else
+            echo -e "${YELLOW}For local OpenClaw installs, copy these variables into .openclaw/.env or export them before running the collector.${NC}"
+        fi
     else
         echo -e "${YELLOW}Add these to your shell profile (~/.bashrc, ~/.zshrc) for persistence.${NC}"
     fi
@@ -912,7 +1031,8 @@ else
         echo "  2. Add TokenLeague variables to ~/.openclaw/.env"
         echo "  3. Restart the OpenClaw service"
         if [[ "$INSTALL_GLOBAL" == "true" ]]; then
-            echo "  4. Run: python3 $global_openclaw_collector_path"
+            echo "  4. Check timer status: sudo systemctl status $OPENCLAW_SYSTEMD_TIMER_NAME"
+            echo "  5. Optional manual run: python3 $global_openclaw_collector_path"
         else
             echo "  4. Run: python3 $local_openclaw_collector_path"
         fi
