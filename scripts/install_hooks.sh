@@ -2,17 +2,18 @@
 #
 # TokenLeague Hooks Installation Script
 #
-# This script installs or uninstalls TokenLeague statistics hooks for Claude Code and/or Codex CLI.
+# This script installs or uninstalls TokenLeague statistics hooks for supported agents.
 #
 # Usage:
-#   ./install_hooks.sh [--claude] [--codex] [--both] [--global] [--uninstall]
+#   ./install_hooks.sh [--claude] [--codex] [--gemini] [--openclaw] [--both] [--global] [--uninstall]
 #
 # Options:
 #   --claude    Install/uninstall hooks for Claude Code only
 #   --codex     Install/uninstall hooks for Codex CLI only
 #   --gemini    Install/uninstall hooks for Gemini CLI only
+#   --openclaw  Install/uninstall collector assets for OpenClaw
 #   --both      Install/uninstall hooks for both (default)
-#   --global    Install/uninstall to user's global config directory (~/.claude, ~/.codex)
+#   --global    Install/uninstall to user's global config directory (~/.claude, ~/.codex, ~/.gemini, ~/.openclaw)
 #   --local     Install/uninstall to current project directory (default)
 #   --uninstall Remove TokenLeague hooks
 #
@@ -34,11 +35,13 @@ NC='\033[0m' # No Color
 INSTALL_CLAUDE=false
 INSTALL_CODEX=false
 INSTALL_GEMINI=false
+INSTALL_OPENCLAW=false
 INSTALL_GLOBAL=false
 MODE_UNINSTALL=false
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+HOOKS_SOURCE_DIR="$PROJECT_ROOT/hooks"
 
 write_codex_hooks_config() {
     local target_path="$1"
@@ -513,6 +516,10 @@ while [[ $# -gt 0 ]]; do
             INSTALL_GEMINI=true
             shift
             ;;
+        --openclaw)
+            INSTALL_OPENCLAW=true
+            shift
+            ;;
         --both)
             INSTALL_CLAUDE=true
             INSTALL_CODEX=true
@@ -539,8 +546,9 @@ while [[ $# -gt 0 ]]; do
             echo "  --claude    Install/uninstall hooks for Claude Code only"
             echo "  --codex     Install/uninstall hooks for Codex CLI only"
             echo "  --gemini    Install/uninstall hooks for Gemini CLI only"
+            echo "  --openclaw  Install/uninstall collector assets for OpenClaw"
             echo "  --both      Install/uninstall hooks for both (default)"
-            echo "  --global    Install/uninstall to user's global config (~/.claude, ~/.codex)"
+            echo "  --global    Install/uninstall to user's global config (~/.claude, ~/.codex, ~/.gemini, ~/.openclaw)"
             echo "  --local     Install/uninstall to current project directory (default)"
             echo "  --uninstall Remove TokenLeague hooks"
             echo "  --help, -h  Show this help message"
@@ -554,7 +562,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Default to both if nothing specified
-if [[ "$INSTALL_CLAUDE" == "false" && "$INSTALL_CODEX" == "false" ]]; then
+if [[ "$INSTALL_CLAUDE" == "false" && "$INSTALL_CODEX" == "false" && "$INSTALL_GEMINI" == "false" && "$INSTALL_OPENCLAW" == "false" ]]; then
     INSTALL_CLAUDE=true
     INSTALL_CODEX=true
 fi
@@ -582,11 +590,11 @@ install_claude_hooks() {
     mkdir -p "$target_dir/hooks"
 
     # Copy hook script
-    cp "$PROJECT_ROOT/.claude/hooks/tokenleague.py" "$target_dir/hooks/tokenleague.py"
+    cp "$HOOKS_SOURCE_DIR/claude/tokenleague.py" "$target_dir/hooks/tokenleague.py"
     chmod +x "$target_dir/hooks/tokenleague.py"
 
     # Copy env example
-    cp "$PROJECT_ROOT/.claude/hooks/tokenleague.env.example" "$target_dir/hooks/tokenleague.env.example"
+    cp "$HOOKS_SOURCE_DIR/claude/tokenleague.env.example" "$target_dir/hooks/tokenleague.env.example"
 
     # Create or merge settings.json
     merge_claude_settings "$target_dir/settings.json" "$command_path"
@@ -610,16 +618,37 @@ install_gemini_hooks() {
 
     mkdir -p "$target_dir/hooks"
 
-    cp "$PROJECT_ROOT/.gemini/hooks/tokenleague.py" "$target_dir/hooks/tokenleague.py"
+    cp "$HOOKS_SOURCE_DIR/gemini/tokenleague.py" "$target_dir/hooks/tokenleague.py"
     chmod +x "$target_dir/hooks/tokenleague.py"
 
-    cp "$PROJECT_ROOT/.gemini/hooks/tokenleague.env.example" "$target_dir/hooks/tokenleague.env.example"
+    cp "$HOOKS_SOURCE_DIR/gemini/tokenleague.env.example" "$target_dir/hooks/tokenleague.env.example"
 
     # Create or merge .gemini/settings.json
     local settings_path="$target_dir/settings.json"
     merge_gemini_settings "$settings_path" "$command_path"
 
     echo -e "${GREEN}✓ Gemini CLI hooks installed successfully${NC}"
+}
+
+# Function to install OpenClaw collector assets
+install_openclaw_hooks() {
+    local target_dir
+    if [[ "$INSTALL_GLOBAL" == "true" ]]; then
+        target_dir="$HOME/.openclaw"
+    else
+        target_dir="$PROJECT_ROOT/.openclaw"
+    fi
+
+    echo -e "${YELLOW}Installing OpenClaw collector assets to: $target_dir${NC}"
+
+    mkdir -p "$target_dir"
+
+    cp "$PROJECT_ROOT/hooks/openclaw/tokenleague_collect.py" "$target_dir/tokenleague_collect.py"
+    chmod +x "$target_dir/tokenleague_collect.py"
+
+    cp "$PROJECT_ROOT/hooks/openclaw/tokenleague.env.example" "$target_dir/tokenleague.env.example"
+
+    echo -e "${GREEN}✓ OpenClaw collector assets installed successfully${NC}"
 }
 
 # Function to install Codex CLI hooks
@@ -637,11 +666,11 @@ install_codex_hooks() {
     mkdir -p "$target_dir/hooks"
 
     # Copy hook script
-    cp "$PROJECT_ROOT/.codex/hooks/tokenleague.py" "$target_dir/hooks/tokenleague.py"
+    cp "$HOOKS_SOURCE_DIR/codex/tokenleague.py" "$target_dir/hooks/tokenleague.py"
     chmod +x "$target_dir/hooks/tokenleague.py"
 
     # Copy env example
-    cp "$PROJECT_ROOT/.codex/hooks/tokenleague.env.example" "$target_dir/hooks/tokenleague.env.example"
+    cp "$HOOKS_SOURCE_DIR/codex/tokenleague.env.example" "$target_dir/hooks/tokenleague.env.example"
 
     local command_path
     local hooks_config_path="$target_dir/hooks.json"
@@ -655,6 +684,32 @@ install_codex_hooks() {
     ensure_codex_feature_flag
 
     echo -e "${GREEN}✓ Codex CLI hooks installed successfully${NC}"
+}
+
+# Function to uninstall OpenClaw collector assets
+uninstall_openclaw_hooks() {
+    local target_dir
+    if [[ "$INSTALL_GLOBAL" == "true" ]]; then
+        target_dir="$HOME/.openclaw"
+    else
+        target_dir="$PROJECT_ROOT/.openclaw"
+    fi
+
+    echo -e "${YELLOW}Uninstalling OpenClaw collector assets from: $target_dir${NC}"
+
+    if [[ -f "$target_dir/tokenleague_collect.py" ]]; then
+        rm -f "$target_dir/tokenleague_collect.py"
+        echo -e "${GREEN}  ✓ Removed tokenleague_collect.py${NC}"
+    else
+        echo -e "${YELLOW}  → tokenleague_collect.py not found${NC}"
+    fi
+
+    if [[ -f "$target_dir/tokenleague.env.example" ]]; then
+        rm -f "$target_dir/tokenleague.env.example"
+        echo -e "${GREEN}  ✓ Removed tokenleague.env.example${NC}"
+    fi
+
+    echo -e "${GREEN}✓ OpenClaw collector assets uninstalled${NC}"
 }
 
 # Function to uninstall Gemini CLI hooks
@@ -769,6 +824,11 @@ if [[ "$MODE_UNINSTALL" == "true" ]]; then
         echo ""
     fi
 
+    if [[ "$INSTALL_OPENCLAW" == "true" ]]; then
+        uninstall_openclaw_hooks
+        echo ""
+    fi
+
     echo -e "${GREEN}Uninstallation complete!${NC}"
 else
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
@@ -792,6 +852,11 @@ else
         echo ""
     fi
 
+    if [[ "$INSTALL_OPENCLAW" == "true" ]]; then
+        install_openclaw_hooks
+        echo ""
+    fi
+
     # Print configuration instructions
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
     echo -e "${BLUE}       Configuration Required${NC}"
@@ -805,7 +870,12 @@ else
     echo "  # Optional: TokenLeague API URL (default: http://localhost:5006)"
     echo "  export TOKENLEAGUE_API_URL=\"http://localhost:5006\""
     echo ""
-    echo -e "${YELLOW}Add these to your shell profile (~/.bashrc, ~/.zshrc) for persistence.${NC}"
+    if [[ "$INSTALL_OPENCLAW" == "true" ]]; then
+        echo -e "${YELLOW}For OpenClaw service installs, put these variables in ~/.openclaw/.env and restart the service.${NC}"
+        echo -e "${YELLOW}Use shell profile exports only as a fallback for terminal-started agents.${NC}"
+    else
+        echo -e "${YELLOW}Add these to your shell profile (~/.bashrc, ~/.zshrc) for persistence.${NC}"
+    fi
     echo ""
 
     # Print verification instructions
@@ -813,6 +883,8 @@ else
     echo -e "${BLUE}       Verification${NC}"
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
     echo ""
+    local_openclaw_collector_path="$PROJECT_ROOT/.openclaw/tokenleague_collect.py"
+    global_openclaw_collector_path="$HOME/.openclaw/tokenleague_collect.py"
     if [[ "$INSTALL_CLAUDE" == "true" ]]; then
         echo -e "To test Claude Code hooks:"
         echo "  1. Start TokenLeague: cd $PROJECT_ROOT && python -m service.app"
@@ -832,6 +904,18 @@ else
         echo "  1. Start TokenLeague: cd $PROJECT_ROOT && python -m service.app"
         echo "  2. Run: gemini"
         echo "  3. Send a prompt and check the leaderboard"
+        echo ""
+    fi
+    if [[ "$INSTALL_OPENCLAW" == "true" ]]; then
+        echo -e "To test OpenClaw collector support:"
+        echo "  1. Start TokenLeague: cd $PROJECT_ROOT && python -m service.app"
+        echo "  2. Add TokenLeague variables to ~/.openclaw/.env"
+        echo "  3. Restart the OpenClaw service"
+        if [[ "$INSTALL_GLOBAL" == "true" ]]; then
+            echo "  4. Run: python3 $global_openclaw_collector_path"
+        else
+            echo "  4. Run: python3 $local_openclaw_collector_path"
+        fi
         echo ""
     fi
 

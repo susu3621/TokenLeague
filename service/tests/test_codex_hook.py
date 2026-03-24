@@ -3,8 +3,8 @@ import importlib.util
 from pathlib import Path
 
 
-HOOK_PATH = Path(__file__).resolve().parents[2] / ".codex" / "hooks" / "tokenleague.py"
-HOOKS_CONFIG_PATH = Path(__file__).resolve().parents[2] / ".codex" / "hooks.json"
+HOOK_PATH = Path(__file__).resolve().parents[2] / "hooks" / "codex" / "tokenleague.py"
+HOOKS_CONFIG_PATH = Path(__file__).resolve().parents[2] / "hooks" / "codex" / "hooks.json"
 INSTALL_SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "install_hooks.sh"
 
 
@@ -14,6 +14,18 @@ def _load_hook_module():
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
+
+
+def _make_git_worktree_path(tmp_path: Path, project_name: str, worktree_name: str) -> Path:
+    repo_root = tmp_path / project_name
+    (repo_root / ".git").mkdir(parents=True)
+    worktree_dir = repo_root / ".worktrees" / worktree_name
+    worktree_dir.mkdir(parents=True)
+    (worktree_dir / ".git").write_text(
+        f"gitdir: {repo_root / '.git' / 'worktrees' / worktree_name}\n",
+        encoding="utf-8",
+    )
+    return worktree_dir
 
 
 def _task_started(timestamp: str, turn_id: str) -> dict:
@@ -72,6 +84,13 @@ def test_install_script_uses_codex_hooks_json_and_enables_feature_flag():
     assert "config.toml" in content
     assert "codex_hooks = true" in content
     assert ".codex/settings.json" not in content
+
+
+def test_detect_project_name_uses_repo_root_for_git_worktree(tmp_path):
+    hook = _load_hook_module()
+    worktree_dir = _make_git_worktree_path(tmp_path, "TokenLeague", "openclaw-hook-support")
+
+    assert hook._detect_project_name(str(worktree_dir)) == "TokenLeague"
 
 
 def test_handle_user_prompt_submit_persists_session_state(tmp_path, monkeypatch):

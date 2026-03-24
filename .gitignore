@@ -127,3 +127,9 @@ coverage.xml
 
 # Git worktrees
 .worktrees/ 
+
+# Agent local install targets
+.claude/
+.codex/
+.gemini/
+.openclaw/

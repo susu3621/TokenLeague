@@ -48,6 +48,33 @@ def _get_hook_log_file() -> Path:
     return _get_temp_dir() / HOOK_LOG_FILE_NAME
 
 
+def _resolve_worktree_repo_root(root: Path) -> Path | None:
+    git_file = root / ".git"
+    if not git_file.is_file():
+        return None
+
+    try:
+        first_line = git_file.read_text(encoding="utf-8").splitlines()[0].strip()
+    except (IndexError, OSError, UnicodeDecodeError):
+        return None
+
+    prefix = "gitdir:"
+    if not first_line.startswith(prefix):
+        return None
+
+    gitdir_value = first_line[len(prefix):].strip()
+    gitdir_path = Path(gitdir_value)
+    if not gitdir_path.is_absolute():
+        gitdir_path = (git_file.parent / gitdir_path).resolve()
+
+    parts = gitdir_path.parts
+    for index in range(len(parts) - 2):
+        if parts[index] == ".git" and parts[index + 1] == "worktrees":
+            repo_root = Path(*parts[:index])
+            return repo_root if str(repo_root) else Path(parts[0])
+    return None
+
+
 def _detect_project_name(cwd: str | None = None) -> str:
     raw_cwd = str(cwd or "").strip()
     candidate = Path(raw_cwd or os.getcwd()).expanduser()
@@ -61,8 +88,13 @@ def _detect_project_name(cwd: str | None = None) -> str:
 
     search_roots = [candidate, *candidate.parents]
     for root in search_roots:
-        if (root / ".git").exists():
+        if (root / ".git").is_dir():
             return root.name
+
+    for root in search_roots:
+        repo_root = _resolve_worktree_repo_root(root)
+        if repo_root is not None:
+            return repo_root.name
 
     normalized = str(candidate).rstrip("/\\")
     if not normalized:

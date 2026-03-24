@@ -6,7 +6,8 @@ Add TokenLeague statistics support for OpenClaw without changing the server inge
 
 ## Scope
 
-- Add OpenClaw collector assets under `.openclaw/`.
+- Move built-in hook assets out of repository-root auto-discovery directories and into `hooks/<agent>/` template directories.
+- Add OpenClaw collector assets under `hooks/openclaw/`.
 - Extend `scripts/install_hooks.sh` to install and uninstall OpenClaw collector assets in project and global locations.
 - Add automated tests for OpenClaw session parsing, aggregation, and deduplication behavior.
 - Update user-facing hook installation documentation, including service-safe environment setup guidance.
@@ -34,6 +35,8 @@ Because of that, OpenClaw should be integrated as a collector that reads Gateway
 ### Integration model
 
 Add a dedicated OpenClaw collector script instead of trying to reuse the existing local command-hook model.
+
+Repository-owned hook assets should live under `hooks/<agent>/` rather than `.claude/`, `.codex/`, `.gemini/`, or `.openclaw/` at the repository root. This prevents the repository checkout itself from auto-enabling hooks when a user already has global agent configuration.
 
 The collector will read:
 
@@ -116,15 +119,24 @@ OpenClaw model metadata and OpenClaw binary version must remain separate fields.
 
 Extend `scripts/install_hooks.sh` with `--openclaw`.
 
+The installer should treat `hooks/<agent>/` as the source of truth for all built-in hook templates:
+
+- `hooks/claude/`
+- `hooks/codex/`
+- `hooks/gemini/`
+- `hooks/openclaw/`
+
+Global or explicit local installs copy from those directories into agent-specific config locations such as `~/.claude/`, `~/.codex/`, `~/.gemini/`, `~/.openclaw/`, or repository-local target directories when `--local` is requested.
+
 Global install:
 
-- copy `.openclaw/tokenleague_collect.py`
-- copy `.openclaw/tokenleague.env.example`
+- copy `hooks/openclaw/tokenleague_collect.py`
+- copy `hooks/openclaw/tokenleague.env.example`
 - target `~/.openclaw/`
 
 Local install:
 
-- copy the same assets into repository-local `.openclaw/`
+- copy the same assets into repository-local `.openclaw/` only when the user explicitly runs `install_hooks.sh --local`
 
 The install script should not rewrite the user's main OpenClaw Gateway configuration. It should only place collector assets and print next-step guidance for configuring `~/.openclaw/.env` and restarting the OpenClaw service.
 
@@ -152,13 +164,16 @@ Add focused tests for:
 
 Create:
 
-- `.openclaw/tokenleague_collect.py`
-- `.openclaw/tokenleague.env.example`
+- `hooks/openclaw/tokenleague_collect.py`
+- `hooks/openclaw/tokenleague.env.example`
 - `service/tests/test_openclaw_hook.py`
 - `docs/superpowers/specs/2026-03-24-openclaw-hook-design.md`
 
 Modify:
 
+- `hooks/claude/*`
+- `hooks/codex/*`
+- `hooks/gemini/*`
 - `scripts/install_hooks.sh`
 - `README.md`
 - `docs/HOOKS.md`

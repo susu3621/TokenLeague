@@ -1,6 +1,6 @@
 # TokenLeague Hooks
 
-TokenLeague provides statistics hooks for Claude Code, Codex CLI, and Gemini CLI to automatically track token usage and send it to the TokenLeague leaderboard.
+TokenLeague provides statistics hooks and collector assets for Claude Code, Codex CLI, Gemini CLI, and OpenClaw to automatically track token usage and send it to the TokenLeague leaderboard.
 
 ## Quick Start
 
@@ -10,8 +10,10 @@ Run the installation script:
 
 ```bash
 cd /path/to/TokenLeague
-./scripts/install_hooks.sh --both --gemini --global
+./scripts/install_hooks.sh --both --gemini --openclaw --global
 ```
+
+Built-in templates live under `hooks/` inside this repository. The repository checkout itself does not auto-enable agent hooks; installation is explicit.
 
 **Options:**
 | Option | Description |
@@ -19,14 +21,15 @@ cd /path/to/TokenLeague
 | `--claude` | Install only Claude Code hooks |
 | `--codex` | Install only Codex CLI hooks |
 | `--gemini` | Install only Gemini CLI hooks |
+| `--openclaw` | Install only OpenClaw collector assets |
 | `--both` | Install Claude Code and Codex CLI hooks |
-| `--global` | Install to `~/.claude`, `~/.codex`, and/or `~/.gemini` depending on flags |
+| `--global` | Install to `~/.claude`, `~/.codex`, `~/.gemini`, and/or `~/.openclaw` depending on flags |
 | `--local` | Install to project directory (default) |
 
 **Examples:**
 ```bash
 # Install all supported hooks globally
-./scripts/install_hooks.sh --both --gemini --global
+./scripts/install_hooks.sh --both --gemini --openclaw --global
 
 # Install only Claude Code hooks globally
 ./scripts/install_hooks.sh --claude --global
@@ -34,15 +37,18 @@ cd /path/to/TokenLeague
 # Install only Gemini CLI hooks globally
 ./scripts/install_hooks.sh --gemini --global
 
+# Install only OpenClaw collector assets globally
+./scripts/install_hooks.sh --openclaw --global
+
 # Install to current project directory only
-./scripts/install_hooks.sh --both --gemini --local
+./scripts/install_hooks.sh --both --gemini --openclaw --local
 ```
 
 ### Uninstall Hooks
 
 ```bash
 # Uninstall all supported hooks globally
-./scripts/install_hooks.sh --both --gemini --global --uninstall
+./scripts/install_hooks.sh --both --gemini --openclaw --global --uninstall
 
 # Uninstall only Claude Code hooks
 ./scripts/install_hooks.sh --claude --global --uninstall
@@ -52,11 +58,14 @@ cd /path/to/TokenLeague
 
 # Uninstall only Gemini CLI hooks
 ./scripts/install_hooks.sh --gemini --global --uninstall
+
+# Uninstall only OpenClaw collector assets
+./scripts/install_hooks.sh --openclaw --global --uninstall
 ```
 
 ### Configure Environment Variables
 
-Add to your shell profile (`~/.bashrc` or `~/.zshrc`):
+For Claude / Codex / Gemini, add these to your shell profile (`~/.bashrc` or `~/.zshrc`):
 
 ```bash
 # Required: Your TokenLeague hook key
@@ -67,7 +76,12 @@ export TOKENLEAGUE_API_URL="http://localhost:5006"
 
 # Optional: Override Gemini CLI version detection when needed
 export TOKENLEAGUE_GEMINI_CLI_VERSION="0.34.0"
+
+# Optional: Override OpenClaw version detection when needed
+export TOKENLEAGUE_OPENCLAW_VERSION="0.1.0"
 ```
+
+For OpenClaw service deployments, prefer putting these variables in `~/.openclaw/.env` and restarting the service. This is more reliable than relying on interactive shell startup files.
 
 Get your hook key from the TokenLeague admin panel.
 
@@ -88,6 +102,11 @@ codex
 gemini
 ```
 
+**OpenClaw:**
+```bash
+python3 ~/.openclaw/tokenleague_collect.py
+```
+
 ## How It Works
 
 ### Hook Events
@@ -101,15 +120,16 @@ gemini
 | `AfterAgent` | After Gemini finishes a turn | Upload prompt usage and update task aggregate |
 | `Stop` | When Claude Code or Codex CLI stops | Parse transcript or finalized turn usage and upload |
 | `SessionEnd` | When Claude Code or Gemini CLI exits | Cleanup or final fallback handling |
+| `Collector Run` | When you execute the OpenClaw collector | Read Gateway session files and upload new prompt/session aggregates |
 
 ### Data Flow
 
 ```
 ┌─────────────────┐
 │ Claude / Codex /│
-│   Gemini CLI    │
+│ Gemini / OpenClaw│
 └────────┬────────┘
-         │ Hook Events
+         │ Hook Events / Collector
          ▼
 ┌─────────────────┐
 │ tokenleague.py  │
@@ -154,12 +174,15 @@ gemini
 | `TOKENLEAGUE_HOOK_KEY` | Yes | - | Your authentication key |
 | `TOKENLEAGUE_API_URL` | No | `http://localhost:5006` | TokenLeague API URL |
 | `TOKENLEAGUE_GEMINI_CLI_VERSION` | No | auto-detect | Override Gemini CLI version if automatic detection is unavailable |
+| `TOKENLEAGUE_OPENCLAW_VERSION` | No | auto-detect / `unknown` | Override OpenClaw version when automatic detection is unavailable |
 
 ### Settings File
 
-Claude hooks are configured in `.claude/settings.json`.
+Repository templates live under `hooks/claude`, `hooks/codex`, `hooks/gemini`, and `hooks/openclaw`.
 
-Codex hooks are configured in `.codex/hooks.json`, and the hook engine must be enabled in `~/.codex/config.toml`:
+Claude hooks are installed into `.claude/settings.json` or `~/.claude/settings.json`.
+
+Codex hooks are installed into `.codex/hooks.json` or `~/.codex/hooks.json`, and the hook engine must be enabled in `~/.codex/config.toml`:
 
 ```json
 {
@@ -175,7 +198,7 @@ Codex hooks are configured in `.codex/hooks.json`, and the hook engine must be e
 codex_hooks = true
 ```
 
-Gemini hooks are configured in `.gemini/settings.json` or `~/.gemini/settings.json`:
+Gemini hooks are installed into `.gemini/settings.json` or `~/.gemini/settings.json`:
 
 ```json
 {
@@ -187,6 +210,14 @@ Gemini hooks are configured in `.gemini/settings.json` or `~/.gemini/settings.js
     "SessionEnd": [...]
   }
 }
+```
+
+OpenClaw installs a collector script and env example into `.openclaw/` or `~/.openclaw/`:
+
+```text
+.openclaw/
+├── tokenleague_collect.py
+└── tokenleague.env.example
 ```
 
 ## Privacy
@@ -223,7 +254,7 @@ The hooks **do NOT collect**:
 
 4. **Check hook logs:**
    - Hooks run asynchronously and silently
-   - Errors don't block Claude Code/Codex/Gemini CLI
+   - Errors don't block Claude Code/Codex/Gemini CLI/OpenClaw
 
 ### Session Data Not Appearing
 
@@ -241,11 +272,11 @@ The hooks **do NOT collect**:
    codex_hooks = true
    ```
 
-3. Ensure hooks are configured in `~/.codex/hooks.json` or `<repo>/.codex/hooks.json`
+3. Ensure hooks are configured in `~/.codex/hooks.json` or the directory created by `install_hooks.sh --local`
 
 ### Gemini CLI Hooks Not Working
 
-1. Ensure hooks are configured in `~/.gemini/settings.json` or `<repo>/.gemini/settings.json`
+1. Ensure hooks are configured in `~/.gemini/settings.json` or the directory created by `install_hooks.sh --local`
 
 2. Open Gemini CLI and check `/hooks panel` to verify TokenLeague hooks are enabled
 
@@ -256,6 +287,16 @@ The hooks **do NOT collect**:
    export TOKENLEAGUE_GEMINI_CLI_VERSION="0.34.0"
    ```
 
+### OpenClaw Collector Not Working
+
+1. Ensure `~/.openclaw/tokenleague_collect.py` exists or run `./scripts/install_hooks.sh --openclaw --global`
+
+2. Prefer putting TokenLeague variables in `~/.openclaw/.env`
+
+3. Restart the OpenClaw service after changing `.env`
+
+4. If OpenClaw still cannot see shell-provided variables, use `env.shellEnv.enabled` only as a fallback
+
 ## Manual Installation
 
 ### Claude Code
@@ -265,8 +306,8 @@ The hooks **do NOT collect**:
 mkdir -p .claude/hooks
 
 # Copy files
-cp /path/to/TokenLeague/.claude/hooks/tokenleague.py .claude/hooks/
-cp /path/to/TokenLeague/.claude/settings.json .
+cp /path/to/TokenLeague/hooks/claude/tokenleague.py .claude/hooks/
+cp /path/to/TokenLeague/hooks/claude/settings.json .claude/
 
 # Make executable
 chmod +x .claude/hooks/tokenleague.py
@@ -279,8 +320,8 @@ chmod +x .claude/hooks/tokenleague.py
 mkdir -p .codex/hooks
 
 # Copy files
-cp /path/to/TokenLeague/.codex/hooks/tokenleague.py .codex/hooks/
-cp /path/to/TokenLeague/.codex/hooks.json .
+cp /path/to/TokenLeague/hooks/codex/tokenleague.py .codex/hooks/
+cp /path/to/TokenLeague/hooks/codex/hooks.json .codex/
 
 # Make executable
 chmod +x .codex/hooks/tokenleague.py
@@ -300,11 +341,20 @@ codex_hooks = true
 mkdir -p .gemini/hooks
 
 # Copy files
-cp /path/to/TokenLeague/.gemini/hooks/tokenleague.py .gemini/hooks/
-cp /path/to/TokenLeague/.gemini/settings.json .gemini/
+cp /path/to/TokenLeague/hooks/gemini/tokenleague.py .gemini/hooks/
+cp /path/to/TokenLeague/hooks/gemini/settings.json .gemini/
 
 # Make executable
 chmod +x .gemini/hooks/tokenleague.py
+```
+
+### OpenClaw
+
+```bash
+mkdir -p ~/.openclaw
+cp /path/to/TokenLeague/hooks/openclaw/tokenleague_collect.py ~/.openclaw/
+cp /path/to/TokenLeague/hooks/openclaw/tokenleague.env.example ~/.openclaw/
+chmod +x ~/.openclaw/tokenleague_collect.py
 ```
 
 ## Uninstalling
@@ -312,7 +362,7 @@ chmod +x .gemini/hooks/tokenleague.py
 Run the uninstall command:
 
 ```bash
-./scripts/install_hooks.sh --both --gemini --global --uninstall
+./scripts/install_hooks.sh --both --gemini --openclaw --global --uninstall
 ```
 
 The uninstaller will:
@@ -320,7 +370,7 @@ The uninstaller will:
 - Remove TokenLeague hooks from `settings.json` / `hooks.json`
 - Preserve other hooks and configurations
 
-To completely remove TokenLeague, also remove the environment variables from your shell profile (`~/.bashrc` or `~/.zshrc`).
+To completely remove TokenLeague, also remove the environment variables from your shell profile or `~/.openclaw/.env`.
 
 ## API Reference
 

@@ -2,23 +2,29 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add OpenClaw collector support that reads Gateway session artifacts, uploads TokenLeague prompt and task usage, and documents a service-safe environment setup.
+**Goal:** Add OpenClaw collector support that reads Gateway session artifacts, uploads TokenLeague prompt and task usage, and moves built-in hook assets into a non-auto-enabled `hooks/` template layout.
 
-**Architecture:** Add a dedicated `.openclaw` collector instead of trying to reuse the terminal hook model used by Claude, Codex, and Gemini. The collector reads `sessions.json` and session transcript JSONL files, maintains a local deduplication cursor, uploads `prompt-event` and `task-run` payloads through the existing API, and is installed by extending the current hook installer with OpenClaw-specific asset copying and guidance.
+**Architecture:** Move repository-owned hook templates for Claude, Codex, Gemini, and OpenClaw into `hooks/<agent>/` so a repository checkout does not auto-enable hooks by default. Add a dedicated OpenClaw collector template under `hooks/openclaw/`; the collector reads `sessions.json` and session transcript JSONL files, maintains a local deduplication cursor, uploads `prompt-event` and `task-run` payloads through the existing API, and is installed by extending the current hook installer to copy templates into explicit local or global agent config directories.
 
 **Tech Stack:** Python collector scripts, Bash installer, JSON session parsing, pytest
 
 ---
 
-### Task 1: Add failing OpenClaw collector tests
+### Task 1: Add failing tests for the new template layout and OpenClaw collector
 
 **Files:**
+- Modify: `service/tests/test_claude_hook.py`
+- Modify: `service/tests/test_codex_hook.py`
+- Modify: `service/tests/test_gemini_hook.py`
 - Create: `service/tests/test_openclaw_hook.py`
 - Test: `service/tests/test_openclaw_hook.py`
 
 - [ ] **Step 1: Write the failing tests**
 
 ```python
+def test_claude_hook_assets_live_under_hooks_directory():
+    ...
+
 def test_install_script_supports_openclaw_assets():
     ...
 
@@ -32,7 +38,7 @@ def test_collect_session_skips_previously_processed_turns():
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `pytest service/tests/test_openclaw_hook.py -q`
-Expected: FAIL because `.openclaw` assets and collector implementation do not exist yet.
+Expected: FAIL because `hooks/openclaw/` assets and collector implementation do not exist yet.
 
 - [ ] **Step 3: Write minimal test fixtures**
 
@@ -58,12 +64,52 @@ and transcript JSONL records that delimit at least one user turn and one assista
 - [ ] **Step 4: Run tests again to confirm the failures are meaningful**
 
 Run: `pytest service/tests/test_openclaw_hook.py -q`
-Expected: FAIL on missing module, missing functions, or missing `.openclaw` assets, not on malformed test setup.
+Expected: FAIL on missing module, missing functions, or missing `hooks/openclaw/` assets, not on malformed test setup.
 
-### Task 2: Implement the OpenClaw collector
+### Task 2: Move built-in hook assets into `hooks/<agent>/`
 
 **Files:**
-- Create: `.openclaw/tokenleague_collect.py`
+- Create: `hooks/claude/tokenleague.py`
+- Create: `hooks/claude/tokenleague.env.example`
+- Create: `hooks/claude/settings.json`
+- Create: `hooks/codex/tokenleague.py`
+- Create: `hooks/codex/tokenleague.env.example`
+- Create: `hooks/codex/hooks.json`
+- Create: `hooks/gemini/tokenleague.py`
+- Create: `hooks/gemini/tokenleague.env.example`
+- Create: `hooks/gemini/settings.json`
+- Test: `service/tests/test_claude_hook.py`
+- Test: `service/tests/test_codex_hook.py`
+- Test: `service/tests/test_gemini_hook.py`
+
+- [ ] **Step 1: Update existing tests to load assets from `hooks/<agent>/`**
+
+Change path expectations in the existing hook tests so they read:
+
+```python
+HOOK_PATH = ROOT / "hooks" / "claude" / "tokenleague.py"
+```
+
+and equivalent Codex and Gemini paths.
+
+- [ ] **Step 2: Run the existing hook tests to verify they fail**
+
+Run: `pytest service/tests/test_claude_hook.py service/tests/test_codex_hook.py service/tests/test_gemini_hook.py -q`
+Expected: FAIL because the new template directories do not exist yet.
+
+- [ ] **Step 3: Move the current hook assets into `hooks/<agent>/`**
+
+Create the new template directories and copy the existing Claude, Codex, and Gemini hook files into them without changing runtime behavior beyond path updates.
+
+- [ ] **Step 4: Run the existing hook tests again**
+
+Run: `pytest service/tests/test_claude_hook.py service/tests/test_codex_hook.py service/tests/test_gemini_hook.py -q`
+Expected: PASS, including the worktree project-name regression coverage.
+
+### Task 3: Implement the OpenClaw collector
+
+**Files:**
+- Create: `hooks/openclaw/tokenleague_collect.py`
 - Test: `service/tests/test_openclaw_hook.py`
 
 - [ ] **Step 1: Implement session file discovery helpers**
@@ -112,10 +158,10 @@ This should iterate sessions, upload new prompt events first, then upload the la
 Run: `pytest service/tests/test_openclaw_hook.py -q`
 Expected: PASS for parsing, payload building, and basic upload behavior.
 
-### Task 3: Add deduplication and version handling
+### Task 4: Add deduplication and version handling
 
 **Files:**
-- Modify: `.openclaw/tokenleague_collect.py`
+- Modify: `hooks/openclaw/tokenleague_collect.py`
 - Test: `service/tests/test_openclaw_hook.py`
 
 - [ ] **Step 1: Write the failing deduplication and version tests**
@@ -158,11 +204,11 @@ Support:
 Run: `pytest service/tests/test_openclaw_hook.py -q`
 Expected: PASS with deduplication and version logic included.
 
-### Task 4: Extend the installer for OpenClaw assets
+### Task 5: Extend the installer for the new hook template layout
 
 **Files:**
 - Modify: `scripts/install_hooks.sh`
-- Create: `.openclaw/tokenleague.env.example`
+- Create: `hooks/openclaw/tokenleague.env.example`
 - Test: `service/tests/test_openclaw_hook.py`
 
 - [ ] **Step 1: Add failing installer assertions**
@@ -175,7 +221,7 @@ def test_install_script_supports_openclaw_assets():
     assert "--openclaw" in content
     assert "install_openclaw_hooks" in content
     assert "uninstall_openclaw_hooks" in content
-    assert ".openclaw/tokenleague_collect.py" in content
+    assert "hooks/openclaw/tokenleague_collect.py" in content
 ```
 
 - [ ] **Step 2: Run the targeted installer test**
@@ -185,11 +231,11 @@ Expected: FAIL because the installer does not know about OpenClaw yet.
 
 - [ ] **Step 3: Implement minimal installer changes**
 
-Add `--openclaw` support, copy collector assets into repository-local `.openclaw/` or global `~/.openclaw/`, support uninstall cleanup for those assets, and print next-step guidance that recommends `~/.openclaw/.env`.
+Add `--openclaw` support, source all built-in hook assets from `hooks/<agent>/`, copy them into repository-local target directories only when `--local` is used, support uninstall cleanup for those target directories, and print next-step guidance that recommends `~/.openclaw/.env`.
 
 - [ ] **Step 4: Create the environment example**
 
-Write `.openclaw/tokenleague.env.example` containing:
+Write `hooks/openclaw/tokenleague.env.example` containing:
 
 ```bash
 TOKENLEAGUE_HOOK_KEY=your-hook-key-here
@@ -214,6 +260,7 @@ Expected: PASS
 
 Document:
 - `--openclaw` installation examples
+- that repository-owned hook templates now live under `hooks/` and are not auto-enabled by checkout alone
 - that OpenClaw uses a collector, not terminal hook events
 - why `~/.openclaw/.env` is the recommended configuration path for service startups
 
@@ -253,4 +300,4 @@ Expected: PASS with no shell syntax errors.
 - [ ] **Step 4: Review diff for scope control**
 
 Run: `git diff -- . ':!docs/superpowers'`
-Expected: Only `.openclaw` assets, installer changes, hook docs, and OpenClaw tests are included.
+Expected: Only `hooks/` assets, installer changes, hook docs, and hook tests are included.

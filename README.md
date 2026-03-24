@@ -1,6 +1,6 @@
 # TokenLeague
 
-Token League 是一个 AI 助手 Token 使用量排行榜应用，用于追踪 Claude Code、Codex CLI 和 Gemini CLI 的使用统计。
+Token League 是一个 AI 助手 Token 使用量排行榜应用，用于追踪 Claude Code、Codex CLI、Gemini CLI 和 OpenClaw 的使用统计。
 
 TokenLeague is a token usage leaderboard application for tracking AI assistant usage.
 
@@ -8,7 +8,7 @@ TokenLeague is a token usage leaderboard application for tracking AI assistant u
 
 - Token 使用量排行榜
 - 多用户支持
-- 支持 Claude Code、Codex CLI 和 Gemini CLI 统计
+- 支持 Claude Code、Codex CLI、Gemini CLI 和 OpenClaw 统计
 - Web 管理界面
 
 ## 快速开始
@@ -47,7 +47,9 @@ python -m service.app
 
 ## Hooks 安装
 
-TokenLeague 提供统计 hooks，自动追踪 Claude Code、Codex CLI 和 Gemini CLI 的 token 使用量。
+TokenLeague 提供统计 hooks / collector，自动追踪 Claude Code、Codex CLI、Gemini CLI 和 OpenClaw 的 token 使用量。
+
+仓库内置模板现在统一放在 `hooks/` 目录下，checkout 本仓库本身不会默认启用任何 agent hook。只有在你显式执行安装脚本时，才会把模板复制到 `~/.claude`、`~/.codex`、`~/.gemini`、`~/.openclaw` 或项目级本地目录。
 
 ### 安装 Hooks
 
@@ -64,13 +66,16 @@ TokenLeague 提供统计 hooks，自动追踪 Claude Code、Codex CLI 和 Gemini
 # 仅安装 Gemini CLI hooks
 ./scripts/install_hooks.sh --gemini --global
 
+# 仅安装 OpenClaw collector
+./scripts/install_hooks.sh --openclaw --global
+
 # 项目级安装（仅当前项目）
-./scripts/install_hooks.sh --both --gemini --local
+./scripts/install_hooks.sh --both --gemini --openclaw --local
 ```
 
 ### 配置环境变量
 
-安装后，在 `~/.bashrc` 或 `~/.zshrc` 中添加：
+安装后，Claude / Codex / Gemini 推荐在 `~/.bashrc` 或 `~/.zshrc` 中添加：
 
 ```bash
 # 必需：你的 TokenLeague hook key（从管理面板获取）
@@ -81,7 +86,12 @@ export TOKENLEAGUE_API_URL="http://localhost:5006"
 
 # 可选：手动指定 Gemini CLI 版本
 export TOKENLEAGUE_GEMINI_CLI_VERSION="0.34.0"
+
+# 可选：手动指定 OpenClaw 版本
+export TOKENLEAGUE_OPENCLAW_VERSION="0.1.0"
 ```
+
+如果你使用 OpenClaw service 启动，优先把这些变量写入 `~/.openclaw/.env`，不要只放在 shell profile 里。service 进程通常不会继承交互式 shell 环境。
 
 ### 卸载 Hooks
 
@@ -97,6 +107,9 @@ export TOKENLEAGUE_GEMINI_CLI_VERSION="0.34.0"
 
 # 仅卸载 Gemini CLI hooks
 ./scripts/install_hooks.sh --gemini --global --uninstall
+
+# 仅卸载 OpenClaw collector
+./scripts/install_hooks.sh --openclaw --global --uninstall
 ```
 
 更多详情请参考 [docs/HOOKS.md](docs/HOOKS.md)。
