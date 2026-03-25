@@ -714,14 +714,22 @@ def _build_task_run_payload(
         usage_output = sum(int(event.get("output_token_count") or 0) for event in prompt_events)
         usage_cached_input = sum(int(event.get("cached_input_token_count") or 0) for event in prompt_events)
 
+    # Calculate finished_at first, then use it as fallback for started_at if needed
+    finished_at = str(
+        summary.get("finished_at")
+        or _normalize_timestamp(session_record.get("updatedAt") or session_record.get("finishedAt"))
+    )
+    started_at = str(
+        summary.get("started_at")
+        or _normalize_timestamp(session_record.get("startedAt"))
+        or finished_at  # Fallback to finished_at if started_at is still empty
+    )
+
     return {
         "external_task_id": str(session_record.get("id") or ""),
         "project_name": str(summary.get("project_name") or _get_project_name()),
-        "started_at": str(summary.get("started_at") or _normalize_timestamp(session_record.get("startedAt"))),
-        "finished_at": str(
-            summary.get("finished_at")
-            or _normalize_timestamp(session_record.get("updatedAt") or session_record.get("finishedAt"))
-        ),
+        "started_at": started_at,
+        "finished_at": finished_at,
         "prompt_count": len(prompt_events),
         "input_token_count": usage_input,
         "output_token_count": usage_output,
