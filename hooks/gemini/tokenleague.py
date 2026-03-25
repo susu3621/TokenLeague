@@ -287,6 +287,7 @@ def _empty_task_run_state() -> dict[str, Any]:
         "prompt_count": 0,
         "input_token_count": 0,
         "output_token_count": 0,
+        "cached_input_token_count": 0,
     }
 
 
@@ -298,6 +299,7 @@ def _normalize_task_run_state(value: Any) -> dict[str, Any]:
         "prompt_count": int(payload.get("prompt_count") or 0),
         "input_token_count": int(payload.get("input_token_count") or 0),
         "output_token_count": int(payload.get("output_token_count") or 0),
+        "cached_input_token_count": int(payload.get("cached_input_token_count") or 0),
     }
 
 
@@ -400,13 +402,16 @@ def _handle_session_start(event_data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _extract_usage_counts(usage_metadata: dict[str, Any]) -> tuple[int, int] | None:
+def _extract_usage_counts(usage_metadata: dict[str, Any]) -> tuple[int, int, int] | None:
+    """Extract input, output, and cached token counts from usage metadata."""
     if not isinstance(usage_metadata, dict) or not usage_metadata:
         return None
 
     prompt_tokens = usage_metadata.get("promptTokenCount")
     candidate_tokens = usage_metadata.get("candidatesTokenCount")
     total_tokens = usage_metadata.get("totalTokenCount")
+    # Gemini API uses cachedContentTokenCount for cached tokens
+    cached_tokens = usage_metadata.get("cachedContentTokenCount")
 
     if prompt_tokens is None and candidate_tokens is None and total_tokens is None:
         return None
@@ -427,7 +432,7 @@ def _extract_usage_counts(usage_metadata: dict[str, Any]) -> tuple[int, int] | N
         else:
             candidate_tokens = 0
 
-    return int(prompt_tokens or 0), int(candidate_tokens or 0)
+    return int(prompt_tokens or 0), int(candidate_tokens or 0), int(cached_tokens or 0)
 
 
 def _extract_response_id(llm_response: dict[str, Any]) -> str:
@@ -528,7 +533,7 @@ def _build_prompt_event(
     if token_counts is None:
         return None
 
-    input_tokens, output_tokens = token_counts
+    input_tokens, output_tokens, cached_tokens = token_counts
     external_event_id = str(
         pending_turn.get("latest_response_id")
         or f"{session_id}:turn:{pending_turn.get('started_at') or prompt_finished_at}"
@@ -541,6 +546,7 @@ def _build_prompt_event(
         "prompt_finished_at": prompt_finished_at,
         "input_token_count": input_tokens,
         "output_token_count": output_tokens,
+        "cached_input_token_count": cached_tokens,
         "agent_type": AGENT_TYPE,
         "agent_version": str(pending_turn.get("latest_agent_version") or "unknown"),
         "model_name": str(pending_turn.get("latest_model_name") or "unknown"),
@@ -560,6 +566,7 @@ def _accumulate_task_run_state(
     next_state["prompt_count"] += 1
     next_state["input_token_count"] += int(prompt_event["input_token_count"])
     next_state["output_token_count"] += int(prompt_event["output_token_count"])
+    next_state["cached_input_token_count"] += int(prompt_event.get("cached_input_token_count") or 0)
     return next_state
 
 
@@ -582,6 +589,7 @@ def _build_task_run_payload(
         "prompt_count": int(task_run_state["prompt_count"]),
         "input_token_count": int(task_run_state["input_token_count"]),
         "output_token_count": int(task_run_state["output_token_count"]),
+        "cached_input_token_count": int(task_run_state["cached_input_token_count"]),
         "agent_type": AGENT_TYPE,
         "agent_version": agent_version,
         "model_name": model_name,
@@ -646,7 +654,18 @@ def _handle_after_model(event_data: dict[str, Any]) -> None:
             _write_hook_log("after_model_skipped", reason="missing_pending_turn", session_id=session_id)
             return
 
+        # Try usageMetadata first (standard Gemini API format)
         latest_usage = llm_response.get("usageMetadata")
+        # Also check for tokens object (Gemini CLI format with cached support)
+        tokens_obj = llm_response.get("tokens")
+        if isinstance(tokens_obj, dict) and not isinstance(latest_usage, dict):
+            # Convert tokens format to usageMetadata format for consistency
+            latest_usage = {
+                "promptTokenCount": tokens_obj.get("input"),
+                "candidatesTokenCount": tokens_obj.get("output"),
+                "cachedContentTokenCount": tokens_obj.get("cached"),
+                "totalTokenCount": tokens_obj.get("total"),
+            }
         if not isinstance(latest_usage, dict):
             latest_usage = pending_turn.get("latest_usage", {})
 
@@ -749,6 +768,7 @@ def _handle_after_agent(event_data: dict[str, Any]) -> None:
         prompt_count=task_run["prompt_count"],
         input_token_count=task_run["input_token_count"],
         output_token_count=task_run["output_token_count"],
+        cached_input_token_count=task_run["cached_input_token_count"],
     )
 
 

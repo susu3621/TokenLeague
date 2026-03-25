@@ -173,6 +173,7 @@ def test_handle_after_agent_uploads_prompt_and_task_usage(tmp_path, monkeypatch)
                 "prompt_finished_at": "2026-03-24T08:01:08.000Z",
                 "input_token_count": 120,
                 "output_token_count": 45,
+                "cached_input_token_count": 0,
                 "agent_type": "gemini-cli",
                 "agent_version": "0.34.0",
                 "model_name": "gemini-2.5-pro",
@@ -188,6 +189,7 @@ def test_handle_after_agent_uploads_prompt_and_task_usage(tmp_path, monkeypatch)
                 "prompt_count": 1,
                 "input_token_count": 120,
                 "output_token_count": 45,
+                "cached_input_token_count": 0,
                 "agent_type": "gemini-cli",
                 "agent_version": "0.34.0",
                 "model_name": "gemini-2.5-pro",
@@ -199,6 +201,7 @@ def test_handle_after_agent_uploads_prompt_and_task_usage(tmp_path, monkeypatch)
     assert state["task_run"]["prompt_count"] == 1
     assert state["task_run"]["input_token_count"] == 120
     assert state["task_run"]["output_token_count"] == 45
+    assert state["task_run"]["cached_input_token_count"] == 0
     assert state["pending_turn"] == {}
 
 
