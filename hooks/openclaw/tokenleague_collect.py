@@ -640,12 +640,16 @@ def _summarize_transcript(
     last_user_record: dict[str, Any] = {}
     project_name = _get_project_name()
     prompt_events: list[dict[str, Any]] = []
+    first_record_timestamp = ""
 
     for record in transcript_records:
         if not isinstance(record, dict):
             continue
         record_type = str(record.get("type") or "")
         record_timestamp = _normalize_timestamp(record.get("timestamp") or _extract_message(record).get("timestamp"))
+        # Capture first timestamp as fallback for started_at
+        if not first_record_timestamp and record_timestamp:
+            first_record_timestamp = record_timestamp
         if record_type == "session":
             if not started_at and record_timestamp:
                 started_at = record_timestamp
@@ -679,6 +683,10 @@ def _summarize_transcript(
 
         if record_timestamp:
             finished_at = record_timestamp
+
+    # Fallback: use first record timestamp if started_at is still empty
+    if not started_at and first_record_timestamp:
+        started_at = first_record_timestamp
 
     return {
         "cwd": cwd,
