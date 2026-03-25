@@ -19,7 +19,7 @@ DOCS_DIR = BASE_DIR.parent / "docs"
 API_DOC_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 FILTER_FIELDS = ("agent_type", "agent_version", "model_name")
 VALID_WINDOWS = {"day", "week", "all"}
-VALID_TIMELINE_WINDOWS = {"week", "month"}
+VALID_TIMELINE_WINDOWS = {"today", "week", "month"}
 
 
 app = Flask(__name__)
@@ -563,9 +563,13 @@ def api_user_models(user_id: int):
 def api_user_timeline(user_id: int):
     """Get user token usage timeline"""
     window = _requested_window(VALID_TIMELINE_WINDOWS, default="week")
-    granularity = (request.args.get("granularity") or "hour").strip().lower()
-    if granularity not in ("hour", "day", "week"):
+    # today window always uses hour granularity
+    if window == "today":
         granularity = "hour"
+    else:
+        granularity = (request.args.get("granularity") or "hour").strip().lower()
+        if granularity not in ("hour", "day", "week"):
+            granularity = "hour"
     user = db.get_user_by_id(user_id)
     if not user:
         return _json_error("User not found", 404)

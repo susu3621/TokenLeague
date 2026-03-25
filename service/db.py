@@ -1097,11 +1097,24 @@ def get_user_time_series(
         start_date = end_date - timedelta(days=day_count - 1)
         daily_bucket_range = (start_date, end_date)
 
+    hourly_bucket_range: tuple[datetime, datetime] | None = None
+    if window == "today":
+        end_time = now.astimezone(UTC)
+        start_time = end_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        hourly_bucket_range = (start_time, end_time)
+
     matching_events = []
     for event in prompt_events:
         if event["user_id"] != user_id:
             continue
         event_time = _prompt_event_time(event)
+        if hourly_bucket_range is not None:
+            if event_time is None:
+                continue
+            event_dt = _to_storage_datetime(event_time)
+            if hourly_bucket_range[0] <= event_dt <= hourly_bucket_range[1]:
+                matching_events.append(event)
+            continue
         if daily_bucket_range is not None:
             if event_time is None:
                 continue
@@ -1165,6 +1178,25 @@ def get_user_time_series(
                 },
             )
             current_date += timedelta(days=1)
+        result = list(time_buckets.values())
+
+    if hourly_bucket_range is not None:
+        current_hour = hourly_bucket_range[0]
+        while current_hour <= hourly_bucket_range[1]:
+            bucket = current_hour.strftime("%Y-%m-%d %H:00")
+            time_buckets.setdefault(
+                bucket,
+                {
+                    "time_bucket": bucket,
+                    "total_token_count": 0,
+                    "input_token_count": 0,
+                    "output_token_count": 0,
+                    "prompt_count": 0,
+                    "project_breakdown": [],
+                    "_project_totals": {},
+                },
+            )
+            current_hour += timedelta(hours=1)
         result = list(time_buckets.values())
 
     for item in result:

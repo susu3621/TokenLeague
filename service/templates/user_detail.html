@@ -141,6 +141,7 @@
         <div class="section-header">
             <h2>Usage Timeline</h2>
             <div class="timeline-range" aria-label="Timeline range selector">
+                <button type="button" class="timeline-range-button" data-timeline-window="today">今天</button>
                 <button type="button" class="timeline-range-button is-active" data-timeline-window="week">过去7天</button>
                 <button type="button" class="timeline-range-button" data-timeline-window="month">过去30天</button>
             </div>
@@ -439,7 +440,8 @@
 
     function fetchTimeline(windowValue) {
         setTimelineWindow(windowValue);
-        fetch(`/api/users/${userId}/timeline?window=${windowValue}&granularity=day`)
+        const granularity = windowValue === 'today' ? 'hour' : 'day';
+        fetch(`/api/users/${userId}/timeline?window=${windowValue}&granularity=${granularity}`)
         .then(r => r.json())
         .then(data => {
             const ctx = document.getElementById('timeline-chart').getContext('2d');
@@ -452,10 +454,22 @@
             if (timelineChart) {
                 timelineChart.destroy();
             }
+            const isToday = windowValue === 'today';
+            const labels = data.timeline.map(t => {
+                if (isToday) {
+                    // Show only HH:00 for today's hourly data
+                    const parts = t.time_bucket.split(' ');
+                    return parts.length > 1 ? parts[1] : t.time_bucket;
+                }
+                return t.time_bucket;
+            });
+            const xTickConfig = isToday
+                ? { autoSkip: true, maxRotation: 0, minRotation: 0, maxTicksLimit: 12 }
+                : { autoSkip: true, maxRotation: 0, minRotation: 0, maxTicksLimit: 8 };
             timelineChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: data.timeline.map(t => t.time_bucket),
+                    labels: labels,
                     datasets: datasets
                 },
                 options: {
@@ -479,12 +493,7 @@
                         },
                         x: {
                             stacked: true,
-                            ticks: {
-                                autoSkip: true,
-                                maxRotation: 0,
-                                minRotation: 0,
-                                maxTicksLimit: 8
-                            }
+                            ticks: xTickConfig
                         }
                     }
                 }

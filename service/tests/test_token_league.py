@@ -339,14 +339,66 @@ def test_user_timeline_api_supports_month_daily_range(auth_session, monkeypatch)
     ]
 
 
+def test_user_timeline_api_supports_today_hourly_range(auth_session, monkeypatch):
+    """Test that today window returns hourly data with hour granularity."""
+    import db
+    from db import upsert_prompt_event
+
+    fixed_now = datetime(2026, 3, 24, 14, 30, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(db, "_utcnow", lambda: fixed_now)
+
+    db.reset_in_memory_state()
+    upsert_prompt_event(
+        1,
+        {
+            **_prompt_payload(
+                "today-hour-1",
+                fixed_now.replace(hour=9, minute=0),
+                input_tokens=100,
+                output_tokens=50,
+            ),
+            "project_name": "TokenLeague",
+        },
+    )
+    upsert_prompt_event(
+        1,
+        {
+            **_prompt_payload(
+                "today-hour-2",
+                fixed_now.replace(hour=11, minute=0),
+                input_tokens=200,
+                output_tokens=100,
+            ),
+            "project_name": "SideQuest",
+        },
+    )
+
+    response = auth_session.get("/api/users/1/timeline?window=today")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["window"] == "today"
+    assert payload["granularity"] == "hour"
+    # Should have buckets from 00:00 to 14:00 (15 buckets)
+    assert len(payload["timeline"]) == 15
+    assert payload["timeline"][0]["time_bucket"] == "2026-03-24 00:00"
+    assert payload["timeline"][-1]["time_bucket"] == "2026-03-24 14:00"
+
+    timeline = {row["time_bucket"]: row for row in payload["timeline"]}
+    assert timeline["2026-03-24 09:00"]["total_token_count"] == 150
+    assert timeline["2026-03-24 11:00"]["total_token_count"] == 300
+    assert timeline["2026-03-24 10:00"]["total_token_count"] == 0
+
+
 def test_user_detail_page_renders_timeline_range_selector(auth_session):
     response = auth_session.get("/users/1")
 
     assert response.status_code == 200
     html = response.get_data(as_text=True)
+    assert "今天" in html
     assert "过去7天" in html
     assert "过去30天" in html
-    assert "granularity=day" in html
+    assert "granularity" in html
     assert "project_breakdown" in html
     assert "stacked: true" in html
 
