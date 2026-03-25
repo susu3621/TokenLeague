@@ -88,7 +88,7 @@ def test_handle_stop_parses_transcript_and_uploads_prompt_and_task_usage(tmp_pat
                             "role": "assistant",
                             "model": "glm-5",
                             "content": [{"type": "thinking", "thinking": "..."}],
-                            "usage": {"input_tokens": 0, "output_tokens": 0},
+                            "usage": {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0},
                         },
                     }
                 ),
@@ -104,7 +104,7 @@ def test_handle_stop_parses_transcript_and_uploads_prompt_and_task_usage(tmp_pat
                             "role": "assistant",
                             "model": "glm-5",
                             "content": [{"type": "text", "text": "好的主人"}],
-                            "usage": {"input_tokens": 34521, "output_tokens": 85},
+                            "usage": {"input_tokens": 34521, "output_tokens": 85, "cache_read_input_tokens": 1024, "cache_creation_input_tokens": 0},
                         },
                     }
                 ),
@@ -140,6 +140,7 @@ def test_handle_stop_parses_transcript_and_uploads_prompt_and_task_usage(tmp_pat
                 "prompt_finished_at": "2026-03-23T08:26:56.851Z",
                 "input_token_count": 34521,
                 "output_token_count": 85,
+                "cached_input_token_count": 1024,
                 "agent_type": "claude-code",
                 "agent_version": "2.1.81",
                 "model_name": "glm-5",
@@ -155,6 +156,7 @@ def test_handle_stop_parses_transcript_and_uploads_prompt_and_task_usage(tmp_pat
                 "prompt_count": 1,
                 "input_token_count": 34521,
                 "output_token_count": 85,
+                "cached_input_token_count": 1024,
                 "agent_type": "claude-code",
                 "agent_version": "2.1.81",
                 "model_name": "glm-5",

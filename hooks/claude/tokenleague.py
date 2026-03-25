@@ -278,8 +278,8 @@ def _send_api_request(endpoint: str, payload: dict[str, Any]) -> bool:
     return False
 
 
-def _extract_token_counts(event_data: dict[str, Any]) -> tuple[int, int]:
-    """Extract input and output token counts from event data."""
+def _extract_token_counts(event_data: dict[str, Any]) -> tuple[int, int, int]:
+    """Extract input, output, and cached token counts from event data."""
     # Try different possible locations for token counts
     usage = event_data.get("usage", {})
     if not usage:
@@ -290,7 +290,12 @@ def _extract_token_counts(event_data: dict[str, Any]) -> tuple[int, int]:
     input_tokens = usage.get("input_tokens", 0) or usage.get("input_token_count", 0) or 0
     output_tokens = usage.get("output_tokens", 0) or usage.get("output_token_count", 0) or 0
 
-    return int(input_tokens), int(output_tokens)
+    # Support both old and new cache token field names
+    cache_read = usage.get("cache_read_input_tokens", 0) or 0
+    cache_creation = usage.get("cache_creation_input_tokens", 0) or 0
+    cached_input_tokens = usage.get("cached_input_tokens", cache_read + cache_creation) or 0
+
+    return int(input_tokens), int(output_tokens), int(cached_input_tokens)
 
 
 def _extract_model_info(event_data: dict[str, Any]) -> tuple[str, str]:
@@ -495,7 +500,7 @@ def _build_usage_payloads_from_transcript(
         if not prompt_started_at or not prompt_finished_at:
             continue
 
-        input_tokens, output_tokens = _extract_token_counts(final_entry)
+        input_tokens, output_tokens, cached_tokens = _extract_token_counts(final_entry)
         model_name, agent_version = _extract_model_info(final_entry)
         if model_name == "unknown":
             model_name = fallback_model_name
@@ -511,6 +516,7 @@ def _build_usage_payloads_from_transcript(
                 "prompt_finished_at": prompt_finished_at,
                 "input_token_count": input_tokens,
                 "output_token_count": output_tokens,
+                "cached_input_token_count": cached_tokens,
                 "agent_type": AGENT_TYPE,
                 "agent_version": agent_version,
                 "model_name": model_name,
@@ -528,6 +534,7 @@ def _build_usage_payloads_from_transcript(
         "prompt_count": len(prompt_events),
         "input_token_count": sum(event["input_token_count"] for event in prompt_events),
         "output_token_count": sum(event["output_token_count"] for event in prompt_events),
+        "cached_input_token_count": sum(event["cached_input_token_count"] for event in prompt_events),
         "agent_type": AGENT_TYPE,
         "agent_version": prompt_events[-1]["agent_version"],
         "model_name": prompt_events[-1]["model_name"],
@@ -554,6 +561,7 @@ def _handle_stop(event_data: dict[str, Any]) -> None:
         prompt_count=len(prompt_events),
         input_token_count=task_run["input_token_count"],
         output_token_count=task_run["output_token_count"],
+        cached_input_token_count=task_run["cached_input_token_count"],
     )
 
     for prompt_event in prompt_events:
