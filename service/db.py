@@ -521,7 +521,7 @@ def upsert_prompt_event(user_id: int, payload: dict[str, Any]):
             user_id, task_id, external_event_id, project_name, prompt_started_at, prompt_finished_at,
             input_token_count, output_token_count, cached_input_token_count, total_token_count, duration_ms,
             agent_type, agent_version, model_name, status, metadata_json, created_at, updated_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
             task_id = VALUES(task_id),
             project_name = VALUES(project_name),
@@ -592,9 +592,9 @@ def upsert_task_run(user_id: int, payload: dict[str, Any]):
         """
         INSERT INTO task_runs (
             user_id, task_id, external_task_id, project_name, started_at, finished_at, prompt_count,
-            input_token_count, output_token_count, total_token_count, total_duration_ms,
+            input_token_count, output_token_count, cached_input_token_count, total_token_count, total_duration_ms,
             agent_type, agent_version, model_name, status, metadata_json, created_at, updated_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
             task_id = VALUES(task_id),
             project_name = VALUES(project_name),
@@ -603,6 +603,7 @@ def upsert_task_run(user_id: int, payload: dict[str, Any]):
             prompt_count = VALUES(prompt_count),
             input_token_count = VALUES(input_token_count),
             output_token_count = VALUES(output_token_count),
+            cached_input_token_count = VALUES(cached_input_token_count),
             total_token_count = VALUES(total_token_count),
             total_duration_ms = VALUES(total_duration_ms),
             agent_type = VALUES(agent_type),
@@ -622,6 +623,7 @@ def upsert_task_run(user_id: int, payload: dict[str, Any]):
             task_run["prompt_count"],
             task_run["input_token_count"],
             task_run["output_token_count"],
+            task_run["cached_input_token_count"],
             task_run["total_token_count"],
             task_run["total_duration_ms"],
             task_run["agent_type"],
