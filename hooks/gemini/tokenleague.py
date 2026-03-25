@@ -30,6 +30,12 @@ HOOK_LOG_FILE_NAME = ".tokenleague_gemini_hook.log"
 AGENT_TYPE = "gemini-cli"
 _GEMINI_CLI_VERSION_CACHE: str | None = None
 
+# ANSI color codes for terminal output
+ANSI_GREEN = "\033[32m"
+ANSI_RED = "\033[31m"
+ANSI_BOLD = "\033[1m"
+ANSI_RESET = "\033[0m"
+
 
 def _get_env(key: str, default: str | None = None) -> str | None:
     return os.getenv(key, default)
@@ -369,12 +375,16 @@ def _build_session_start_message() -> str:
     hook_key = _get_hook_key()
 
     if _get_env("TOKENLEAGUE_API_URL"):
-        api_url_status = f"configured ({api_url})"
+        api_url_status = f"{ANSI_GREEN}configured{ANSI_RESET} ({api_url})"
     else:
-        api_url_status = f"default ({api_url})"
+        api_url_status = f"{ANSI_RED}default{ANSI_RESET} ({api_url})"
 
-    hook_key_status = "configured" if hook_key else "missing"
-    return f"[TokenLeague] TOKENLEAGUE_API_URL={api_url_status}, TOKENLEAGUE_HOOK_KEY={hook_key_status}"
+    if hook_key:
+        hook_key_status = f"{ANSI_GREEN}configured{ANSI_RESET}"
+    else:
+        hook_key_status = f"{ANSI_RED}missing{ANSI_RESET}"
+
+    return f"{ANSI_BOLD}[TokenLeague]{ANSI_RESET} TOKENLEAGUE_API_URL={api_url_status}, TOKENLEAGUE_HOOK_KEY={hook_key_status}"
 
 
 def _handle_session_start(event_data: dict[str, Any]) -> dict[str, Any]:
