@@ -424,7 +424,7 @@ def _normalize_timestamp(value: Any) -> str:
     return str(value)
 
 
-def _extract_usage(value: Any) -> tuple[int, int]:
+def _extract_usage(value: Any) -> dict[str, int]:
     usage = _coerce_dict(value)
     input_count = (
         usage.get("inputTokens")
@@ -440,7 +440,13 @@ def _extract_usage(value: Any) -> tuple[int, int]:
         or usage.get("output")
         or 0
     )
-    return int(input_count), int(output_count)
+    cache_read_count = usage.get("cacheRead") or 0
+    cache_write_count = usage.get("cacheWrite") or 0
+    return {
+        "input_token_count": int(input_count),
+        "output_token_count": int(output_count),
+        "cached_input_token_count": int(cache_read_count + cache_write_count),
+    }
 
 
 def _extract_message(record: dict[str, Any]) -> dict[str, Any]:
@@ -456,7 +462,7 @@ def _extract_record_role(record: dict[str, Any]) -> str:
     return ""
 
 
-def _extract_record_usage(record: dict[str, Any]) -> tuple[int, int]:
+def _extract_record_usage(record: dict[str, Any]) -> dict[str, int]:
     direct_usage = _coerce_dict(record.get("usage"))
     if direct_usage:
         return _extract_usage(direct_usage)
@@ -602,15 +608,16 @@ def _build_prompt_event_payload(
     project_name: str,
     model_name: str,
 ) -> dict[str, Any]:
-    input_token_count, output_token_count = _extract_record_usage(assistant_record)
+    usage = _extract_record_usage(assistant_record)
     return {
         "external_event_id": str(assistant_record.get("id") or ""),
         "task_id": str(session_record.get("id") or ""),
         "project_name": project_name,
         "prompt_started_at": _normalize_timestamp(user_record.get("timestamp") or _extract_message(user_record).get("timestamp")),
         "prompt_finished_at": _normalize_timestamp(assistant_record.get("timestamp") or _extract_message(assistant_record).get("timestamp")),
-        "input_token_count": input_token_count,
-        "output_token_count": output_token_count,
+        "input_token_count": usage["input_token_count"],
+        "output_token_count": usage["output_token_count"],
+        "cached_input_token_count": usage["cached_input_token_count"],
         "agent_type": AGENT_TYPE,
         "agent_version": _get_openclaw_version(),
         "model_name": model_name or str(session_record.get("model") or "unknown"),
@@ -689,10 +696,15 @@ def _build_task_run_payload(
 ) -> dict[str, Any]:
     usage = _coerce_dict(session_record.get("usage"))
     prompt_events = _coerce_list(summary.get("prompt_events"))
-    usage_input, usage_output = _extract_usage(usage)
-    if usage_input == 0 and usage_output == 0:
+    usage_info = _extract_usage(usage) if usage else None
+    if usage_info:
+        usage_input = usage_info["input_token_count"]
+        usage_output = usage_info["output_token_count"]
+        usage_cached_input = usage_info["cached_input_token_count"]
+    else:
         usage_input = sum(int(event.get("input_token_count") or 0) for event in prompt_events)
         usage_output = sum(int(event.get("output_token_count") or 0) for event in prompt_events)
+        usage_cached_input = sum(int(event.get("cached_input_token_count") or 0) for event in prompt_events)
 
     return {
         "external_task_id": str(session_record.get("id") or ""),
@@ -705,6 +717,7 @@ def _build_task_run_payload(
         "prompt_count": len(prompt_events),
         "input_token_count": usage_input,
         "output_token_count": usage_output,
+        "cached_input_token_count": usage_cached_input,
         "agent_type": AGENT_TYPE,
         "agent_version": _get_openclaw_version(),
         "model_name": str(summary.get("model_name") or session_record.get("model") or "unknown"),

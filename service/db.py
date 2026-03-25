@@ -436,6 +436,7 @@ def _normalize_prompt_event(user_id: int, payload: dict[str, Any]) -> dict[str, 
     finished_at = _parse_datetime(payload.get("prompt_finished_at"))
     input_token_count = int(payload.get("input_token_count") or 0)
     output_token_count = int(payload.get("output_token_count") or 0)
+    cached_input_token_count = int(payload.get("cached_input_token_count") or 0)
     duration_ms = int(
         payload.get("duration_ms")
         or _non_negative_duration_ms(started_at, finished_at)
@@ -449,7 +450,8 @@ def _normalize_prompt_event(user_id: int, payload: dict[str, Any]) -> dict[str, 
         "prompt_finished_at": finished_at,
         "input_token_count": input_token_count,
         "output_token_count": output_token_count,
-        "total_token_count": input_token_count + output_token_count,
+        "cached_input_token_count": cached_input_token_count,
+        "total_token_count": input_token_count + output_token_count + cached_input_token_count,
         "duration_ms": duration_ms,
         "agent_type": (payload.get("agent_type") or "").strip(),
         "agent_version": (payload.get("agent_version") or "").strip(),
@@ -465,6 +467,7 @@ def _normalize_task_run(user_id: int, payload: dict[str, Any]) -> dict[str, Any]
     finished_at = _parse_datetime(payload.get("finished_at"))
     input_token_count = int(payload.get("input_token_count") or 0)
     output_token_count = int(payload.get("output_token_count") or 0)
+    cached_input_token_count = int(payload.get("cached_input_token_count") or 0)
     total_duration_ms = int(
         payload.get("total_duration_ms")
         or _non_negative_duration_ms(started_at, finished_at)
@@ -479,7 +482,8 @@ def _normalize_task_run(user_id: int, payload: dict[str, Any]) -> dict[str, Any]
         "prompt_count": int(payload.get("prompt_count") or 0),
         "input_token_count": input_token_count,
         "output_token_count": output_token_count,
-        "total_token_count": input_token_count + output_token_count,
+        "cached_input_token_count": cached_input_token_count,
+        "total_token_count": input_token_count + output_token_count + cached_input_token_count,
         "total_duration_ms": total_duration_ms,
         "agent_type": (payload.get("agent_type") or "").strip(),
         "agent_version": (payload.get("agent_version") or "").strip(),
@@ -515,9 +519,9 @@ def upsert_prompt_event(user_id: int, payload: dict[str, Any]):
         """
         INSERT INTO prompt_events (
             user_id, task_id, external_event_id, project_name, prompt_started_at, prompt_finished_at,
-            input_token_count, output_token_count, total_token_count, duration_ms,
+            input_token_count, output_token_count, cached_input_token_count, total_token_count, duration_ms,
             agent_type, agent_version, model_name, status, metadata_json, created_at, updated_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
             task_id = VALUES(task_id),
             project_name = VALUES(project_name),
@@ -525,6 +529,7 @@ def upsert_prompt_event(user_id: int, payload: dict[str, Any]):
             prompt_finished_at = VALUES(prompt_finished_at),
             input_token_count = VALUES(input_token_count),
             output_token_count = VALUES(output_token_count),
+            cached_input_token_count = VALUES(cached_input_token_count),
             total_token_count = VALUES(total_token_count),
             duration_ms = VALUES(duration_ms),
             agent_type = VALUES(agent_type),
@@ -543,6 +548,7 @@ def upsert_prompt_event(user_id: int, payload: dict[str, Any]):
             event["prompt_finished_at"].replace(tzinfo=None) if event["prompt_finished_at"] else None,
             event["input_token_count"],
             event["output_token_count"],
+            event["cached_input_token_count"],
             event["total_token_count"],
             event["duration_ms"],
             event["agent_type"],

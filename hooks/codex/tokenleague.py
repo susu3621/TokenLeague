@@ -278,6 +278,7 @@ def _empty_task_run_state() -> dict[str, Any]:
         "prompt_count": 0,
         "input_token_count": 0,
         "output_token_count": 0,
+        "cached_input_token_count": 0,
     }
 
 
@@ -289,6 +290,7 @@ def _normalize_task_run_state(value: Any) -> dict[str, Any]:
         "prompt_count": int(payload.get("prompt_count") or 0),
         "input_token_count": int(payload.get("input_token_count") or 0),
         "output_token_count": int(payload.get("output_token_count") or 0),
+        "cached_input_token_count": int(payload.get("cached_input_token_count") or 0),
     }
 
 
@@ -415,6 +417,7 @@ def _extract_completed_turns(entries: list[dict[str, Any]]) -> list[dict[str, An
                 "finished_at": "",
                 "input_token_count": 0,
                 "output_token_count": 0,
+                "cached_input_token_count": 0,
             }
             continue
 
@@ -429,6 +432,7 @@ def _extract_completed_turns(entries: list[dict[str, Any]]) -> list[dict[str, An
                 continue
             current_turn["input_token_count"] += int(last_usage.get("input_tokens") or 0)
             current_turn["output_token_count"] += int(last_usage.get("output_tokens") or 0)
+            current_turn["cached_input_token_count"] += int(last_usage.get("cached_input_tokens") or 0)
             continue
 
         if event_type == "task_complete":
@@ -459,6 +463,7 @@ def _build_prompt_event(
         "prompt_finished_at": str(turn["finished_at"]),
         "input_token_count": int(turn["input_token_count"]),
         "output_token_count": int(turn["output_token_count"]),
+        "cached_input_token_count": int(turn["cached_input_token_count"]),
         "agent_type": AGENT_TYPE,
         "agent_version": agent_version,
         "model_name": model_name,
@@ -478,6 +483,7 @@ def _accumulate_task_run_state(
     next_state["prompt_count"] += 1
     next_state["input_token_count"] += int(prompt_event["input_token_count"])
     next_state["output_token_count"] += int(prompt_event["output_token_count"])
+    next_state["cached_input_token_count"] += int(prompt_event["cached_input_token_count"])
     return next_state
 
 
@@ -499,6 +505,7 @@ def _build_task_run_payload(
         "prompt_count": int(task_run_state["prompt_count"]),
         "input_token_count": int(task_run_state["input_token_count"]),
         "output_token_count": int(task_run_state["output_token_count"]),
+        "cached_input_token_count": int(task_run_state["cached_input_token_count"]),
         "agent_type": AGENT_TYPE,
         "agent_version": agent_version,
         "model_name": model_name,
