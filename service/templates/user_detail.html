@@ -98,6 +98,20 @@
     </div>
 
     <div class="card">
+        <div class="section-header">
+            <h2>Usage Timeline</h2>
+            <div class="timeline-range" aria-label="Timeline range selector">
+                <button type="button" class="timeline-range-button" data-timeline-window="today">今天</button>
+                <button type="button" class="timeline-range-button is-active" data-timeline-window="week">过去7天</button>
+                <button type="button" class="timeline-range-button" data-timeline-window="month">过去30天</button>
+            </div>
+        </div>
+        <div class="chart-container">
+            <canvas id="timeline-chart"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
         <h2 style="margin-top: 0;">Project Breakdown</h2>
         <table id="project-table">
             <thead>
@@ -135,20 +149,6 @@
                 <tr><td colspan="5" class="muted">Loading...</td></tr>
             </tbody>
         </table>
-    </div>
-
-    <div class="card">
-        <div class="section-header">
-            <h2>Usage Timeline</h2>
-            <div class="timeline-range" aria-label="Timeline range selector">
-                <button type="button" class="timeline-range-button" data-timeline-window="today">今天</button>
-                <button type="button" class="timeline-range-button is-active" data-timeline-window="week">过去7天</button>
-                <button type="button" class="timeline-range-button" data-timeline-window="month">过去30天</button>
-            </div>
-        </div>
-        <div class="chart-container">
-            <canvas id="timeline-chart"></canvas>
-        </div>
     </div>
 
     <div class="card">
@@ -276,6 +276,41 @@
             });
         } catch {
             return isoString;
+        }
+    }
+
+    // Convert UTC time bucket to local time label for timeline chart
+    function formatTimelineLabel(timeBucket, isHourly) {
+        if (!timeBucket) return '-';
+        try {
+            // timeBucket format: "YYYY-MM-DD HH:00" (hourly) or "YYYY-MM-DD" (daily)
+            // Convert to ISO format with Z suffix to indicate UTC
+            let isoString;
+            if (timeBucket.includes(' ')) {
+                // Hourly format: "2026-03-26 00:00" -> "2026-03-26T00:00:00Z"
+                isoString = timeBucket.replace(' ', 'T') + ':00Z';
+            } else {
+                // Daily format: "2026-03-26" -> treat as UTC midnight
+                isoString = timeBucket + 'T00:00:00Z';
+            }
+            const date = new Date(isoString);
+            if (isNaN(date.getTime())) return timeBucket;
+            if (isHourly) {
+                // Show only HH:MM for hourly data
+                return date.toLocaleTimeString(navigator.language || 'en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
+            } else {
+                // Show MM-DD for daily data
+                return date.toLocaleDateString(navigator.language || 'en-US', {
+                    month: '2-digit',
+                    day: '2-digit'
+                });
+            }
+        } catch {
+            return timeBucket;
         }
     }
 
@@ -455,14 +490,7 @@
                 timelineChart.destroy();
             }
             const isToday = windowValue === 'today';
-            const labels = data.timeline.map(t => {
-                if (isToday) {
-                    // Show only HH:00 for today's hourly data
-                    const parts = t.time_bucket.split(' ');
-                    return parts.length > 1 ? parts[1] : t.time_bucket;
-                }
-                return t.time_bucket;
-            });
+            const labels = data.timeline.map(t => formatTimelineLabel(t.time_bucket, isToday));
             const xTickConfig = isToday
                 ? { autoSkip: true, maxRotation: 0, minRotation: 0, maxTicksLimit: 12 }
                 : { autoSkip: true, maxRotation: 0, minRotation: 0, maxTicksLimit: 8 };
