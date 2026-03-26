@@ -481,7 +481,7 @@ def test_user_detail_page_renders_refresh_targets_for_stats_sections(auth_sessio
     assert 'data-user-detail-recent-prompt-events-body' in html
 
 
-def test_user_detail_page_falls_back_to_week_selector_for_all_window(auth_session, monkeypatch):
+def test_user_detail_all_window_keeps_no_active_selector(auth_session, monkeypatch):
     _seed_user_detail_window_data(monkeypatch)
 
     response = auth_session.get("/users/1?window=all")
@@ -489,10 +489,62 @@ def test_user_detail_page_falls_back_to_week_selector_for_all_window(auth_sessio
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "let currentWindow = 'all';" in html
-    assert 'data-user-detail-window-selector="week"' in html
-    assert 'class="timeline-range-button is-active" data-user-detail-window-option="week"' in html
-    assert 'data-user-detail-window-option="today"' in html
-    assert 'data-user-detail-window-option="month"' in html
+    assert 'data-user-detail-window-selector="all"' in html
+    assert 'class="timeline-range-button is-active" data-user-detail-window-option="today"' not in html
+    assert 'class="timeline-range-button is-active" data-user-detail-window-option="week"' not in html
+    assert 'class="timeline-range-button is-active" data-user-detail-window-option="month"' not in html
+
+
+def test_user_timeline_api_accepts_day_alias_as_today(auth_session, monkeypatch):
+    import db
+    from db import upsert_prompt_event
+
+    fixed_now = datetime(2026, 3, 24, 12, 0, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(db, "_utcnow", lambda: fixed_now)
+
+    db.reset_in_memory_state()
+    upsert_prompt_event(
+        1,
+        _prompt_payload(
+            "day-alias-event",
+            fixed_now - timedelta(hours=1),
+            input_tokens=20,
+            output_tokens=10,
+        ),
+    )
+
+    response = auth_session.get("/api/users/1/timeline?window=day")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["window"] == "today"
+    assert payload["granularity"] == "hour"
+    assert len(payload["timeline"]) == 13
+    assert payload["timeline"][0]["time_bucket"] == "2026-03-24 00:00"
+    assert payload["timeline"][-1]["time_bucket"] == "2026-03-24 12:00"
+    timeline = {row["time_bucket"]: row for row in payload["timeline"]}
+    assert timeline["2026-03-24 11:00"]["total_token_count"] == 30
+    assert timeline["2026-03-24 12:00"]["total_token_count"] == 0
+
+
+def test_user_timeline_api_accepts_all_window(auth_session, monkeypatch):
+    _seed_user_detail_window_data(monkeypatch)
+
+    response = auth_session.get("/api/users/1/timeline?window=all&granularity=day")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["window"] == "all"
+    assert payload["granularity"] == "day"
+    assert len(payload["timeline"]) == 3
+    assert [row["time_bucket"] for row in payload["timeline"]] == [
+        "2026-03-16",
+        "2026-03-23",
+        "2026-03-24",
+    ]
+    assert payload["timeline"][0]["total_token_count"] == 100
+    assert payload["timeline"][1]["total_token_count"] == 60
+    assert payload["timeline"][2]["total_token_count"] == 30
 
 
 def test_user_detail_page_script_requests_all_sections_with_selected_window(auth_session, monkeypatch):

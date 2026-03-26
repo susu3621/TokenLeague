@@ -570,7 +570,7 @@ def api_user_models(user_id: int):
 @auth_module.login_required
 def api_user_timeline(user_id: int):
     """Get user token usage timeline"""
-    window = _requested_window(VALID_TIMELINE_WINDOWS, default="week")
+    window = _requested_user_detail_window()
     # today window always uses hour granularity
     if window == "today":
         granularity = "hour"

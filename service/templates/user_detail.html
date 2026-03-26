@@ -72,7 +72,6 @@
 {% endblock %}
 
 {% block content %}
-{% set timeline_selector_window = window if window in ['today', 'week', 'month'] else 'week' %}
 <section class="stack">
     <div class="card">
         <h1 class="hero-title">{{ stats.user.display_name }}</h1>
@@ -101,10 +100,10 @@
     <div class="card">
         <div class="section-header">
             <h2>Usage Timeline</h2>
-            <div class="timeline-range" aria-label="Timeline range selector" data-user-detail-window-selector="{{ timeline_selector_window }}">
-                <button type="button" class="timeline-range-button{% if timeline_selector_window == 'today' %} is-active{% endif %}" data-user-detail-window-option="today">今天</button>
-                <button type="button" class="timeline-range-button{% if timeline_selector_window == 'week' %} is-active{% endif %}" data-user-detail-window-option="week">过去7天</button>
-                <button type="button" class="timeline-range-button{% if timeline_selector_window == 'month' %} is-active{% endif %}" data-user-detail-window-option="month">过去30天</button>
+            <div class="timeline-range" aria-label="Timeline range selector" data-user-detail-window-selector="{{ window }}">
+                <button type="button" class="timeline-range-button{% if window == 'today' %} is-active{% endif %}" data-user-detail-window-option="today">今天</button>
+                <button type="button" class="timeline-range-button{% if window == 'week' %} is-active{% endif %}" data-user-detail-window-option="week">过去7天</button>
+                <button type="button" class="timeline-range-button{% if window == 'month' %} is-active{% endif %}" data-user-detail-window-option="month">过去30天</button>
             </div>
         </div>
         <div class="chart-container">
