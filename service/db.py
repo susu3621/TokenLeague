@@ -956,9 +956,14 @@ def list_agent_catalog() -> list[dict[str, Any]]:
     return rows
 
 
-def get_user_project_breakdown(user_id: int, window: str = "all") -> list[dict[str, Any]]:
+def get_user_project_breakdown(
+    user_id: int,
+    window: str = "all",
+    filters: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
     """Get user token statistics grouped by project."""
     now = _utcnow()
+    filters = filters or {}
 
     if use_in_memory_store():
         prompt_events = list(_memory_prompt_events)
@@ -972,6 +977,7 @@ def get_user_project_breakdown(user_id: int, window: str = "all") -> list[dict[s
         for event in prompt_events
         if event["user_id"] == user_id
         and _within_window(_prompt_event_time(event), window, now)
+        and _record_matches_filters(event, filters)
     ]
 
     task_counts: dict[str, int] = defaultdict(int)
@@ -979,6 +985,8 @@ def get_user_project_breakdown(user_id: int, window: str = "all") -> list[dict[s
         if task_run["user_id"] != user_id:
             continue
         if not _within_window(_task_run_time(task_run), window, now):
+            continue
+        if not _record_matches_filters(task_run, filters):
             continue
         project = task_run.get("project_name") or ""
         task_counts[project] += 1
@@ -1020,9 +1028,14 @@ def get_user_project_breakdown(user_id: int, window: str = "all") -> list[dict[s
     return result
 
 
-def get_user_model_breakdown(user_id: int, window: str = "all") -> list[dict[str, Any]]:
+def get_user_model_breakdown(
+    user_id: int,
+    window: str = "all",
+    filters: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
     """Get user token statistics grouped by model."""
     now = _utcnow()
+    filters = filters or {}
 
     if use_in_memory_store():
         prompt_events = list(_memory_prompt_events)
@@ -1036,6 +1049,7 @@ def get_user_model_breakdown(user_id: int, window: str = "all") -> list[dict[str
         for event in prompt_events
         if event["user_id"] == user_id
         and _within_window(_prompt_event_time(event), window, now)
+        and _record_matches_filters(event, filters)
     ]
 
     task_counts: dict[str, int] = defaultdict(int)
@@ -1043,6 +1057,8 @@ def get_user_model_breakdown(user_id: int, window: str = "all") -> list[dict[str
         if task_run["user_id"] != user_id:
             continue
         if not _within_window(_task_run_time(task_run), window, now):
+            continue
+        if not _record_matches_filters(task_run, filters):
             continue
         model = task_run.get("model_name") or ""
         task_counts[model] += 1
@@ -1085,10 +1101,14 @@ def get_user_model_breakdown(user_id: int, window: str = "all") -> list[dict[str
 
 
 def get_user_time_series(
-    user_id: int, window: str = "all", granularity: str = "hour"
+    user_id: int,
+    window: str = "all",
+    granularity: str = "hour",
+    filters: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """Get user token usage timeline grouped by time bucket."""
     now = _utcnow()
+    filters = filters or {}
 
     if granularity not in ("hour", "day", "week"):
         granularity = "hour"
@@ -1114,6 +1134,8 @@ def get_user_time_series(
     matching_events = []
     for event in prompt_events:
         if event["user_id"] != user_id:
+            continue
+        if not _record_matches_filters(event, filters):
             continue
         event_time = _prompt_event_time(event)
         if hourly_bucket_range is not None:

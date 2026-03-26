@@ -80,6 +80,55 @@ def _seed_user_detail_window_data(monkeypatch):
         db.upsert_task_run(1, task_payload)
 
 
+def _seed_user_detail_filter_data(monkeypatch):
+    import db
+
+    fixed_now = datetime(2026, 3, 24, 12, 0, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(db, "_utcnow", lambda: fixed_now)
+
+    fixtures = [
+        ("codex-primary", fixed_now, "codex-primary-task", "TokenLeague", "codex", "1.0.0", "gpt-5.4", 20, 10),
+        (
+            "claude-side",
+            fixed_now - timedelta(days=1),
+            "claude-side-task",
+            "SideQuest",
+            "claude-code",
+            "2.0.0",
+            "claude-sonnet-4",
+            40,
+            20,
+        ),
+        ("codex-archive", fixed_now - timedelta(days=2), "codex-archive-task", "Archive", "codex", "1.0.0", "gpt-4.1", 70, 30),
+    ]
+
+    for event_id, started_at, task_id, project_name, agent_type, agent_version, model_name, input_tokens, output_tokens in fixtures:
+        prompt_payload = _prompt_payload(
+            event_id,
+            started_at,
+            task_id=task_id,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+        )
+        prompt_payload["project_name"] = project_name
+        prompt_payload["agent_type"] = agent_type
+        prompt_payload["agent_version"] = agent_version
+        prompt_payload["model_name"] = model_name
+        db.upsert_prompt_event(1, prompt_payload)
+
+        task_payload = _task_payload(
+            task_id,
+            started_at,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+        )
+        task_payload["project_name"] = project_name
+        task_payload["agent_type"] = agent_type
+        task_payload["agent_version"] = agent_version
+        task_payload["model_name"] = model_name
+        db.upsert_task_run(1, task_payload)
+
+
 def test_leaderboard_requires_login(client):
     response = client.get("/leaderboard")
 
@@ -579,6 +628,23 @@ def test_user_detail_page_script_requests_all_sections_with_selected_window(auth
     assert "refreshUserDetail(currentWindow);" in html
 
 
+def test_user_detail_page_script_escapes_dynamic_refresh_fields_before_inner_html(auth_session):
+    response = auth_session.get("/users/1")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "function escapeHtml(value)" in html
+    assert "${escapeHtml(row.agent_type)}" in html
+    assert "${escapeHtml(row.agent_version)}" in html
+    assert "${escapeHtml(row.model_name)}" in html
+    assert "${escapeHtml((row.external_event_id || '').slice(0, 16))}..." in html
+    assert "${escapeHtml(row.project_name)}" in html
+    assert "${escapeHtml((row.task_id || '').slice(0, 16))}..." in html
+    assert 'data-utc-time="${escapeHtml(row.prompt_finished_at || \'\')}"' in html
+    assert "${escapeHtml(project.project_name)}" in html
+    assert "${escapeHtml(model.model_name)}" in html
+
+
 def test_user_detail_day_window_aliases_to_today(auth_session, monkeypatch):
     _seed_user_detail_window_data(monkeypatch)
 
@@ -633,6 +699,46 @@ def test_user_detail_breakdown_apis_honor_month_window(auth_session, monkeypatch
     assert models["gpt-5.4"]["total_token_count"] == 30
     assert models["claude-sonnet-4"]["total_token_count"] == 60
     assert models["gpt-4.1"]["total_token_count"] == 100
+
+
+def test_user_detail_refresh_apis_honor_filters(auth_session, monkeypatch):
+    _seed_user_detail_filter_data(monkeypatch)
+
+    projects_response = auth_session.get("/api/users/1/projects?window=month&agent_type=codex")
+    models_response = auth_session.get("/api/users/1/models?window=month&model_name=gpt-5.4")
+    timeline_response = auth_session.get("/api/users/1/timeline?window=month&granularity=day&agent_type=codex")
+
+    assert projects_response.status_code == 200
+    assert models_response.status_code == 200
+    assert timeline_response.status_code == 200
+
+    projects = {row["project_name"]: row for row in projects_response.get_json()["projects"]}
+    assert projects_response.get_json()["window"] == "month"
+    assert set(projects) == {"Archive", "TokenLeague"}
+    assert projects["TokenLeague"]["total_token_count"] == 30
+    assert projects["TokenLeague"]["task_count"] == 1
+    assert projects["Archive"]["total_token_count"] == 100
+    assert projects["Archive"]["task_count"] == 1
+
+    models = models_response.get_json()["models"]
+    assert models_response.get_json()["window"] == "month"
+    assert [row["model_name"] for row in models] == ["gpt-5.4"]
+    assert models[0]["total_token_count"] == 30
+    assert models[0]["task_count"] == 1
+
+    timeline = timeline_response.get_json()
+    nonzero_buckets = {
+        bucket["time_bucket"]: bucket for bucket in timeline["timeline"] if bucket["total_token_count"] > 0
+    }
+    assert timeline["window"] == "month"
+    assert timeline["granularity"] == "day"
+    assert set(nonzero_buckets) == {"2026-03-22", "2026-03-24"}
+    assert nonzero_buckets["2026-03-24"]["project_breakdown"] == [
+        {"project_name": "TokenLeague", "total_token_count": 30}
+    ]
+    assert nonzero_buckets["2026-03-22"]["project_breakdown"] == [
+        {"project_name": "Archive", "total_token_count": 100}
+    ]
 
 
 def test_user_detail_page_renders_timeline_range_selector(auth_session):

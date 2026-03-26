@@ -541,13 +541,14 @@ def api_user_stats(user_id: int):
 def api_user_projects(user_id: int):
     """Get user token statistics grouped by project"""
     window = _requested_user_detail_window()
+    filters = _requested_filters()
     user = db.get_user_by_id(user_id)
     if not user:
         return _json_error("User not found", 404)
     return jsonify({
         "success": True,
         "window": window,
-        "projects": db.get_user_project_breakdown(user_id, window=window),
+        "projects": db.get_user_project_breakdown(user_id, window=window, filters=filters),
     })
 
 
@@ -556,13 +557,14 @@ def api_user_projects(user_id: int):
 def api_user_models(user_id: int):
     """Get user token statistics grouped by model"""
     window = _requested_user_detail_window()
+    filters = _requested_filters()
     user = db.get_user_by_id(user_id)
     if not user:
         return _json_error("User not found", 404)
     return jsonify({
         "success": True,
         "window": window,
-        "models": db.get_user_model_breakdown(user_id, window=window),
+        "models": db.get_user_model_breakdown(user_id, window=window, filters=filters),
     })
 
 
@@ -571,6 +573,7 @@ def api_user_models(user_id: int):
 def api_user_timeline(user_id: int):
     """Get user token usage timeline"""
     window = _requested_user_detail_window()
+    filters = _requested_filters()
     # today window always uses hour granularity
     if window == "today":
         granularity = "hour"
@@ -585,7 +588,12 @@ def api_user_timeline(user_id: int):
         "success": True,
         "window": window,
         "granularity": granularity,
-        "timeline": db.get_user_time_series(user_id, window=window, granularity=granularity),
+        "timeline": db.get_user_time_series(
+            user_id,
+            window=window,
+            granularity=granularity,
+            filters=filters,
+        ),
     })
 
 

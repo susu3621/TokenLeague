@@ -329,6 +329,15 @@
     // Run conversion on page load
     document.addEventListener('DOMContentLoaded', convertUtcTimesToLocal);
 
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     function renderSummary(summary) {
         const values = {
             'total-token-count': formatTokenCount(summary.total_token_count),
@@ -354,9 +363,9 @@
 
         tbody.innerHTML = rows.map(row => `
             <tr>
-                <td>${row.agent_type}</td>
-                <td>${row.agent_version}</td>
-                <td>${row.model_name}</td>
+                <td>${escapeHtml(row.agent_type)}</td>
+                <td>${escapeHtml(row.agent_version)}</td>
+                <td>${escapeHtml(row.model_name)}</td>
                 <td>${formatTokenCount(row.total_token_count)}</td>
                 <td>${formatCount(row.prompt_count)}</td>
                 <td>${formatCount(row.task_count)}</td>
@@ -373,12 +382,12 @@
 
         tbody.innerHTML = rows.map(row => `
             <tr>
-                <td style="font-family: monospace; font-size: 0.875rem;">${row.external_event_id.slice(0, 16)}...</td>
-                <td>${row.project_name}</td>
-                <td style="font-family: monospace; font-size: 0.875rem;">${row.task_id.slice(0, 16)}...</td>
+                <td style="font-family: monospace; font-size: 0.875rem;">${escapeHtml((row.external_event_id || '').slice(0, 16))}...</td>
+                <td>${escapeHtml(row.project_name)}</td>
+                <td style="font-family: monospace; font-size: 0.875rem;">${escapeHtml((row.task_id || '').slice(0, 16))}...</td>
                 <td>${formatTokenCount(row.total_token_count)}</td>
-                <td>${row.model_name}</td>
-                <td data-utc-time="${row.prompt_finished_at || ''}">${row.prompt_finished_at || '-'}</td>
+                <td>${escapeHtml(row.model_name)}</td>
+                <td data-utc-time="${escapeHtml(row.prompt_finished_at || '')}">${escapeHtml(row.prompt_finished_at || '-')}</td>
             </tr>
         `).join('');
         convertUtcTimesToLocal();
@@ -393,7 +402,7 @@
 
         tbody.innerHTML = projects.map(project => `
             <tr>
-                <td>${project.project_name}</td>
+                <td>${escapeHtml(project.project_name)}</td>
                 <td>${formatTokenCount(project.total_token_count)}</td>
                 <td>${formatTokenCount(project.input_token_count)}</td>
                 <td>${formatTokenCount(project.output_token_count)}</td>
@@ -419,7 +428,7 @@
 
         tbody.innerHTML = models.map(model => `
             <tr>
-                <td>${model.model_name}</td>
+                <td>${escapeHtml(model.model_name)}</td>
                 <td>${formatTokenCount(model.total_token_count)}</td>
                 <td>${formatTokenCount(model.input_token_count)}</td>
                 <td>${formatTokenCount(model.output_token_count)}</td>
