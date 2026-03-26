@@ -79,19 +79,19 @@
 
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-value">{{ format_token_count(stats.summary.total_token_count) }}</div>
+                <div class="stat-value" data-user-detail-summary-value="total-token-count">{{ format_token_count(stats.summary.total_token_count) }}</div>
                 <div class="stat-label">Total Tokens</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">{{ "{:,}".format(stats.summary.prompt_count) }}</div>
+                <div class="stat-value" data-user-detail-summary-value="prompt-count">{{ "{:,}".format(stats.summary.prompt_count) }}</div>
                 <div class="stat-label">Prompts</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">{{ "{:,}".format(stats.summary.task_count) }}</div>
+                <div class="stat-value" data-user-detail-summary-value="task-count">{{ "{:,}".format(stats.summary.task_count) }}</div>
                 <div class="stat-label">Tasks</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">{{ format_token_count(stats.summary.avg_token_per_prompt) }}</div>
+                <div class="stat-value" data-user-detail-summary-value="avg-token-per-prompt">{{ format_token_count(stats.summary.avg_token_per_prompt) }}</div>
                 <div class="stat-label">Avg Tokens / Prompt</div>
             </div>
         </div>
@@ -100,10 +100,10 @@
     <div class="card">
         <div class="section-header">
             <h2>Usage Timeline</h2>
-            <div class="timeline-range" aria-label="Timeline range selector">
-                <button type="button" class="timeline-range-button" data-timeline-window="today">今天</button>
-                <button type="button" class="timeline-range-button is-active" data-timeline-window="week">过去7天</button>
-                <button type="button" class="timeline-range-button" data-timeline-window="month">过去30天</button>
+            <div class="timeline-range" aria-label="Timeline range selector" data-user-detail-window-selector="{{ window }}">
+                <button type="button" class="timeline-range-button{% if window == 'today' %} is-active{% endif %}" data-user-detail-window-option="today">今天</button>
+                <button type="button" class="timeline-range-button{% if window == 'week' %} is-active{% endif %}" data-user-detail-window-option="week">过去7天</button>
+                <button type="button" class="timeline-range-button{% if window == 'month' %} is-active{% endif %}" data-user-detail-window-option="month">过去30天</button>
             </div>
         </div>
         <div class="chart-container">
@@ -164,7 +164,7 @@
                     <th>Tasks</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody data-user-detail-agent-breakdown-body>
                 {% for row in stats.agent_breakdown %}
                 <tr>
                     <td>{{ row.agent_type }}</td>
@@ -196,7 +196,7 @@
                     <th>Completed At</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody data-user-detail-recent-prompt-events-body>
                 {% for row in stats.recent_prompt_events %}
                 <tr>
                     <td style="font-family: monospace; font-size: 0.875rem;">{{ row.external_event_id[:16] }}...</td>
@@ -220,7 +220,7 @@
 <script>
 (function() {
     const userId = {{ stats.user.id }};
-    const windowParam = '{{ window }}';
+    const currentWindow = '{{ window }}';
     let timelineChart = null;
     const timelineColorCache = new Map();
 
@@ -328,7 +328,7 @@
     document.addEventListener('DOMContentLoaded', convertUtcTimesToLocal);
 
     // Fetch project breakdown
-    fetch(`/api/users/${userId}/projects?window=${windowParam}`)
+    fetch(`/api/users/${userId}/projects?window=${currentWindow}`)
         .then(r => r.json())
         .then(data => {
             const tbody = document.querySelector('#project-table tbody');
@@ -349,7 +349,7 @@
         });
 
     // Fetch model breakdown and render chart
-    fetch(`/api/users/${userId}/models?window=${windowParam}`)
+    fetch(`/api/users/${userId}/models?window=${currentWindow}`)
         .then(r => r.json())
         .then(data => {
             const tbody = document.querySelector('#model-table tbody');
@@ -411,8 +411,8 @@
         });
 
     function setTimelineWindow(windowValue) {
-        document.querySelectorAll('[data-timeline-window]').forEach(button => {
-            button.classList.toggle('is-active', button.dataset.timelineWindow === windowValue);
+        document.querySelectorAll('[data-user-detail-window-option]').forEach(button => {
+            button.classList.toggle('is-active', button.dataset.userDetailWindowOption === windowValue);
         });
     }
 
@@ -529,13 +529,13 @@
         });
     }
 
-    document.querySelectorAll('[data-timeline-window]').forEach(button => {
+    document.querySelectorAll('[data-user-detail-window-option]').forEach(button => {
         button.addEventListener('click', () => {
-            fetchTimeline(button.dataset.timelineWindow);
+            fetchTimeline(button.dataset.userDetailWindowOption);
         });
     });
 
-    fetchTimeline('week');
+    fetchTimeline(currentWindow);
 })();
 </script>
 {% endblock %}

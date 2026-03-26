@@ -441,13 +441,41 @@ def test_user_detail_defaults_to_week_window(auth_session, monkeypatch):
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "within the selected week window" in html
-    assert "const windowParam = 'week';" in html
+    assert "const currentWindow = 'week';" in html
     assert "today-event" in html
     assert "yesterday-event" in html
     assert "old-event" not in html
     assert "today-task" in html
     assert "yesterday-task" in html
     assert "old-task" not in html
+
+
+def test_user_detail_page_uses_week_as_default_window(auth_session, monkeypatch):
+    _seed_user_detail_window_data(monkeypatch)
+
+    response = auth_session.get("/users/1")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "within the selected week window" in html
+    assert "const currentWindow = 'week';" in html
+    assert "const windowParam = 'week';" not in html
+
+
+def test_user_detail_page_renders_refresh_targets_for_stats_sections(auth_session, monkeypatch):
+    _seed_user_detail_window_data(monkeypatch)
+
+    response = auth_session.get("/users/1")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert 'data-user-detail-summary-value="total-token-count"' in html
+    assert 'data-user-detail-summary-value="prompt-count"' in html
+    assert 'data-user-detail-summary-value="task-count"' in html
+    assert 'data-user-detail-summary-value="avg-token-per-prompt"' in html
+    assert 'data-user-detail-window-selector' in html
+    assert 'data-user-detail-agent-breakdown-body' in html
+    assert 'data-user-detail-recent-prompt-events-body' in html
 
 
 def test_user_detail_day_window_aliases_to_today(auth_session, monkeypatch):
@@ -463,7 +491,7 @@ def test_user_detail_day_window_aliases_to_today(auth_session, monkeypatch):
     today_html = today_response.get_data(as_text=True)
     assert day_html == today_html
     assert "within the selected today window" in day_html
-    assert "const windowParam = 'today';" in day_html
+    assert "const currentWindow = 'today';" in day_html
     assert "today-event" in day_html
     assert "yesterday-event" not in day_html
     assert "old-event" not in day_html
