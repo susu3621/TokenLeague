@@ -656,7 +656,7 @@ def _within_window(event_time: datetime | None, window: str, now: datetime) -> b
     event_time = _to_storage_datetime(event_time)
     if window == "all":
         return True
-    if window == "day":
+    if window in {"day", "today"}:
         start = now.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         return event_time >= start
     if window == "week":

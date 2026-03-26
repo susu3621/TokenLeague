@@ -19,6 +19,7 @@ DOCS_DIR = BASE_DIR.parent / "docs"
 API_DOC_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 FILTER_FIELDS = ("agent_type", "agent_version", "model_name")
 VALID_WINDOWS = {"day", "week", "all"}
+VALID_USER_DETAIL_WINDOWS = {"today", "week", "month", "all"}
 VALID_TIMELINE_WINDOWS = {"today", "week", "month"}
 
 
@@ -67,6 +68,13 @@ def _requested_window(valid_windows: set[str] | None = None, default: str = "all
     allowed = valid_windows or VALID_WINDOWS
     window = (request.args.get("window") or default).strip().lower()
     return window if window in allowed else default
+
+
+def _requested_user_detail_window(default: str = "week") -> str:
+    raw = (request.args.get("window") or default).strip().lower()
+    if raw == "day":
+        return "today"
+    return raw if raw in VALID_USER_DETAIL_WINDOWS else default
 
 
 def _requested_filters() -> dict[str, str]:
@@ -332,7 +340,7 @@ def leaderboard():
 @app.route("/users/<int:user_id>")
 @auth_module.login_required
 def user_detail(user_id: int):
-    window = _requested_window()
+    window = _requested_user_detail_window()
     filters = _requested_filters()
     stats = db.get_user_stats(user_id, window=window, filters=filters)
     if not stats:
@@ -520,7 +528,7 @@ def api_leaderboard():
 @auth_module.login_required
 def api_user_stats(user_id: int):
     """Get single user token statistics"""
-    window = _requested_window()
+    window = _requested_user_detail_window()
     filters = _requested_filters()
     stats = db.get_user_stats(user_id, window=window, filters=filters)
     if not stats:
@@ -532,7 +540,7 @@ def api_user_stats(user_id: int):
 @auth_module.login_required
 def api_user_projects(user_id: int):
     """Get user token statistics grouped by project"""
-    window = _requested_window()
+    window = _requested_user_detail_window()
     user = db.get_user_by_id(user_id)
     if not user:
         return _json_error("User not found", 404)
@@ -547,7 +555,7 @@ def api_user_projects(user_id: int):
 @auth_module.login_required
 def api_user_models(user_id: int):
     """Get user token statistics grouped by model"""
-    window = _requested_window()
+    window = _requested_user_detail_window()
     user = db.get_user_by_id(user_id)
     if not user:
         return _json_error("User not found", 404)

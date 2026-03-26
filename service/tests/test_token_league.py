@@ -390,6 +390,100 @@ def test_user_timeline_api_supports_today_hourly_range(auth_session, monkeypatch
     assert timeline["2026-03-24 10:00"]["total_token_count"] == 0
 
 
+def test_user_detail_defaults_to_week_window(auth_session, monkeypatch):
+    import app as app_module
+    import db
+
+    seen = {}
+
+    def fake_get_user_stats(user_id, window="all", filters=None):
+        seen["window"] = window
+        return {
+            "summary": {},
+            "agent_breakdown": [],
+            "recent_prompt_events": [],
+            "recent_task_runs": [],
+        }
+
+    monkeypatch.setattr(db, "get_user_stats", fake_get_user_stats)
+    monkeypatch.setattr(app_module, "render_template", lambda *args, **kwargs: "ok")
+
+    response = auth_session.get("/users/1")
+
+    assert response.status_code == 200
+    assert seen["window"] == "week"
+
+
+def test_user_detail_day_window_aliases_to_today(auth_session, monkeypatch):
+    import app as app_module
+    import db
+
+    seen = {}
+
+    def fake_get_user_stats(user_id, window="all", filters=None):
+        seen["window"] = window
+        return {
+            "summary": {},
+            "agent_breakdown": [],
+            "recent_prompt_events": [],
+            "recent_task_runs": [],
+        }
+
+    monkeypatch.setattr(db, "get_user_stats", fake_get_user_stats)
+    monkeypatch.setattr(app_module, "render_template", lambda *args, **kwargs: "ok")
+
+    response = auth_session.get("/users/1?window=day")
+
+    assert response.status_code == 200
+    assert seen["window"] == "today"
+
+
+def test_user_detail_breakdown_apis_honor_month_window(auth_session, monkeypatch):
+    import db
+
+    seen = {}
+
+    def fake_get_user_stats(user_id, window="all", filters=None):
+        seen["stats"] = window
+        return {
+            "summary": {},
+            "agent_breakdown": [],
+            "recent_prompt_events": [],
+            "recent_task_runs": [],
+        }
+
+    def fake_get_user_project_breakdown(user_id, window="all"):
+        seen["projects"] = window
+        return []
+
+    def fake_get_user_model_breakdown(user_id, window="all"):
+        seen["models"] = window
+        return []
+
+    monkeypatch.setattr(db, "get_user_stats", fake_get_user_stats)
+    monkeypatch.setattr(db, "get_user_project_breakdown", fake_get_user_project_breakdown)
+    monkeypatch.setattr(db, "get_user_model_breakdown", fake_get_user_model_breakdown)
+    monkeypatch.setattr(
+        db,
+        "get_user_by_id",
+        lambda user_id: {
+            "id": user_id,
+            "username": "admin",
+            "display_name": "Admin",
+            "status": db.USER_ACTIVE,
+        },
+    )
+
+    stats_response = auth_session.get("/api/users/1/stats?window=month")
+    projects_response = auth_session.get("/api/users/1/projects?window=month")
+    models_response = auth_session.get("/api/users/1/models?window=month")
+
+    assert stats_response.status_code == 200
+    assert projects_response.status_code == 200
+    assert models_response.status_code == 200
+    assert seen == {"stats": "month", "projects": "month", "models": "month"}
+
+
 def test_user_detail_page_renders_timeline_range_selector(auth_session):
     response = auth_session.get("/users/1")
 
