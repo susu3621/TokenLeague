@@ -503,11 +503,20 @@ def test_user_detail_page_script_requests_all_sections_with_selected_window(auth
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "function refreshUserDetail(windowValue)" in html
-    assert "history.replaceState({}, '', `/users/${userId}?window=${windowValue}`);" in html
+    assert "let refreshRequestId = 0;" in html
+    assert "const requestId = ++refreshRequestId;" in html
+    assert "const nextUrl = new URL(window.location.href);" in html
+    assert "nextUrl.searchParams.set('window', windowValue);" in html
+    assert "history.replaceState({}, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);" in html
     assert "fetch(`/api/users/${userId}/stats?window=${windowValue}`)" in html
     assert "fetch(`/api/users/${userId}/projects?window=${windowValue}`)" in html
     assert "fetch(`/api/users/${userId}/models?window=${windowValue}`)" in html
     assert "fetch(`/api/users/${userId}/timeline?window=${windowValue}&granularity=${granularity}`)" in html
+    assert html.count("if (requestId !== refreshRequestId) {") == 4
+    assert "renderSummary(data.summary || {});" in html
+    assert "renderProjects(data.projects || []);" in html
+    assert "renderModels(data.models || []);" in html
+    assert "renderTimeline(data.timeline || [], windowValue);" in html
     assert "refreshUserDetail(currentWindow);" in html
 
 
@@ -611,8 +620,8 @@ def test_user_detail_page_renders_compact_token_counts(auth_session):
     assert "1.3K" in html
     assert "1,250" not in html
     assert "function formatTokenCount(value)" in html
-    assert "formatTokenCount(p.total_token_count)" in html
-    assert "formatTokenCount(m.total_token_count)" in html
+    assert "formatTokenCount(project.total_token_count)" in html
+    assert "formatTokenCount(model.total_token_count)" in html
     assert "callback: value => formatTokenCount(value)" in html
 
 

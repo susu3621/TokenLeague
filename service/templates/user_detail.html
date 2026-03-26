@@ -224,6 +224,7 @@
     let currentWindow = '{{ window }}';
     let modelChart = null;
     let timelineChart = null;
+    let refreshRequestId = 0;
     const timelineColorCache = new Map();
 
     function trimTrailingDecimal(value) {
@@ -587,11 +588,17 @@
     }
 
     function refreshUserDetail(windowValue) {
-        history.replaceState({}, '', `/users/${userId}?window=${windowValue}`);
+        const requestId = ++refreshRequestId;
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.set('window', windowValue);
+        history.replaceState({}, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
 
         fetch(`/api/users/${userId}/stats?window=${windowValue}`)
             .then(r => r.json())
             .then(data => {
+                if (requestId !== refreshRequestId) {
+                    return;
+                }
                 renderSummary(data.summary || {});
                 renderAgentBreakdown(data.agent_breakdown || []);
                 renderRecentPromptEvents(data.recent_prompt_events || []);
@@ -600,12 +607,18 @@
         fetch(`/api/users/${userId}/projects?window=${windowValue}`)
             .then(r => r.json())
             .then(data => {
+                if (requestId !== refreshRequestId) {
+                    return;
+                }
                 renderProjects(data.projects || []);
             });
 
         fetch(`/api/users/${userId}/models?window=${windowValue}`)
             .then(r => r.json())
             .then(data => {
+                if (requestId !== refreshRequestId) {
+                    return;
+                }
                 renderModels(data.models || []);
             });
 
@@ -613,6 +626,9 @@
         fetch(`/api/users/${userId}/timeline?window=${windowValue}&granularity=${granularity}`)
             .then(r => r.json())
             .then(data => {
+                if (requestId !== refreshRequestId) {
+                    return;
+                }
                 renderTimeline(data.timeline || [], windowValue);
             });
     }
