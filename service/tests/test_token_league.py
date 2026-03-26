@@ -441,7 +441,7 @@ def test_user_detail_defaults_to_week_window(auth_session, monkeypatch):
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "within the selected week window" in html
-    assert "const currentWindow = 'week';" in html
+    assert "let currentWindow = 'week';" in html
     assert "today-event" in html
     assert "yesterday-event" in html
     assert "old-event" not in html
@@ -458,7 +458,7 @@ def test_user_detail_page_uses_week_as_default_window(auth_session, monkeypatch)
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "within the selected week window" in html
-    assert "const currentWindow = 'week';" in html
+    assert "let currentWindow = 'week';" in html
     assert "const windowParam = 'week';" not in html
 
 
@@ -473,9 +473,26 @@ def test_user_detail_page_renders_refresh_targets_for_stats_sections(auth_sessio
     assert 'data-user-detail-summary-value="prompt-count"' in html
     assert 'data-user-detail-summary-value="task-count"' in html
     assert 'data-user-detail-summary-value="avg-token-per-prompt"' in html
-    assert 'data-user-detail-window-selector' in html
+    assert 'data-user-detail-window-selector="week"' in html
+    assert 'data-user-detail-window-option="today"' in html
+    assert 'data-user-detail-window-option="week"' in html
+    assert 'data-user-detail-window-option="month"' in html
     assert 'data-user-detail-agent-breakdown-body' in html
     assert 'data-user-detail-recent-prompt-events-body' in html
+
+
+def test_user_detail_page_falls_back_to_week_selector_for_all_window(auth_session, monkeypatch):
+    _seed_user_detail_window_data(monkeypatch)
+
+    response = auth_session.get("/users/1?window=all")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "let currentWindow = 'all';" in html
+    assert 'data-user-detail-window-selector="week"' in html
+    assert 'class="timeline-range-button is-active" data-user-detail-window-option="week"' in html
+    assert 'data-user-detail-window-option="today"' in html
+    assert 'data-user-detail-window-option="month"' in html
 
 
 def test_user_detail_day_window_aliases_to_today(auth_session, monkeypatch):
@@ -491,7 +508,7 @@ def test_user_detail_day_window_aliases_to_today(auth_session, monkeypatch):
     today_html = today_response.get_data(as_text=True)
     assert day_html == today_html
     assert "within the selected today window" in day_html
-    assert "const currentWindow = 'today';" in day_html
+    assert "let currentWindow = 'today';" in day_html
     assert "today-event" in day_html
     assert "yesterday-event" not in day_html
     assert "old-event" not in day_html

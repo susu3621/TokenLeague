@@ -72,6 +72,7 @@
 {% endblock %}
 
 {% block content %}
+{% set timeline_selector_window = window if window in ['today', 'week', 'month'] else 'week' %}
 <section class="stack">
     <div class="card">
         <h1 class="hero-title">{{ stats.user.display_name }}</h1>
@@ -100,10 +101,10 @@
     <div class="card">
         <div class="section-header">
             <h2>Usage Timeline</h2>
-            <div class="timeline-range" aria-label="Timeline range selector" data-user-detail-window-selector="{{ window }}">
-                <button type="button" class="timeline-range-button{% if window == 'today' %} is-active{% endif %}" data-user-detail-window-option="today">今天</button>
-                <button type="button" class="timeline-range-button{% if window == 'week' %} is-active{% endif %}" data-user-detail-window-option="week">过去7天</button>
-                <button type="button" class="timeline-range-button{% if window == 'month' %} is-active{% endif %}" data-user-detail-window-option="month">过去30天</button>
+            <div class="timeline-range" aria-label="Timeline range selector" data-user-detail-window-selector="{{ timeline_selector_window }}">
+                <button type="button" class="timeline-range-button{% if timeline_selector_window == 'today' %} is-active{% endif %}" data-user-detail-window-option="today">今天</button>
+                <button type="button" class="timeline-range-button{% if timeline_selector_window == 'week' %} is-active{% endif %}" data-user-detail-window-option="week">过去7天</button>
+                <button type="button" class="timeline-range-button{% if timeline_selector_window == 'month' %} is-active{% endif %}" data-user-detail-window-option="month">过去30天</button>
             </div>
         </div>
         <div class="chart-container">
@@ -220,7 +221,7 @@
 <script>
 (function() {
     const userId = {{ stats.user.id }};
-    const currentWindow = '{{ window }}';
+    let currentWindow = '{{ window }}';
     let timelineChart = null;
     const timelineColorCache = new Map();
 
@@ -411,6 +412,11 @@
         });
 
     function setTimelineWindow(windowValue) {
+        currentWindow = windowValue;
+        const selector = document.querySelector('[data-user-detail-window-selector]');
+        if (selector) {
+            selector.dataset.userDetailWindowSelector = windowValue;
+        }
         document.querySelectorAll('[data-user-detail-window-option]').forEach(button => {
             button.classList.toggle('is-active', button.dataset.userDetailWindowOption === windowValue);
         });
@@ -474,7 +480,6 @@
     }
 
     function fetchTimeline(windowValue) {
-        setTimelineWindow(windowValue);
         const granularity = windowValue === 'today' ? 'hour' : 'day';
         fetch(`/api/users/${userId}/timeline?window=${windowValue}&granularity=${granularity}`)
         .then(r => r.json())
@@ -531,7 +536,8 @@
 
     document.querySelectorAll('[data-user-detail-window-option]').forEach(button => {
         button.addEventListener('click', () => {
-            fetchTimeline(button.dataset.userDetailWindowOption);
+            setTimelineWindow(button.dataset.userDetailWindowOption);
+            fetchTimeline(currentWindow);
         });
     });
 
