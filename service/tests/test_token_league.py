@@ -495,6 +495,22 @@ def test_user_detail_page_falls_back_to_week_selector_for_all_window(auth_sessio
     assert 'data-user-detail-window-option="month"' in html
 
 
+def test_user_detail_page_script_requests_all_sections_with_selected_window(auth_session, monkeypatch):
+    _seed_user_detail_window_data(monkeypatch)
+
+    response = auth_session.get("/users/1")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "function refreshUserDetail(windowValue)" in html
+    assert "history.replaceState({}, '', `/users/${userId}?window=${windowValue}`);" in html
+    assert "fetch(`/api/users/${userId}/stats?window=${windowValue}`)" in html
+    assert "fetch(`/api/users/${userId}/projects?window=${windowValue}`)" in html
+    assert "fetch(`/api/users/${userId}/models?window=${windowValue}`)" in html
+    assert "fetch(`/api/users/${userId}/timeline?window=${windowValue}&granularity=${granularity}`)" in html
+    assert "refreshUserDetail(currentWindow);" in html
+
+
 def test_user_detail_day_window_aliases_to_today(auth_session, monkeypatch):
     _seed_user_detail_window_data(monkeypatch)
 

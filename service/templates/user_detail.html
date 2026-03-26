@@ -222,6 +222,7 @@
 (function() {
     const userId = {{ stats.user.id }};
     let currentWindow = '{{ window }}';
+    let modelChart = null;
     let timelineChart = null;
     const timelineColorCache = new Map();
 
@@ -328,88 +329,144 @@
     // Run conversion on page load
     document.addEventListener('DOMContentLoaded', convertUtcTimesToLocal);
 
-    // Fetch project breakdown
-    fetch(`/api/users/${userId}/projects?window=${currentWindow}`)
-        .then(r => r.json())
-        .then(data => {
-            const tbody = document.querySelector('#project-table tbody');
-            if (!data.projects || data.projects.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="muted">No project data.</td></tr>';
-                return;
+    function renderSummary(summary) {
+        const values = {
+            'total-token-count': formatTokenCount(summary.total_token_count),
+            'prompt-count': formatCount(summary.prompt_count),
+            'task-count': formatCount(summary.task_count),
+            'avg-token-per-prompt': formatTokenCount(summary.avg_token_per_prompt),
+        };
+
+        Object.entries(values).forEach(([key, value]) => {
+            const el = document.querySelector(`[data-user-detail-summary-value="${key}"]`);
+            if (el) {
+                el.textContent = value;
             }
-            tbody.innerHTML = data.projects.map(p => `
-                <tr>
-                    <td>${p.project_name}</td>
-                    <td>${formatTokenCount(p.total_token_count)}</td>
-                    <td>${formatTokenCount(p.input_token_count)}</td>
-                    <td>${formatTokenCount(p.output_token_count)}</td>
-                    <td>${formatCount(p.prompt_count)}</td>
-                    <td>${formatCount(p.task_count)}</td>
-                </tr>
-            `).join('');
         });
+    }
 
-    // Fetch model breakdown and render chart
-    fetch(`/api/users/${userId}/models?window=${currentWindow}`)
-        .then(r => r.json())
-        .then(data => {
-            const tbody = document.querySelector('#model-table tbody');
-            if (!data.models || data.models.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="muted">No model data.</td></tr>';
-                return;
-            }
-            tbody.innerHTML = data.models.map(m => `
-                <tr>
-                    <td>${m.model_name}</td>
-                    <td>${formatTokenCount(m.total_token_count)}</td>
-                    <td>${formatTokenCount(m.input_token_count)}</td>
-                    <td>${formatTokenCount(m.output_token_count)}</td>
-                    <td>${formatCount(m.prompt_count)}</td>
-                </tr>
-            `).join('');
+    function renderAgentBreakdown(rows) {
+        const tbody = document.querySelector('[data-user-detail-agent-breakdown-body]');
+        if (!rows || rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="muted">No data in this window.</td></tr>';
+            return;
+        }
 
-            // Render model chart
-            const ctx = document.getElementById('model-chart').getContext('2d');
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: data.models.map(m => m.model_name),
-                    datasets: [
-                        {
-                            label: 'Input Tokens',
-                            data: data.models.map(m => m.input_token_count),
-                            backgroundColor: '#374151',
-                        },
-                        {
-                            label: 'Output Tokens',
-                            data: data.models.map(m => m.output_token_count),
-                            backgroundColor: '#9ca3af',
-                        }
-                    ]
-                },
-                options: {
-                    indexAxis: 'y',
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'bottom' },
-                        tooltip: {
-                            callbacks: {
-                                label: context => `${context.dataset.label}: ${formatTokenCount(context.parsed.x)}`
-                            }
-                        }
+        tbody.innerHTML = rows.map(row => `
+            <tr>
+                <td>${row.agent_type}</td>
+                <td>${row.agent_version}</td>
+                <td>${row.model_name}</td>
+                <td>${formatTokenCount(row.total_token_count)}</td>
+                <td>${formatCount(row.prompt_count)}</td>
+                <td>${formatCount(row.task_count)}</td>
+            </tr>
+        `).join('');
+    }
+
+    function renderRecentPromptEvents(rows) {
+        const tbody = document.querySelector('[data-user-detail-recent-prompt-events-body]');
+        if (!rows || rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="muted">No prompt events recorded.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = rows.map(row => `
+            <tr>
+                <td style="font-family: monospace; font-size: 0.875rem;">${row.external_event_id.slice(0, 16)}...</td>
+                <td>${row.project_name}</td>
+                <td style="font-family: monospace; font-size: 0.875rem;">${row.task_id.slice(0, 16)}...</td>
+                <td>${formatTokenCount(row.total_token_count)}</td>
+                <td>${row.model_name}</td>
+                <td data-utc-time="${row.prompt_finished_at || ''}">${row.prompt_finished_at || '-'}</td>
+            </tr>
+        `).join('');
+        convertUtcTimesToLocal();
+    }
+
+    function renderProjects(projects) {
+        const tbody = document.querySelector('#project-table tbody');
+        if (!projects || projects.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="muted">No project data.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = projects.map(project => `
+            <tr>
+                <td>${project.project_name}</td>
+                <td>${formatTokenCount(project.total_token_count)}</td>
+                <td>${formatTokenCount(project.input_token_count)}</td>
+                <td>${formatTokenCount(project.output_token_count)}</td>
+                <td>${formatCount(project.prompt_count)}</td>
+                <td>${formatCount(project.task_count)}</td>
+            </tr>
+        `).join('');
+    }
+
+    function renderModels(models) {
+        const tbody = document.querySelector('#model-table tbody');
+        const ctx = document.getElementById('model-chart').getContext('2d');
+        if (modelChart) {
+            modelChart.destroy();
+            modelChart = null;
+        }
+
+        if (!models || models.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="muted">No model data.</td></tr>';
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            return;
+        }
+
+        tbody.innerHTML = models.map(model => `
+            <tr>
+                <td>${model.model_name}</td>
+                <td>${formatTokenCount(model.total_token_count)}</td>
+                <td>${formatTokenCount(model.input_token_count)}</td>
+                <td>${formatTokenCount(model.output_token_count)}</td>
+                <td>${formatCount(model.prompt_count)}</td>
+            </tr>
+        `).join('');
+
+        modelChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: models.map(model => model.model_name),
+                datasets: [
+                    {
+                        label: 'Input Tokens',
+                        data: models.map(model => model.input_token_count),
+                        backgroundColor: '#374151',
                     },
-                    scales: {
-                        x: {
-                            beginAtZero: true,
-                            ticks: {
-                                callback: value => formatTokenCount(value)
-                            }
+                    {
+                        label: 'Output Tokens',
+                        data: models.map(model => model.output_token_count),
+                        backgroundColor: '#9ca3af',
+                    }
+                ]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: context => `${context.dataset.label}: ${formatTokenCount(context.parsed.x)}`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: value => formatTokenCount(value)
                         }
                     }
                 }
-            });
+            }
         });
+    }
 
     function setTimelineWindow(windowValue) {
         currentWindow = windowValue;
@@ -479,69 +536,95 @@
         });
     }
 
-    function fetchTimeline(windowValue) {
-        const granularity = windowValue === 'today' ? 'hour' : 'day';
-        fetch(`/api/users/${userId}/timeline?window=${windowValue}&granularity=${granularity}`)
-        .then(r => r.json())
-        .then(data => {
-            const ctx = document.getElementById('timeline-chart').getContext('2d');
-            const datasets = buildTimelineDatasets(data.timeline || []);
-            if (!data.timeline || data.timeline.length === 0 || datasets.length === 0) {
-                renderEmptyTimeline(ctx);
-                return;
-            }
+    function renderTimeline(timeline, windowValue) {
+        const ctx = document.getElementById('timeline-chart').getContext('2d');
+        const datasets = buildTimelineDatasets(timeline || []);
+        if (!timeline || timeline.length === 0 || datasets.length === 0) {
+            renderEmptyTimeline(ctx);
+            return;
+        }
 
-            if (timelineChart) {
-                timelineChart.destroy();
-            }
-            const isToday = windowValue === 'today';
-            const labels = data.timeline.map(t => formatTimelineLabel(t.time_bucket, isToday));
-            const xTickConfig = isToday
-                ? { autoSkip: true, maxRotation: 0, minRotation: 0, maxTicksLimit: 12 }
-                : { autoSkip: true, maxRotation: 0, minRotation: 0, maxTicksLimit: 8 };
-            timelineChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: datasets
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'bottom' },
-                        tooltip: {
-                            callbacks: {
-                                label: context => `${context.dataset.label}: ${formatTokenCount(context.parsed.y)}`
-                            }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            stacked: true,
-                            ticks: {
-                                callback: value => formatTokenCount(value)
-                            }
-                        },
-                        x: {
-                            stacked: true,
-                            ticks: xTickConfig
+        if (timelineChart) {
+            timelineChart.destroy();
+        }
+        const isToday = windowValue === 'today';
+        const labels = timeline.map(bucket => formatTimelineLabel(bucket.time_bucket, isToday));
+        const xTickConfig = isToday
+            ? { autoSkip: true, maxRotation: 0, minRotation: 0, maxTicksLimit: 12 }
+            : { autoSkip: true, maxRotation: 0, minRotation: 0, maxTicksLimit: 8 };
+        timelineChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: context => `${context.dataset.label}: ${formatTokenCount(context.parsed.y)}`
                         }
                     }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        stacked: true,
+                        ticks: {
+                            callback: value => formatTokenCount(value)
+                        }
+                    },
+                    x: {
+                        stacked: true,
+                        ticks: xTickConfig
+                    }
                 }
-            });
+            }
         });
+    }
+
+    function refreshUserDetail(windowValue) {
+        history.replaceState({}, '', `/users/${userId}?window=${windowValue}`);
+
+        fetch(`/api/users/${userId}/stats?window=${windowValue}`)
+            .then(r => r.json())
+            .then(data => {
+                renderSummary(data.summary || {});
+                renderAgentBreakdown(data.agent_breakdown || []);
+                renderRecentPromptEvents(data.recent_prompt_events || []);
+            });
+
+        fetch(`/api/users/${userId}/projects?window=${windowValue}`)
+            .then(r => r.json())
+            .then(data => {
+                renderProjects(data.projects || []);
+            });
+
+        fetch(`/api/users/${userId}/models?window=${windowValue}`)
+            .then(r => r.json())
+            .then(data => {
+                renderModels(data.models || []);
+            });
+
+        const granularity = windowValue === 'today' ? 'hour' : 'day';
+        fetch(`/api/users/${userId}/timeline?window=${windowValue}&granularity=${granularity}`)
+            .then(r => r.json())
+            .then(data => {
+                renderTimeline(data.timeline || [], windowValue);
+            });
     }
 
     document.querySelectorAll('[data-user-detail-window-option]').forEach(button => {
         button.addEventListener('click', () => {
             setTimelineWindow(button.dataset.userDetailWindowOption);
-            fetchTimeline(currentWindow);
+            refreshUserDetail(currentWindow);
         });
     });
 
-    fetchTimeline(currentWindow);
+    refreshUserDetail(currentWindow);
 })();
 </script>
 {% endblock %}
