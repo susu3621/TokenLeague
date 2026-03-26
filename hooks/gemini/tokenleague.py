@@ -30,11 +30,11 @@ HOOK_LOG_FILE_NAME = ".tokenleague_gemini_hook.log"
 AGENT_TYPE = "gemini-cli"
 _GEMINI_CLI_VERSION_CACHE: str | None = None
 
-# ANSI color codes for terminal output
-ANSI_GREEN = "\033[32m"
-ANSI_RED = "\033[31m"
-ANSI_BOLD = "\033[1m"
-ANSI_RESET = "\033[0m"
+# ANSI color codes disabled for Gemini CLI (does not support ANSI escape codes)
+ANSI_GREEN = ""
+ANSI_RED = ""
+ANSI_BOLD = ""
+ANSI_RESET = ""
 
 
 def _get_env(key: str, default: str | None = None) -> str | None:
