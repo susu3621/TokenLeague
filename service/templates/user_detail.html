@@ -537,6 +537,17 @@
         });
     }
 
+    function buildRefreshUrl(pathname, windowValue, extraSearchParams = {}) {
+        const url = new URL(pathname, window.location.origin);
+        const params = new URLSearchParams(window.location.search);
+        params.set('window', windowValue);
+        Object.entries(extraSearchParams).forEach(([key, value]) => {
+            params.set(key, value);
+        });
+        url.search = params.toString();
+        return `${url.pathname}${url.search}`;
+    }
+
     function renderTimeline(timeline, windowValue) {
         const ctx = document.getElementById('timeline-chart').getContext('2d');
         const datasets = buildTimelineDatasets(timeline || []);
@@ -593,7 +604,7 @@
         nextUrl.searchParams.set('window', windowValue);
         history.replaceState({}, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
 
-        fetch(`/api/users/${userId}/stats?window=${windowValue}`)
+        fetch(buildRefreshUrl(`/api/users/${userId}/stats`, windowValue))
             .then(r => r.json())
             .then(data => {
                 if (requestId !== refreshRequestId) {
@@ -604,7 +615,7 @@
                 renderRecentPromptEvents(data.recent_prompt_events || []);
             });
 
-        fetch(`/api/users/${userId}/projects?window=${windowValue}`)
+        fetch(buildRefreshUrl(`/api/users/${userId}/projects`, windowValue))
             .then(r => r.json())
             .then(data => {
                 if (requestId !== refreshRequestId) {
@@ -613,7 +624,7 @@
                 renderProjects(data.projects || []);
             });
 
-        fetch(`/api/users/${userId}/models?window=${windowValue}`)
+        fetch(buildRefreshUrl(`/api/users/${userId}/models`, windowValue))
             .then(r => r.json())
             .then(data => {
                 if (requestId !== refreshRequestId) {
@@ -623,7 +634,7 @@
             });
 
         const granularity = windowValue === 'today' ? 'hour' : 'day';
-        fetch(`/api/users/${userId}/timeline?window=${windowValue}&granularity=${granularity}`)
+        fetch(buildRefreshUrl(`/api/users/${userId}/timeline`, windowValue, { granularity }))
             .then(r => r.json())
             .then(data => {
                 if (requestId !== refreshRequestId) {
