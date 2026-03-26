@@ -159,6 +159,26 @@ def _write_hook_log(event_type: str, **fields: Any) -> None:
         pass
 
 
+def _coerce_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _coerce_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _parse_timestamp(value: Any) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+
+    normalized = text.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+
 def _payload_identifier(payload: dict[str, Any]) -> str:
     return str(
         payload.get("external_event_id")
@@ -435,6 +455,135 @@ def _extract_usage_counts(usage_metadata: dict[str, Any]) -> tuple[int, int, int
     return int(prompt_tokens or 0), int(candidate_tokens or 0), int(cached_tokens or 0)
 
 
+def _extract_chat_message_text(message: dict[str, Any]) -> str:
+    content = message.get("content")
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+
+    parts: list[str] = []
+    for item in content:
+        if isinstance(item, str):
+            parts.append(item)
+            continue
+        if not isinstance(item, dict):
+            continue
+        text = item.get("text")
+        if text:
+            parts.append(str(text))
+    return "".join(parts)
+
+
+def _extract_chat_message_usage(message: dict[str, Any]) -> tuple[int, int, int] | None:
+    tokens = _coerce_dict(message.get("tokens"))
+    if not tokens:
+        return None
+    return (
+        int(tokens.get("input") or 0),
+        int(tokens.get("output") or 0),
+        int(tokens.get("cached") or 0),
+    )
+
+
+def _iter_gemini_chat_session_files() -> Iterator[Path]:
+    chats_root = Path.home() / ".gemini" / "tmp"
+    if not chats_root.exists():
+        return iter(())
+
+    candidates: list[tuple[float, Path]] = []
+    for path in chats_root.rglob("session-*.json"):
+        if path.parent.name != "chats":
+            continue
+        try:
+            candidates.append((path.stat().st_mtime, path))
+        except OSError:
+            continue
+
+    candidates.sort(reverse=True)
+    return (path for _, path in candidates[:128])
+
+
+def _load_chat_usage_counts(
+    session_id: str,
+    pending_turn: dict[str, Any],
+) -> tuple[int, int, int] | None:
+    pending_prompt = str(pending_turn.get("prompt") or "")
+    pending_started_at = _parse_timestamp(pending_turn.get("started_at"))
+
+    for path in _iter_gemini_chat_session_files():
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        if str(payload.get("sessionId") or "") != session_id:
+            continue
+
+        messages = _coerce_list(payload.get("messages"))
+        for index, raw_message in enumerate(messages):
+            message = _coerce_dict(raw_message)
+            if str(message.get("type") or "") != "user":
+                continue
+
+            if pending_prompt and _extract_chat_message_text(message) != pending_prompt:
+                continue
+
+            message_timestamp = _parse_timestamp(message.get("timestamp"))
+            if pending_started_at and message_timestamp and message_timestamp < pending_started_at:
+                continue
+
+            for candidate in messages[index + 1:]:
+                response_message = _coerce_dict(candidate)
+                if str(response_message.get("type") or "") != "gemini":
+                    continue
+                usage_counts = _extract_chat_message_usage(response_message)
+                if usage_counts is not None:
+                    return usage_counts
+
+        if not pending_started_at:
+            continue
+
+        for raw_message in messages:
+            message = _coerce_dict(raw_message)
+            if str(message.get("type") or "") != "gemini":
+                continue
+            message_timestamp = _parse_timestamp(message.get("timestamp"))
+            if message_timestamp and message_timestamp < pending_started_at:
+                continue
+            usage_counts = _extract_chat_message_usage(message)
+            if usage_counts is not None:
+                return usage_counts
+
+    return None
+
+
+def _resolve_usage_counts(
+    session_id: str,
+    pending_turn: dict[str, Any],
+) -> tuple[int, int, int] | None:
+    usage_counts = _extract_usage_counts(pending_turn.get("latest_usage", {}))
+    chat_usage_counts = _load_chat_usage_counts(session_id, pending_turn)
+    if chat_usage_counts is None:
+        return usage_counts
+    if usage_counts is None:
+        return chat_usage_counts
+
+    input_tokens, output_tokens, cached_tokens = usage_counts
+    if cached_tokens:
+        return usage_counts
+
+    chat_input_tokens, chat_output_tokens, chat_cached_tokens = chat_usage_counts
+    if not chat_cached_tokens:
+        return usage_counts
+
+    return (
+        input_tokens or chat_input_tokens,
+        output_tokens or chat_output_tokens,
+        chat_cached_tokens,
+    )
+
+
 def _extract_response_id(llm_response: dict[str, Any]) -> str:
     return str(
         llm_response.get("responseId")
@@ -529,7 +678,7 @@ def _build_prompt_event(
     project_name: str,
     prompt_finished_at: str,
 ) -> dict[str, Any] | None:
-    token_counts = _extract_usage_counts(pending_turn.get("latest_usage", {}))
+    token_counts = _resolve_usage_counts(session_id, pending_turn)
     if token_counts is None:
         return None
 

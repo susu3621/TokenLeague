@@ -29,6 +29,57 @@ def _make_git_worktree_path(tmp_path: Path, project_name: str, worktree_name: st
     return worktree_dir
 
 
+def _write_gemini_chat_session(
+    root: Path,
+    *,
+    session_id: str,
+    started_at: str,
+    prompt: str,
+    finished_at: str,
+    input_tokens: int,
+    output_tokens: int,
+    cached_tokens: int,
+    model: str = "gemini-3-flash-preview",
+) -> Path:
+    session_path = root / ".gemini" / "tmp" / "tokenleague" / "chats" / "session-2026-03-26T00-00-test.json"
+    session_path.parent.mkdir(parents=True, exist_ok=True)
+    session_path.write_text(
+        json.dumps(
+            {
+                "sessionId": session_id,
+                "startTime": started_at,
+                "lastUpdated": finished_at,
+                "messages": [
+                    {
+                        "id": "user-1",
+                        "timestamp": started_at,
+                        "type": "user",
+                        "content": [{"text": prompt}],
+                    },
+                    {
+                        "id": "gemini-1",
+                        "timestamp": finished_at,
+                        "type": "gemini",
+                        "content": "done",
+                        "tokens": {
+                            "input": input_tokens,
+                            "output": output_tokens,
+                            "cached": cached_tokens,
+                            "thoughts": 0,
+                            "tool": 0,
+                            "total": input_tokens + output_tokens,
+                        },
+                        "model": model,
+                    },
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return session_path
+
+
 def test_gemini_settings_register_expected_hooks():
     payload = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
 
@@ -260,6 +311,80 @@ def test_handle_after_agent_falls_back_to_total_token_count(tmp_path, monkeypatc
     assert uploads[0][1]["output_token_count"] == 0
     assert uploads[1][1]["input_token_count"] == 77
     assert uploads[1][1]["output_token_count"] == 0
+
+
+def test_handle_after_agent_falls_back_to_local_chat_cache_tokens(tmp_path, monkeypatch):
+    hook = _load_hook_module()
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("TOKENLEAGUE_GEMINI_CLI_VERSION", "0.35.0")
+    monkeypatch.setattr(hook, "_write_hook_log", lambda *args, **kwargs: None)
+
+    started_at = "2026-03-25T23:26:00.415Z"
+    finished_at = "2026-03-25T23:26:52.315Z"
+    _write_gemini_chat_session(
+        tmp_path,
+        session_id="session-cache-1",
+        started_at=started_at,
+        prompt="你好",
+        finished_at=finished_at,
+        input_tokens=8157,
+        output_tokens=21,
+        cached_tokens=6045,
+    )
+
+    hook._handle_before_agent(
+        {
+            "session_id": "session-cache-1",
+            "cwd": "/Users/juns/project/TokenLeague",
+            "timestamp": started_at,
+            "prompt": "你好",
+            "hook_event_name": "BeforeAgent",
+        }
+    )
+    hook._handle_after_model(
+        {
+            "session_id": "session-cache-1",
+            "cwd": "/Users/juns/project/TokenLeague",
+            "timestamp": "2026-03-25T23:26:51.000Z",
+            "hook_event_name": "AfterModel",
+            "llm_request": {
+                "model": "gemini-3-flash-preview",
+                "messages": [{"role": "user", "content": "你好"}],
+            },
+            "llm_response": {
+                "usageMetadata": {
+                    "promptTokenCount": 8157,
+                    "candidatesTokenCount": 21,
+                    "totalTokenCount": 8178,
+                },
+            },
+        }
+    )
+
+    uploads = []
+
+    def fake_send_api_request(endpoint, payload):
+        uploads.append((endpoint, payload))
+        return True
+
+    monkeypatch.setattr(hook, "_send_api_request", fake_send_api_request)
+
+    hook._handle_after_agent(
+        {
+            "session_id": "session-cache-1",
+            "cwd": "/Users/juns/project/TokenLeague",
+            "timestamp": finished_at,
+            "prompt": "你好",
+            "prompt_response": "done",
+            "hook_event_name": "AfterAgent",
+        }
+    )
+
+    assert uploads[0][1]["cached_input_token_count"] == 6045
+    assert uploads[1][1]["cached_input_token_count"] == 6045
+    state = hook._load_session_state("session-cache-1")
+    assert state["task_run"]["cached_input_token_count"] == 6045
 
 
 def test_handle_after_agent_detects_gemini_cli_version_from_binary_path(tmp_path, monkeypatch):
