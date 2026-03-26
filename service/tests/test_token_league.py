@@ -37,6 +37,49 @@ def _task_payload(task_id, started_at, *, prompt_count=1, input_tokens=10, outpu
     }
 
 
+def _seed_user_detail_window_data(monkeypatch):
+    import db
+
+    fixed_now = datetime(2026, 3, 24, 12, 0, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(db, "_utcnow", lambda: fixed_now)
+
+    fixtures = [
+        ("today-event", fixed_now, "today-task", "TokenLeague", "gpt-5.4", 20, 10),
+        (
+            "yesterday-event",
+            fixed_now - timedelta(days=1),
+            "yesterday-task",
+            "SideQuest",
+            "claude-sonnet-4",
+            40,
+            20,
+        ),
+        ("old-event", fixed_now - timedelta(days=8), "old-task", "Archive", "gpt-4.1", 70, 30),
+    ]
+
+    for event_id, started_at, task_id, project_name, model_name, input_tokens, output_tokens in fixtures:
+        prompt_payload = _prompt_payload(
+            event_id,
+            started_at,
+            task_id=task_id,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+        )
+        prompt_payload["project_name"] = project_name
+        prompt_payload["model_name"] = model_name
+        db.upsert_prompt_event(1, prompt_payload)
+
+        task_payload = _task_payload(
+            task_id,
+            started_at,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+        )
+        task_payload["project_name"] = project_name
+        task_payload["model_name"] = model_name
+        db.upsert_task_run(1, task_payload)
+
+
 def test_leaderboard_requires_login(client):
     response = client.get("/leaderboard")
 
@@ -391,88 +434,43 @@ def test_user_timeline_api_supports_today_hourly_range(auth_session, monkeypatch
 
 
 def test_user_detail_defaults_to_week_window(auth_session, monkeypatch):
-    import app as app_module
-    import db
-
-    seen = {}
-
-    def fake_get_user_stats(user_id, window="all", filters=None):
-        seen["window"] = window
-        return {
-            "summary": {},
-            "agent_breakdown": [],
-            "recent_prompt_events": [],
-            "recent_task_runs": [],
-        }
-
-    monkeypatch.setattr(db, "get_user_stats", fake_get_user_stats)
-    monkeypatch.setattr(app_module, "render_template", lambda *args, **kwargs: "ok")
+    _seed_user_detail_window_data(monkeypatch)
 
     response = auth_session.get("/users/1")
 
     assert response.status_code == 200
-    assert seen["window"] == "week"
+    html = response.get_data(as_text=True)
+    assert "within the selected week window" in html
+    assert "const windowParam = 'week';" in html
+    assert "today-event" in html
+    assert "yesterday-event" in html
+    assert "old-event" not in html
+    assert "today-task" in html
+    assert "yesterday-task" in html
+    assert "old-task" not in html
 
 
 def test_user_detail_day_window_aliases_to_today(auth_session, monkeypatch):
-    import app as app_module
-    import db
+    _seed_user_detail_window_data(monkeypatch)
 
-    seen = {}
+    day_response = auth_session.get("/users/1?window=day")
+    today_response = auth_session.get("/users/1?window=today")
 
-    def fake_get_user_stats(user_id, window="all", filters=None):
-        seen["window"] = window
-        return {
-            "summary": {},
-            "agent_breakdown": [],
-            "recent_prompt_events": [],
-            "recent_task_runs": [],
-        }
+    assert day_response.status_code == 200
+    assert today_response.status_code == 200
 
-    monkeypatch.setattr(db, "get_user_stats", fake_get_user_stats)
-    monkeypatch.setattr(app_module, "render_template", lambda *args, **kwargs: "ok")
-
-    response = auth_session.get("/users/1?window=day")
-
-    assert response.status_code == 200
-    assert seen["window"] == "today"
+    day_html = day_response.get_data(as_text=True)
+    today_html = today_response.get_data(as_text=True)
+    assert day_html == today_html
+    assert "within the selected today window" in day_html
+    assert "const windowParam = 'today';" in day_html
+    assert "today-event" in day_html
+    assert "yesterday-event" not in day_html
+    assert "old-event" not in day_html
 
 
 def test_user_detail_breakdown_apis_honor_month_window(auth_session, monkeypatch):
-    import db
-
-    seen = {}
-
-    def fake_get_user_stats(user_id, window="all", filters=None):
-        seen["stats"] = window
-        return {
-            "summary": {},
-            "agent_breakdown": [],
-            "recent_prompt_events": [],
-            "recent_task_runs": [],
-        }
-
-    def fake_get_user_project_breakdown(user_id, window="all"):
-        seen["projects"] = window
-        return []
-
-    def fake_get_user_model_breakdown(user_id, window="all"):
-        seen["models"] = window
-        return []
-
-    monkeypatch.setattr(db, "get_user_stats", fake_get_user_stats)
-    monkeypatch.setattr(db, "get_user_project_breakdown", fake_get_user_project_breakdown)
-    monkeypatch.setattr(db, "get_user_model_breakdown", fake_get_user_model_breakdown)
-    monkeypatch.setattr(
-        db,
-        "get_user_by_id",
-        lambda user_id: {
-            "id": user_id,
-            "username": "admin",
-            "display_name": "Admin",
-            "status": db.USER_ACTIVE,
-        },
-    )
+    _seed_user_detail_window_data(monkeypatch)
 
     stats_response = auth_session.get("/api/users/1/stats?window=month")
     projects_response = auth_session.get("/api/users/1/projects?window=month")
@@ -481,7 +479,31 @@ def test_user_detail_breakdown_apis_honor_month_window(auth_session, monkeypatch
     assert stats_response.status_code == 200
     assert projects_response.status_code == 200
     assert models_response.status_code == 200
-    assert seen == {"stats": "month", "projects": "month", "models": "month"}
+
+    stats = stats_response.get_json()
+    assert stats["summary"]["total_token_count"] == 190
+    assert stats["summary"]["prompt_count"] == 3
+    assert stats["summary"]["task_count"] == 3
+    assert {row["external_event_id"] for row in stats["recent_prompt_events"]} == {
+        "today-event",
+        "yesterday-event",
+        "old-event",
+    }
+
+    projects = {row["project_name"]: row for row in projects_response.get_json()["projects"]}
+    assert projects_response.get_json()["window"] == "month"
+    assert projects["TokenLeague"]["total_token_count"] == 30
+    assert projects["TokenLeague"]["task_count"] == 1
+    assert projects["SideQuest"]["total_token_count"] == 60
+    assert projects["SideQuest"]["task_count"] == 1
+    assert projects["Archive"]["total_token_count"] == 100
+    assert projects["Archive"]["task_count"] == 1
+
+    models = {row["model_name"]: row for row in models_response.get_json()["models"]}
+    assert models_response.get_json()["window"] == "month"
+    assert models["gpt-5.4"]["total_token_count"] == 30
+    assert models["claude-sonnet-4"]["total_token_count"] == 60
+    assert models["gpt-4.1"]["total_token_count"] == 100
 
 
 def test_user_detail_page_renders_timeline_range_selector(auth_session):
