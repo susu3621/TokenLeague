@@ -1,6 +1,6 @@
 # TokenLeague Hooks
 
-TokenLeague provides statistics hooks and collector assets for Claude Code, Codex CLI, Gemini CLI, and OpenClaw to automatically track token usage and send it to the TokenLeague leaderboard.
+TokenLeague provides statistics hooks and collector assets for Claude Code, Codex CLI, Cursor, Workbuddy (CodeBuddy CLI), Gemini CLI, Kiro, and OpenClaw to automatically track token usage and send it to the TokenLeague leaderboard.
 
 ## Quick Start
 
@@ -10,7 +10,7 @@ Run the installation script:
 
 ```bash
 cd /path/to/TokenLeague
-./scripts/install_hooks.sh --both --gemini --openclaw --global
+./scripts/install_hooks.sh --both --cursor --workbuddy --gemini --kiro --openclaw --global
 ```
 
 Built-in templates live under `hooks/` inside this repository. The repository checkout itself does not auto-enable agent hooks; installation is explicit.
@@ -20,35 +20,47 @@ Built-in templates live under `hooks/` inside this repository. The repository ch
 |--------|-------------|
 | `--claude` | Install only Claude Code hooks |
 | `--codex` | Install only Codex CLI hooks |
+| `--cursor` | Install only Cursor hooks |
+| `--workbuddy` | Install only Workbuddy / CodeBuddy CLI hooks |
 | `--gemini` | Install only Gemini CLI hooks |
+| `--kiro` | Stage only Kiro hook scripts for manual Agent Hooks setup |
 | `--openclaw` | Install only OpenClaw collector assets |
 | `--both` | Install Claude Code and Codex CLI hooks |
-| `--global` | Install to `~/.claude`, `~/.codex`, `~/.gemini`, and/or `~/.openclaw` depending on flags |
+| `--global` | Install to `~/.claude`, `~/.codex`, `~/.cursor`, `~/.codebuddy`, `~/.gemini`, `~/.kiro`, and/or `~/.openclaw` depending on flags |
 | `--local` | Install to project directory (default) |
 
 **Examples:**
 ```bash
 # Install all supported hooks globally
-./scripts/install_hooks.sh --both --gemini --openclaw --global
+./scripts/install_hooks.sh --both --cursor --workbuddy --gemini --kiro --openclaw --global
 
 # Install only Claude Code hooks globally
 ./scripts/install_hooks.sh --claude --global
 
+# Install only Cursor hooks globally
+./scripts/install_hooks.sh --cursor --global
+
+# Install only Workbuddy hooks globally
+./scripts/install_hooks.sh --workbuddy --global
+
 # Install only Gemini CLI hooks globally
 ./scripts/install_hooks.sh --gemini --global
+
+# Stage Kiro hook scripts globally
+./scripts/install_hooks.sh --kiro --global
 
 # Install only OpenClaw collector assets globally
 ./scripts/install_hooks.sh --openclaw --global
 
 # Install to current project directory only
-./scripts/install_hooks.sh --both --gemini --openclaw --local
+./scripts/install_hooks.sh --both --cursor --workbuddy --gemini --kiro --openclaw --local
 ```
 
 ### Uninstall Hooks
 
 ```bash
 # Uninstall all supported hooks globally
-./scripts/install_hooks.sh --both --gemini --openclaw --global --uninstall
+./scripts/install_hooks.sh --both --cursor --workbuddy --gemini --kiro --openclaw --global --uninstall
 
 # Uninstall only Claude Code hooks
 ./scripts/install_hooks.sh --claude --global --uninstall
@@ -56,8 +68,17 @@ Built-in templates live under `hooks/` inside this repository. The repository ch
 # Uninstall only Codex CLI hooks
 ./scripts/install_hooks.sh --codex --global --uninstall
 
+# Uninstall only Cursor hooks
+./scripts/install_hooks.sh --cursor --global --uninstall
+
+# Uninstall only Workbuddy hooks
+./scripts/install_hooks.sh --workbuddy --global --uninstall
+
 # Uninstall only Gemini CLI hooks
 ./scripts/install_hooks.sh --gemini --global --uninstall
+
+# Remove staged Kiro hook scripts
+./scripts/install_hooks.sh --kiro --global --uninstall
 
 # Uninstall only OpenClaw collector assets
 ./scripts/install_hooks.sh --openclaw --global --uninstall
@@ -65,7 +86,7 @@ Built-in templates live under `hooks/` inside this repository. The repository ch
 
 ### Configure Environment Variables
 
-For Claude / Codex / Gemini, add these to your shell profile (`~/.bashrc` or `~/.zshrc`):
+For Claude / Codex / Cursor / Workbuddy / Gemini / Kiro, add these to your shell profile (`~/.bashrc` or `~/.zshrc`):
 
 ```bash
 # Required: Your TokenLeague hook key
@@ -99,10 +120,28 @@ claude
 codex
 ```
 
+**Cursor:**
+Cursor installs config into `.cursor/hooks.json` or `~/.cursor/hooks.json`, and the hook command lives at `.cursor/hooks/tokenleague.py` or `~/.cursor/hooks/tokenleague.py`.
+
+**Workbuddy / CodeBuddy CLI:**
+Workbuddy installs config into `.codebuddy/settings.json` or `~/.codebuddy/settings.json`.
+
 **Gemini CLI:**
 ```bash
 gemini
 ```
+
+**Kiro:**
+Kiro does not publish a stable on-disk hook config path in its docs. `./scripts/install_hooks.sh --kiro` only stages scripts under `.kiro/hooks/` or `~/.kiro/hooks/`.
+
+Open the `Agent Hooks` UI in Kiro and register two `Shell Command` hooks:
+
+```text
+Prompt Submit -> python3 .kiro/hooks/tokenleague.py prompt-submit
+Agent Stop    -> python3 .kiro/hooks/tokenleague.py agent-stop
+```
+
+If you staged globally, use `python3 ~/.kiro/hooks/tokenleague.py prompt-submit` and `python3 ~/.kiro/hooks/tokenleague.py agent-stop`.
 
 **OpenClaw:**
 ```bash
@@ -120,13 +159,18 @@ python3 ~/.openclaw/tokenleague_collect.py
 
 | Event | Trigger | Action |
 |-------|---------|--------|
-| `SessionStart` | When Claude Code or Gemini CLI starts | Initialize session tracking or display startup status |
+| `SessionStart` | When Claude Code, Workbuddy, or Gemini CLI starts | Initialize session tracking or display startup status |
 | `UserPromptSubmit` | When you send a prompt in Codex CLI | Cache Codex session/transcript metadata |
+| `sessionStart` | When Cursor starts a session | Initialize Cursor hook state |
 | `BeforeAgent` | When you send a prompt in Gemini CLI | Start tracking the pending Gemini turn |
 | `AfterModel` | After a Gemini model response arrives | Cache Gemini usage metadata for the pending turn |
 | `AfterAgent` | After Gemini finishes a turn | Upload prompt usage and update task aggregate |
-| `Stop` | When Claude Code or Codex CLI stops | Parse transcript or finalized turn usage and upload |
-| `SessionEnd` | When Claude Code or Gemini CLI exits | Cleanup or final fallback handling |
+| `Stop` | When Claude Code, Codex CLI, or Workbuddy stops | Parse transcript or finalized turn usage and upload |
+| `stop` | When Cursor stops | Parse Cursor transcript usage and upload |
+| `SessionEnd` | When Claude Code, Workbuddy, or Gemini CLI exits | Cleanup or final fallback handling |
+| `sessionEnd` | When Cursor exits | Re-run transcript parsing as an exit fallback |
+| `Prompt Submit` | When a configured Kiro shell command runs on prompt submit | Print TokenLeague configuration status into Kiro context |
+| `Agent Stop` | When a configured Kiro shell command runs after agent completion | Upload transcript usage when a transcript path is available |
 | `Collector Run` | When you execute the OpenClaw collector | Read Gateway session files and upload new prompt/session aggregates |
 
 ### Data Flow
@@ -134,7 +178,9 @@ python3 ~/.openclaw/tokenleague_collect.py
 ```
 ┌─────────────────┐
 │ Claude / Codex /│
-│ Gemini / OpenClaw│
+│ Cursor / Work-  │
+│ buddy / Gemini /│
+│ Kiro / OpenClaw │
 └────────┬────────┘
          │ Hook Events / Collector
          ▼
@@ -185,7 +231,7 @@ python3 ~/.openclaw/tokenleague_collect.py
 
 ### Settings File
 
-Repository templates live under `hooks/claude`, `hooks/codex`, `hooks/gemini`, and `hooks/openclaw`.
+Repository templates live under `hooks/claude`, `hooks/codex`, `hooks/cursor`, `hooks/workbuddy`, `hooks/gemini`, `hooks/kiro`, and `hooks/openclaw`.
 
 Claude hooks are installed into `.claude/settings.json` or `~/.claude/settings.json`.
 
@@ -203,6 +249,33 @@ Codex hooks are installed into `.codex/hooks.json` or `~/.codex/hooks.json`, and
 ```toml
 [features]
 codex_hooks = true
+```
+
+Cursor hooks are installed into `.cursor/hooks.json` or `~/.cursor/hooks.json`:
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [...],
+    "stop": [...],
+    "sessionEnd": [...]
+  }
+}
+```
+
+The command script lives at `.cursor/hooks/tokenleague.py` or `~/.cursor/hooks/tokenleague.py`.
+
+Workbuddy hooks are installed into `.codebuddy/settings.json` or `~/.codebuddy/settings.json`:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [...],
+    "Stop": [...],
+    "SessionEnd": [...]
+  }
+}
 ```
 
 Gemini hooks are installed into `.gemini/settings.json` or `~/.gemini/settings.json`:
@@ -233,6 +306,23 @@ Global OpenClaw installs also create:
 /etc/systemd/system/
 ├── tokenleague-openclaw-collector.service
 └── tokenleague-openclaw-collector.timer
+```
+
+Kiro stages scripts into `.kiro/hooks/` or `~/.kiro/hooks/`:
+
+```text
+.kiro/
+└── hooks/
+    ├── tokenleague.py
+    ├── tokenleague.env.example
+    └── tokenleague_transcript_hook.py
+```
+
+Kiro setup remains manual in the `Agent Hooks` UI. Recommended bindings:
+
+```text
+Prompt Submit -> python3 .kiro/hooks/tokenleague.py prompt-submit
+Agent Stop    -> python3 .kiro/hooks/tokenleague.py agent-stop
 ```
 
 ## Privacy

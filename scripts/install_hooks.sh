@@ -5,17 +5,26 @@
 # This script installs or uninstalls TokenLeague statistics hooks for supported agents.
 #
 # Usage:
-#   ./install_hooks.sh [--claude] [--codex] [--gemini] [--openclaw] [--both] [--global] [--uninstall]
+#   ./install_hooks.sh [--claude] [--codex] [--cursor] [--workbuddy] [--gemini] [--kiro] [--openclaw] [--both] [--global] [--uninstall]
 #
 # Options:
 #   --claude    Install/uninstall hooks for Claude Code only
 #   --codex     Install/uninstall hooks for Codex CLI only
+#   --cursor    Install/uninstall hooks for Cursor only
+#   --workbuddy Install/uninstall hooks for Workbuddy (CodeBuddy CLI) only
 #   --gemini    Install/uninstall hooks for Gemini CLI only
+#   --kiro      Install/uninstall staged Kiro hook scripts only
 #   --openclaw  Install/uninstall collector assets for OpenClaw
 #   --both      Install/uninstall hooks for both (default)
-#   --global    Install/uninstall to user's global config directory (~/.claude, ~/.codex, ~/.gemini, ~/.openclaw)
+#   --global    Install/uninstall to user's global config directory (~/.claude, ~/.codex, ~/.cursor, ~/.codebuddy, ~/.gemini, ~/.kiro, ~/.openclaw)
 #   --local     Install/uninstall to current project directory (default)
 #   --uninstall Remove TokenLeague hooks
+#
+# Config targets:
+#   Cursor: .cursor/hooks.json or ~/.cursor/hooks.json
+#   Workbuddy: .codebuddy/settings.json or ~/.codebuddy/settings.json
+#   Kiro staged script: .kiro/hooks/tokenleague.py or ~/.kiro/hooks/tokenleague.py
+#   Kiro staged env example: .kiro/hooks/tokenleague.env.example or ~/.kiro/hooks/tokenleague.env.example
 #
 # Environment Variables:
 #   TOKENLEAGUE_HOOK_KEY    Your TokenLeague hook key (required for testing)
@@ -34,7 +43,10 @@ NC='\033[0m' # No Color
 # Default settings
 INSTALL_CLAUDE=false
 INSTALL_CODEX=false
+INSTALL_CURSOR=false
+INSTALL_WORKBUDDY=false
 INSTALL_GEMINI=false
+INSTALL_KIRO=false
 INSTALL_OPENCLAW=false
 INSTALL_GLOBAL=false
 MODE_UNINSTALL=false
@@ -148,7 +160,69 @@ payload = {
         ],
     }
 }
-target_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+write_cursor_hooks_config() {
+    local target_path="$1"
+    local command_base="$2"
+
+    python3 - "$target_path" "$command_base" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+target_path = Path(sys.argv[1])
+command_base = sys.argv[2]
+
+tokenleague_hooks = {
+    "sessionStart": [
+        {
+            "command": f"{command_base} sessionStart",
+            "timeout": 10,
+        }
+    ],
+    "stop": [
+        {
+            "command": f"{command_base} stop",
+            "timeout": 30,
+        }
+    ],
+    "sessionEnd": [
+        {
+            "command": f"{command_base} sessionEnd",
+            "timeout": 30,
+        }
+    ],
+}
+
+if target_path.exists():
+    try:
+        config = json.loads(target_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, IOError):
+        config = {}
+else:
+    config = {}
+
+config["version"] = 1
+existing_hooks = config.get("hooks", {})
+for event_name, event_hooks in tokenleague_hooks.items():
+    if event_name not in existing_hooks:
+        existing_hooks[event_name] = event_hooks
+        continue
+
+    existing_events = existing_hooks[event_name]
+    tokenleague_exists = False
+    for event_config in existing_events:
+        if "tokenleague" in str(event_config.get("command", "")):
+            event_config["command"] = event_hooks[0]["command"]
+            event_config["timeout"] = event_hooks[0]["timeout"]
+            tokenleague_exists = True
+            break
+    if not tokenleague_exists:
+        existing_hooks[event_name] = existing_events + event_hooks
+
+config["hooks"] = existing_hooks
+target_path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+print(f"  → Merged hooks configuration into {target_path}")
 PY
 }
 
@@ -343,14 +417,101 @@ for event_name, event_hooks in tokenleague_hooks.items():
         hooks_list = event_config.get("hooks", [])
         for hook in hooks_list:
             if "tokenleague" in hook.get("command", ""):
-                hook["command"] = command_path
+                hook["command"] = event_hooks[0]["hooks"][0]["command"]
                 hook["timeout"] = 5000
                 tokenleague_exists = True
                 break
         if tokenleague_exists:
             break
     if not tokenleague_exists:
-        existing_hooks[event_name] = existing_events + tokenleague_hooks[event_name]
+        existing_hooks[event_name] = existing_events + event_hooks
+
+settings["hooks"] = existing_hooks
+target_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+print(f"  → Merged hooks configuration into {target_path}")
+PY
+}
+
+merge_workbuddy_settings() {
+    local target_path="$1"
+    local command_base="$2"
+
+    python3 - "$target_path" "$command_base" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+target_path = Path(sys.argv[1])
+command_base = sys.argv[2]
+
+tokenleague_hooks = {
+    "SessionStart": [
+        {
+            "matcher": "startup",
+            "hooks": [
+                {
+                    "name": "tokenleague-session-start",
+                    "type": "command",
+                    "command": f"{command_base} SessionStart",
+                    "timeout": 5000,
+                }
+            ],
+        }
+    ],
+    "Stop": [
+        {
+            "hooks": [
+                {
+                    "name": "tokenleague-stop",
+                    "type": "command",
+                    "command": f"{command_base} Stop",
+                    "timeout": 5000,
+                }
+            ],
+        }
+    ],
+    "SessionEnd": [
+        {
+            "hooks": [
+                {
+                    "name": "tokenleague-session-end",
+                    "type": "command",
+                    "command": f"{command_base} SessionEnd",
+                    "timeout": 5000,
+                }
+            ],
+        }
+    ],
+}
+
+if target_path.exists():
+    try:
+        settings = json.loads(target_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, IOError):
+        settings = {}
+else:
+    settings = {}
+
+existing_hooks = settings.get("hooks", {})
+for event_name, event_hooks in tokenleague_hooks.items():
+    if event_name not in existing_hooks:
+        existing_hooks[event_name] = event_hooks
+        continue
+
+    existing_events = existing_hooks[event_name]
+    tokenleague_exists = False
+    for event_config in existing_events:
+        hooks_list = event_config.get("hooks", [])
+        for hook in hooks_list:
+            if "tokenleague" in hook.get("command", ""):
+                hook["command"] = event_hooks[0]["hooks"][0]["command"]
+                hook["timeout"] = 5000
+                tokenleague_exists = True
+                break
+        if tokenleague_exists:
+            break
+    if not tokenleague_exists:
+        existing_hooks[event_name] = existing_events + event_hooks
 
 settings["hooks"] = existing_hooks
 target_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -515,7 +676,107 @@ print(f"  → Removed {removed_count} TokenLeague hook(s) from {target_path}")
 PY
 }
 
+remove_cursor_hooks() {
+    local target_path="$1"
+
+    python3 - "$target_path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+target_path = Path(sys.argv[1])
+
+if not target_path.exists():
+    print(f"  → Hooks file not found: {target_path}")
+    sys.exit(0)
+
+try:
+    config = json.loads(target_path.read_text(encoding="utf-8"))
+except (json.JSONDecodeError, IOError) as exc:
+    print(f"  → Failed to read hooks config: {exc}")
+    sys.exit(1)
+
+hooks = config.get("hooks", {})
+if not hooks:
+    print(f"  → No hooks configured in {target_path}")
+    sys.exit(0)
+
+removed_count = 0
+for event_name in list(hooks.keys()):
+    event_configs = hooks[event_name]
+    new_configs = [cfg for cfg in event_configs if "tokenleague" not in str(cfg.get("command", ""))]
+    removed_count += len(event_configs) - len(new_configs)
+
+    if new_configs:
+        hooks[event_name] = new_configs
+    else:
+        del hooks[event_name]
+
+if not hooks:
+    config.pop("hooks", None)
+else:
+    config["hooks"] = hooks
+
+config["version"] = 1
+target_path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+print(f"  → Removed {removed_count} TokenLeague hook(s) from {target_path}")
+PY
+}
+
 remove_gemini_hooks() {
+    local target_path="$1"
+
+    python3 - "$target_path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+target_path = Path(sys.argv[1])
+
+if not target_path.exists():
+    print(f"  → Settings file not found: {target_path}")
+    sys.exit(0)
+
+try:
+    settings = json.loads(target_path.read_text(encoding="utf-8"))
+except (json.JSONDecodeError, IOError) as exc:
+    print(f"  → Failed to read settings: {exc}")
+    sys.exit(1)
+
+hooks = settings.get("hooks", {})
+if not hooks:
+    print(f"  → No hooks configured in {target_path}")
+    sys.exit(0)
+
+removed_count = 0
+for event_name in list(hooks.keys()):
+    event_configs = hooks[event_name]
+    new_configs = []
+    for config in event_configs:
+        hooks_list = config.get("hooks", [])
+        new_hooks_list = [h for h in hooks_list if "tokenleague" not in h.get("command", "")]
+        if new_hooks_list:
+            new_config = dict(config)
+            new_config["hooks"] = new_hooks_list
+            new_configs.append(new_config)
+        removed_count += len(hooks_list) - len(new_hooks_list)
+
+    if new_configs:
+        hooks[event_name] = new_configs
+    else:
+        del hooks[event_name]
+
+if not hooks:
+    del settings["hooks"]
+else:
+    settings["hooks"] = hooks
+
+target_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+print(f"  → Removed {removed_count} TokenLeague hook(s) from {target_path}")
+PY
+}
+
+remove_workbuddy_hooks() {
     local target_path="$1"
 
     python3 - "$target_path" <<'PY'
@@ -579,8 +840,20 @@ while [[ $# -gt 0 ]]; do
             INSTALL_CODEX=true
             shift
             ;;
+        --cursor)
+            INSTALL_CURSOR=true
+            shift
+            ;;
+        --workbuddy)
+            INSTALL_WORKBUDDY=true
+            shift
+            ;;
         --gemini)
             INSTALL_GEMINI=true
+            shift
+            ;;
+        --kiro)
+            INSTALL_KIRO=true
             shift
             ;;
         --openclaw)
@@ -612,10 +885,13 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --claude    Install/uninstall hooks for Claude Code only"
             echo "  --codex     Install/uninstall hooks for Codex CLI only"
+            echo "  --cursor    Install/uninstall hooks for Cursor only"
+            echo "  --workbuddy Install/uninstall hooks for Workbuddy (CodeBuddy CLI) only"
             echo "  --gemini    Install/uninstall hooks for Gemini CLI only"
+            echo "  --kiro      Install/uninstall staged Kiro hook scripts only"
             echo "  --openclaw  Install/uninstall collector assets for OpenClaw"
             echo "  --both      Install/uninstall hooks for both (default)"
-            echo "  --global    Install/uninstall to user's global config (~/.claude, ~/.codex, ~/.gemini, ~/.openclaw)"
+            echo "  --global    Install/uninstall to user's global config (~/.claude, ~/.codex, ~/.cursor, ~/.codebuddy, ~/.gemini, ~/.kiro, ~/.openclaw)"
             echo "  --local     Install/uninstall to current project directory (default)"
             echo "  --uninstall Remove TokenLeague hooks"
             echo "  --help, -h  Show this help message"
@@ -629,7 +905,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Default to both if nothing specified
-if [[ "$INSTALL_CLAUDE" == "false" && "$INSTALL_CODEX" == "false" && "$INSTALL_GEMINI" == "false" && "$INSTALL_OPENCLAW" == "false" ]]; then
+if [[ "$INSTALL_CLAUDE" == "false" && "$INSTALL_CODEX" == "false" && "$INSTALL_CURSOR" == "false" && "$INSTALL_WORKBUDDY" == "false" && "$INSTALL_GEMINI" == "false" && "$INSTALL_KIRO" == "false" && "$INSTALL_OPENCLAW" == "false" ]]; then
     INSTALL_CLAUDE=true
     INSTALL_CODEX=true
 fi
@@ -669,6 +945,56 @@ install_claude_hooks() {
     echo -e "${GREEN}✓ Claude Code hooks installed successfully${NC}"
 }
 
+install_cursor_hooks() {
+    local target_dir
+    local command_base
+    if [[ "$INSTALL_GLOBAL" == "true" ]]; then
+        target_dir="$HOME/.cursor"
+        command_base="./hooks/tokenleague.py"
+    else
+        target_dir="$PROJECT_ROOT/.cursor"
+        command_base=".cursor/hooks/tokenleague.py"
+    fi
+
+    echo -e "${YELLOW}Installing Cursor hooks to: $target_dir${NC}"
+
+    mkdir -p "$target_dir/hooks"
+
+    cp "$HOOKS_SOURCE_DIR/cursor/tokenleague.py" "$target_dir/hooks/tokenleague.py"
+    chmod +x "$target_dir/hooks/tokenleague.py"
+    cp "$HOOKS_SOURCE_DIR/common/tokenleague_transcript_hook.py" "$target_dir/hooks/tokenleague_transcript_hook.py"
+    cp "$HOOKS_SOURCE_DIR/cursor/tokenleague.env.example" "$target_dir/hooks/tokenleague.env.example"
+
+    write_cursor_hooks_config "$target_dir/hooks.json" "$command_base"
+
+    echo -e "${GREEN}✓ Cursor hooks installed successfully${NC}"
+}
+
+install_workbuddy_hooks() {
+    local target_dir
+    local command_base
+    if [[ "$INSTALL_GLOBAL" == "true" ]]; then
+        target_dir="$HOME/.codebuddy"
+        command_base="python3 $target_dir/hooks/tokenleague.py"
+    else
+        target_dir="$PROJECT_ROOT/.codebuddy"
+        command_base="python3 .codebuddy/hooks/tokenleague.py"
+    fi
+
+    echo -e "${YELLOW}Installing Workbuddy hooks to: $target_dir${NC}"
+
+    mkdir -p "$target_dir/hooks"
+
+    cp "$HOOKS_SOURCE_DIR/workbuddy/tokenleague.py" "$target_dir/hooks/tokenleague.py"
+    chmod +x "$target_dir/hooks/tokenleague.py"
+    cp "$HOOKS_SOURCE_DIR/common/tokenleague_transcript_hook.py" "$target_dir/hooks/tokenleague_transcript_hook.py"
+    cp "$HOOKS_SOURCE_DIR/workbuddy/tokenleague.env.example" "$target_dir/hooks/tokenleague.env.example"
+
+    merge_workbuddy_settings "$target_dir/settings.json" "$command_base"
+
+    echo -e "${GREEN}✓ Workbuddy hooks installed successfully${NC}"
+}
+
 # Function to install Gemini CLI hooks
 install_gemini_hooks() {
     local target_dir
@@ -695,6 +1021,31 @@ install_gemini_hooks() {
     merge_gemini_settings "$settings_path" "$command_path"
 
     echo -e "${GREEN}✓ Gemini CLI hooks installed successfully${NC}"
+}
+
+install_kiro_hooks() {
+    local target_dir
+    if [[ "$INSTALL_GLOBAL" == "true" ]]; then
+        target_dir="$HOME/.kiro"
+    else
+        target_dir="$PROJECT_ROOT/.kiro"
+    fi
+
+    echo -e "${YELLOW}Installing staged Kiro hook assets to: $target_dir${NC}"
+
+    mkdir -p "$target_dir/hooks"
+
+    cp "$HOOKS_SOURCE_DIR/kiro/tokenleague.py" "$target_dir/hooks/tokenleague.py"
+    chmod +x "$target_dir/hooks/tokenleague.py"
+    cp "$HOOKS_SOURCE_DIR/common/tokenleague_transcript_hook.py" "$target_dir/hooks/tokenleague_transcript_hook.py"
+    cp "$HOOKS_SOURCE_DIR/kiro/tokenleague.env.example" "$target_dir/hooks/tokenleague.env.example"
+
+    echo -e "${YELLOW}  → Kiro hook scripts are staged only. Register them in the Kiro Agent Hooks UI.${NC}"
+    echo -e "${YELLOW}  → Suggested commands:${NC}"
+    echo -e "${YELLOW}    Prompt Submit: python3 $target_dir/hooks/tokenleague.py prompt-submit${NC}"
+    echo -e "${YELLOW}    Agent Stop:   python3 $target_dir/hooks/tokenleague.py agent-stop${NC}"
+
+    echo -e "${GREEN}✓ Kiro hook assets installed successfully${NC}"
 }
 
 # Function to install OpenClaw collector assets
@@ -797,6 +1148,70 @@ install_codex_hooks() {
     echo -e "${GREEN}✓ Codex CLI hooks installed successfully${NC}"
 }
 
+uninstall_cursor_hooks() {
+    local target_dir
+    if [[ "$INSTALL_GLOBAL" == "true" ]]; then
+        target_dir="$HOME/.cursor"
+    else
+        target_dir="$PROJECT_ROOT/.cursor"
+    fi
+
+    echo -e "${YELLOW}Uninstalling Cursor hooks from: $target_dir${NC}"
+
+    if [[ -f "$target_dir/hooks/tokenleague.py" ]]; then
+        rm -f "$target_dir/hooks/tokenleague.py"
+        echo -e "${GREEN}  ✓ Removed tokenleague.py${NC}"
+    else
+        echo -e "${YELLOW}  → tokenleague.py not found${NC}"
+    fi
+
+    if [[ -f "$target_dir/hooks/tokenleague_transcript_hook.py" ]]; then
+        rm -f "$target_dir/hooks/tokenleague_transcript_hook.py"
+        echo -e "${GREEN}  ✓ Removed tokenleague_transcript_hook.py${NC}"
+    fi
+
+    if [[ -f "$target_dir/hooks/tokenleague.env.example" ]]; then
+        rm -f "$target_dir/hooks/tokenleague.env.example"
+        echo -e "${GREEN}  ✓ Removed tokenleague.env.example${NC}"
+    fi
+
+    remove_cursor_hooks "$target_dir/hooks.json"
+
+    echo -e "${GREEN}✓ Cursor hooks uninstalled${NC}"
+}
+
+uninstall_workbuddy_hooks() {
+    local target_dir
+    if [[ "$INSTALL_GLOBAL" == "true" ]]; then
+        target_dir="$HOME/.codebuddy"
+    else
+        target_dir="$PROJECT_ROOT/.codebuddy"
+    fi
+
+    echo -e "${YELLOW}Uninstalling Workbuddy hooks from: $target_dir${NC}"
+
+    if [[ -f "$target_dir/hooks/tokenleague.py" ]]; then
+        rm -f "$target_dir/hooks/tokenleague.py"
+        echo -e "${GREEN}  ✓ Removed tokenleague.py${NC}"
+    else
+        echo -e "${YELLOW}  → tokenleague.py not found${NC}"
+    fi
+
+    if [[ -f "$target_dir/hooks/tokenleague_transcript_hook.py" ]]; then
+        rm -f "$target_dir/hooks/tokenleague_transcript_hook.py"
+        echo -e "${GREEN}  ✓ Removed tokenleague_transcript_hook.py${NC}"
+    fi
+
+    if [[ -f "$target_dir/hooks/tokenleague.env.example" ]]; then
+        rm -f "$target_dir/hooks/tokenleague.env.example"
+        echo -e "${GREEN}  ✓ Removed tokenleague.env.example${NC}"
+    fi
+
+    remove_workbuddy_hooks "$target_dir/settings.json"
+
+    echo -e "${GREEN}✓ Workbuddy hooks uninstalled${NC}"
+}
+
 # Function to uninstall OpenClaw collector assets
 uninstall_openclaw_hooks() {
     local target_dir
@@ -865,6 +1280,36 @@ uninstall_gemini_hooks() {
     remove_gemini_hooks "$target_dir/settings.json"
 
     echo -e "${GREEN}✓ Gemini CLI hooks uninstalled${NC}"
+}
+
+uninstall_kiro_hooks() {
+    local target_dir
+    if [[ "$INSTALL_GLOBAL" == "true" ]]; then
+        target_dir="$HOME/.kiro"
+    else
+        target_dir="$PROJECT_ROOT/.kiro"
+    fi
+
+    echo -e "${YELLOW}Uninstalling staged Kiro hook assets from: $target_dir${NC}"
+
+    if [[ -f "$target_dir/hooks/tokenleague.py" ]]; then
+        rm -f "$target_dir/hooks/tokenleague.py"
+        echo -e "${GREEN}  ✓ Removed tokenleague.py${NC}"
+    else
+        echo -e "${YELLOW}  → tokenleague.py not found${NC}"
+    fi
+
+    if [[ -f "$target_dir/hooks/tokenleague_transcript_hook.py" ]]; then
+        rm -f "$target_dir/hooks/tokenleague_transcript_hook.py"
+        echo -e "${GREEN}  ✓ Removed tokenleague_transcript_hook.py${NC}"
+    fi
+
+    if [[ -f "$target_dir/hooks/tokenleague.env.example" ]]; then
+        rm -f "$target_dir/hooks/tokenleague.env.example"
+        echo -e "${GREEN}  ✓ Removed tokenleague.env.example${NC}"
+    fi
+
+    echo -e "${GREEN}✓ Kiro hook assets uninstalled${NC}"
 }
 
 # Function to uninstall Claude Code hooks
@@ -946,8 +1391,23 @@ if [[ "$MODE_UNINSTALL" == "true" ]]; then
         echo ""
     fi
 
+    if [[ "$INSTALL_CURSOR" == "true" ]]; then
+        uninstall_cursor_hooks
+        echo ""
+    fi
+
+    if [[ "$INSTALL_WORKBUDDY" == "true" ]]; then
+        uninstall_workbuddy_hooks
+        echo ""
+    fi
+
     if [[ "$INSTALL_GEMINI" == "true" ]]; then
         uninstall_gemini_hooks
+        echo ""
+    fi
+
+    if [[ "$INSTALL_KIRO" == "true" ]]; then
+        uninstall_kiro_hooks
         echo ""
     fi
 
@@ -974,8 +1434,23 @@ else
         echo ""
     fi
 
+    if [[ "$INSTALL_CURSOR" == "true" ]]; then
+        install_cursor_hooks
+        echo ""
+    fi
+
+    if [[ "$INSTALL_WORKBUDDY" == "true" ]]; then
+        install_workbuddy_hooks
+        echo ""
+    fi
+
     if [[ "$INSTALL_GEMINI" == "true" ]]; then
         install_gemini_hooks
+        echo ""
+    fi
+
+    if [[ "$INSTALL_KIRO" == "true" ]]; then
+        install_kiro_hooks
         echo ""
     fi
 

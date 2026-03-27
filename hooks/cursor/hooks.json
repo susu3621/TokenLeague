@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": ".cursor/hooks/tokenleague.py sessionStart",
+        "timeout": 10
+      }
+    ],
+    "stop": [
+      {
+        "command": ".cursor/hooks/tokenleague.py stop",
+        "timeout": 30
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": ".cursor/hooks/tokenleague.py sessionEnd",
+        "timeout": 30
+      }
+    ]
+  }
+}
