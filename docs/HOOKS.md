@@ -160,14 +160,12 @@ If a user's local history already exists but was not uploaded when the hook orig
 ```bash
 python3 scripts/backfill_codex.py --dry-run
 python3 scripts/backfill_claude.py --dry-run
-python3 scripts/backfill_cursor.py --dry-run
 ```
 
 Default scan roots:
 
 - Codex: `~/.codex/sessions`
 - Claude Code: `~/.claude/projects`
-- Cursor: `~/.cursor/projects`
 
 Shared options:
 
@@ -179,8 +177,6 @@ Shared options:
 ```
 
 `--dry-run` scans and builds payloads without sending any HTTP requests. Real uploads still require `TOKENLEAGUE_HOOK_KEY`, and may optionally use `TOKENLEAGUE_API_URL`.
-
-Cursor historical backfill is best-effort only. If local Cursor artifacts contain conversation text but no stable token usage fields, the script reports `missing_token_usage` and skips those sessions instead of uploading incorrect zero-token records.
 
 ## How It Works
 

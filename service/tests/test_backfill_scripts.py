@@ -209,36 +209,20 @@ def test_claude_backfill_skips_subagent_transcripts(tmp_path, monkeypatch):
     ]
 
 
-def test_cursor_backfill_reports_missing_token_usage_for_text_only_history(tmp_path, monkeypatch, capsys):
-    home_dir = tmp_path / "home"
-    transcript_path = (
-        home_dir
-        / ".cursor"
-        / "projects"
-        / "Users-juns-project-TokenLeague"
-        / "agent-transcripts"
-        / "session-1.json"
-    )
-    transcript_path.parent.mkdir(parents=True, exist_ok=True)
-    transcript_path.write_text(
-        json.dumps(
-            [
-                {"role": "user", "text": "你好"},
-                {"role": "assistant", "text": "好的"},
-            ]
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.setenv("HOME", str(home_dir))
+def test_cursor_backfill_script_is_not_shipped():
+    assert not CURSOR_SCRIPT_PATH.exists()
 
-    module = _load_module("tokenleague_backfill_cursor", CURSOR_SCRIPT_PATH)
 
-    exit_code = module.main(["--dry-run"])
+def test_backfill_docs_only_reference_codex_and_claude():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    hooks_doc = (ROOT / "docs" / "HOOKS.md").read_text(encoding="utf-8")
 
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert "Mode: dry-run" in captured.out
-    assert "Scanned files: 1" in captured.out
-    assert "Generated prompt events: 0" in captured.out
-    assert "Generated task runs: 0" in captured.out
-    assert "missing_token_usage=1" in captured.out
+    assert "python3 scripts/backfill_codex.py --dry-run" in readme
+    assert "python3 scripts/backfill_claude.py --dry-run" in readme
+    assert "python3 scripts/backfill_cursor.py --dry-run" not in readme
+    assert "`scripts/backfill_cursor.py`" not in readme
+
+    assert "python3 scripts/backfill_codex.py --dry-run" in hooks_doc
+    assert "python3 scripts/backfill_claude.py --dry-run" in hooks_doc
+    assert "python3 scripts/backfill_cursor.py --dry-run" not in hooks_doc
+    assert "Cursor historical backfill" not in hooks_doc

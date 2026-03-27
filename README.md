@@ -125,14 +125,12 @@ export TOKENLEAGUE_OPENCLAW_VERSION="0.1.0"
 ```bash
 python3 scripts/backfill_codex.py --dry-run
 python3 scripts/backfill_claude.py --dry-run
-python3 scripts/backfill_cursor.py --dry-run
 ```
 
 默认扫描路径：
 
 - `scripts/backfill_codex.py`：`~/.codex/sessions`
 - `scripts/backfill_claude.py`：`~/.claude/projects`
-- `scripts/backfill_cursor.py`：`~/.cursor/projects`
 
 常用参数：
 
@@ -149,8 +147,6 @@ python3 scripts/backfill_cursor.py --dry-run
 export TOKENLEAGUE_HOOK_KEY="your-hook-key-here"
 export TOKENLEAGUE_API_URL="http://localhost:5006"  # 可选
 ```
-
-Cursor 历史补录是 best-effort。若本地历史文件里没有可用的 token 用量字段，脚本会明确报告 `missing_token_usage`，并跳过这些记录，而不会伪造 0 token 数据。
 
 ---
 

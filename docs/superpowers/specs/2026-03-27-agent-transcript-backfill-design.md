@@ -2,13 +2,12 @@
 
 ## Goal
 
-Add three manual backfill scripts for TokenLeague so users can replay previously unrecorded historical usage from local agent artifacts into the existing ingestion API.
+Add two manual backfill scripts for TokenLeague so users can replay previously unrecorded historical usage from local agent artifacts into the existing ingestion API.
 
 The scripts must cover:
 
 - Codex
 - Claude Code
-- Cursor
 
 Each script must support a `--dry-run` mode.
 
@@ -41,29 +40,27 @@ Current agent support differs by source format:
 
 - Codex stores structured session JSONL files under `~/.codex/sessions/...`.
 - Claude Code stores structured transcript JSONL files under `~/.claude/projects/...`.
-- Cursor stores local transcript artifacts under `~/.cursor/projects/...`, but the historical artifacts visible in this repository owner's environment do not currently expose stable token usage fields in the same way as Codex and Claude Code.
 
-Because of that, the backfill design should treat Codex and Claude Code as full historical replay sources, while treating Cursor as a best-effort source that only uploads records when actual token usage can be extracted from local history.
+Because of that, the backfill design covers Codex and Claude Code only.
 
 ## Design
 
 ### Script layout
 
-Add three user-facing scripts:
+Add two user-facing scripts:
 
 - `scripts/backfill_codex.py`
 - `scripts/backfill_claude.py`
-- `scripts/backfill_cursor.py`
 
 Also add one internal shared module to avoid duplicating upload, summary, and command-line wiring:
 
 - `scripts/backfill_common.py`
 
-The user-facing scripts stay separate because the requested operating model is three independent manual commands rather than one multiplexed command with an agent selector.
+The user-facing scripts stay separate because the requested operating model is independent manual commands rather than one multiplexed command with an agent selector.
 
 ### Manual execution model
 
-All three scripts are one-shot tools that the user runs manually.
+Both scripts are one-shot tools that the user runs manually.
 
 They do not persist local checkpoint or cursor state. Repeated execution is safe because the server already uses upsert semantics for:
 
@@ -80,7 +77,6 @@ Default roots:
 
 - Codex: `~/.codex/sessions`
 - Claude Code: `~/.claude/projects`
-- Cursor: `~/.cursor/projects`
 
 Each script may additionally accept an optional `--root PATH` override for troubleshooting or constrained replay, but default execution must require no path knowledge from the user.
 
@@ -113,24 +109,6 @@ For each transcript:
 3. Build one aggregated `task-run` per session.
 
 If a transcript contains no prompt events after parsing, it should be skipped and counted in the summary.
-
-#### Cursor
-
-The Cursor backfill scans historical artifacts under `~/.cursor/projects`, starting with known transcript locations such as `agent-transcripts`.
-
-However, in the currently inspected environment, Cursor historical artifacts expose conversation text but not stable token usage fields such as:
-
-- `input_tokens`
-- `output_tokens`
-- `cached_input_tokens`
-
-Therefore the Cursor backfill must be explicitly best-effort:
-
-- If a historical source with real token usage is found and can be parsed into the existing payload shape, upload it.
-- If only text transcripts are found, do not fabricate zero-token records.
-- Instead, classify those sessions as skipped with reason `missing_token_usage`.
-
-This preserves leaderboard correctness and makes the limitation visible rather than silently polluting the database.
 
 ### Dry-run behavior
 
@@ -178,7 +156,7 @@ If a session fails, the script continues processing later sessions and reports t
 
 ### Command-line interface
 
-All three scripts must share the same flags:
+Both scripts must share the same flags:
 
 - `--dry-run`
 - `--limit N`
@@ -205,10 +183,6 @@ The scripts should return:
 - exit code `0` when the run completed without upload or parse failures, including the case where nothing was backfillable
 - exit code `1` when at least one parse or upload failure occurred
 
-For Cursor specifically:
-
-- `missing_token_usage` is a reported skip reason, not a hard failure
-
 ### Testing
 
 Add focused tests for:
@@ -219,9 +193,6 @@ Add focused tests for:
 - per-session upload ordering
 - failure accounting for malformed files
 - `--limit` behavior
-- Cursor best-effort behavior when transcripts contain no token usage
-
-Cursor tests should explicitly verify that transcript-only history is skipped with `missing_token_usage` rather than uploaded with zero-token values.
 
 ## Files
 
@@ -230,7 +201,6 @@ Create:
 - `scripts/backfill_common.py`
 - `scripts/backfill_codex.py`
 - `scripts/backfill_claude.py`
-- `scripts/backfill_cursor.py`
 - `service/tests/test_backfill_scripts.py`
 - `docs/superpowers/specs/2026-03-27-agent-transcript-backfill-design.md`
 
