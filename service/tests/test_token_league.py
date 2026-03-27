@@ -37,7 +37,7 @@ def _task_payload(task_id, started_at, *, prompt_count=1, input_tokens=10, outpu
     }
 
 
-def _seed_user_detail_window_data(monkeypatch):
+def _seed_user_detail_window_data(monkeypatch, *, old_event_days=8):
     import db
 
     fixed_now = datetime(2026, 3, 24, 12, 0, 0, tzinfo=timezone.utc)
@@ -54,7 +54,7 @@ def _seed_user_detail_window_data(monkeypatch):
             40,
             20,
         ),
-        ("old-event", fixed_now - timedelta(days=8), "old-task", "Archive", "gpt-4.1", 70, 30),
+        ("old-event", fixed_now - timedelta(days=old_event_days), "old-task", "Archive", "gpt-4.1", 70, 30),
     ]
 
     for event_id, started_at, task_id, project_name, model_name, input_tokens, output_tokens in fixtures:
@@ -80,7 +80,7 @@ def _seed_user_detail_window_data(monkeypatch):
         db.upsert_task_run(1, task_payload)
 
 
-def _seed_user_detail_filter_data(monkeypatch):
+def _seed_user_detail_filter_data(monkeypatch, *, archive_event_days=2):
     import db
 
     fixed_now = datetime(2026, 3, 24, 12, 0, 0, tzinfo=timezone.utc)
@@ -99,7 +99,7 @@ def _seed_user_detail_filter_data(monkeypatch):
             40,
             20,
         ),
-        ("codex-archive", fixed_now - timedelta(days=2), "codex-archive-task", "Archive", "codex", "1.0.0", "gpt-4.1", 70, 30),
+        ("codex-archive", fixed_now - timedelta(days=archive_event_days), "codex-archive-task", "Archive", "codex", "1.0.0", "gpt-4.1", 70, 30),
     ]
 
     for event_id, started_at, task_id, project_name, agent_type, agent_version, model_name, input_tokens, output_tokens in fixtures:
@@ -431,6 +431,90 @@ def test_user_timeline_api_supports_month_daily_range(auth_session, monkeypatch)
     ]
 
 
+def test_user_timeline_api_supports_quarter_daily_range(auth_session, monkeypatch):
+    import db
+    from db import upsert_prompt_event
+
+    fixed_now = datetime(2026, 3, 24, 12, 0, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(db, "_utcnow", lambda: fixed_now)
+
+    upsert_prompt_event(
+        1,
+        {
+            **_prompt_payload(
+                "timeline-quarter-older",
+                fixed_now - timedelta(days=45),
+                task_id="task-archive",
+                input_tokens=12,
+                output_tokens=8,
+            ),
+            "project_name": "Archive",
+        },
+    )
+    upsert_prompt_event(
+        1,
+        _prompt_payload(
+            "timeline-quarter-1",
+            fixed_now - timedelta(days=4),
+            task_id="task-alpha",
+            input_tokens=30,
+            output_tokens=10,
+        ),
+    )
+    upsert_prompt_event(
+        1,
+        {
+            **_prompt_payload(
+                "timeline-quarter-1b",
+                fixed_now - timedelta(days=4),
+                task_id="task-beta",
+                input_tokens=8,
+                output_tokens=7,
+            ),
+            "project_name": "SideQuest",
+        },
+    )
+    upsert_prompt_event(
+        1,
+        {
+            **_prompt_payload(
+                "timeline-quarter-2",
+                fixed_now,
+                input_tokens=20,
+                output_tokens=5,
+            ),
+            "project_name": "TokenLeague",
+        },
+    )
+
+    response = auth_session.get("/api/users/1/timeline?window=quarter&granularity=day")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["window"] == "quarter"
+    assert payload["granularity"] == "day"
+    assert len(payload["timeline"]) == 90
+    assert payload["timeline"][0]["time_bucket"] == "2025-12-25"
+    assert payload["timeline"][-1]["time_bucket"] == "2026-03-24"
+
+    timeline = {row["time_bucket"]: row for row in payload["timeline"]}
+    assert timeline["2026-02-07"]["total_token_count"] == 20
+    assert timeline["2026-03-20"]["total_token_count"] == 55
+    assert timeline["2026-03-24"]["total_token_count"] == 25
+    assert timeline["2026-03-19"]["total_token_count"] == 0
+    assert timeline["2026-03-19"]["project_breakdown"] == []
+    assert timeline["2026-02-07"]["project_breakdown"] == [
+        {"project_name": "Archive", "total_token_count": 20},
+    ]
+    assert timeline["2026-03-20"]["project_breakdown"] == [
+        {"project_name": "TokenLeague", "total_token_count": 40},
+        {"project_name": "SideQuest", "total_token_count": 15},
+    ]
+    assert timeline["2026-03-24"]["project_breakdown"] == [
+        {"project_name": "TokenLeague", "total_token_count": 25},
+    ]
+
+
 def test_user_timeline_api_supports_today_hourly_range(auth_session, monkeypatch):
     """Test that today window returns hourly data with hour granularity."""
     import db
@@ -526,6 +610,7 @@ def test_user_detail_page_renders_refresh_targets_for_stats_sections(auth_sessio
     assert 'data-user-detail-window-option="today"' in html
     assert 'data-user-detail-window-option="week"' in html
     assert 'data-user-detail-window-option="month"' in html
+    assert 'data-user-detail-window-option="quarter"' in html
     assert 'data-user-detail-agent-breakdown-body' in html
     assert 'data-user-detail-recent-prompt-events-body' in html
 
@@ -542,6 +627,7 @@ def test_user_detail_all_window_keeps_no_active_selector(auth_session, monkeypat
     assert 'class="timeline-range-button is-active" data-user-detail-window-option="today"' not in html
     assert 'class="timeline-range-button is-active" data-user-detail-window-option="week"' not in html
     assert 'class="timeline-range-button is-active" data-user-detail-window-option="month"' not in html
+    assert 'class="timeline-range-button is-active" data-user-detail-window-option="quarter"' not in html
 
 
 def test_user_timeline_api_accepts_day_alias_as_today(auth_session, monkeypatch):
@@ -701,6 +787,43 @@ def test_user_detail_breakdown_apis_honor_month_window(auth_session, monkeypatch
     assert models["gpt-4.1"]["total_token_count"] == 100
 
 
+def test_user_detail_breakdown_apis_honor_quarter_window(auth_session, monkeypatch):
+    _seed_user_detail_window_data(monkeypatch, old_event_days=45)
+
+    stats_response = auth_session.get("/api/users/1/stats?window=quarter")
+    projects_response = auth_session.get("/api/users/1/projects?window=quarter")
+    models_response = auth_session.get("/api/users/1/models?window=quarter")
+
+    assert stats_response.status_code == 200
+    assert projects_response.status_code == 200
+    assert models_response.status_code == 200
+
+    stats = stats_response.get_json()
+    assert stats["summary"]["total_token_count"] == 190
+    assert stats["summary"]["prompt_count"] == 3
+    assert stats["summary"]["task_count"] == 3
+    assert {row["external_event_id"] for row in stats["recent_prompt_events"]} == {
+        "today-event",
+        "yesterday-event",
+        "old-event",
+    }
+
+    projects = {row["project_name"]: row for row in projects_response.get_json()["projects"]}
+    assert projects_response.get_json()["window"] == "quarter"
+    assert projects["TokenLeague"]["total_token_count"] == 30
+    assert projects["TokenLeague"]["task_count"] == 1
+    assert projects["SideQuest"]["total_token_count"] == 60
+    assert projects["SideQuest"]["task_count"] == 1
+    assert projects["Archive"]["total_token_count"] == 100
+    assert projects["Archive"]["task_count"] == 1
+
+    models = {row["model_name"]: row for row in models_response.get_json()["models"]}
+    assert models_response.get_json()["window"] == "quarter"
+    assert models["gpt-5.4"]["total_token_count"] == 30
+    assert models["claude-sonnet-4"]["total_token_count"] == 60
+    assert models["gpt-4.1"]["total_token_count"] == 100
+
+
 def test_user_detail_refresh_apis_honor_filters(auth_session, monkeypatch):
     _seed_user_detail_filter_data(monkeypatch)
 
@@ -741,6 +864,46 @@ def test_user_detail_refresh_apis_honor_filters(auth_session, monkeypatch):
     ]
 
 
+def test_user_detail_refresh_apis_honor_filters_with_quarter_window(auth_session, monkeypatch):
+    _seed_user_detail_filter_data(monkeypatch, archive_event_days=45)
+
+    projects_response = auth_session.get("/api/users/1/projects?window=quarter&agent_type=codex")
+    models_response = auth_session.get("/api/users/1/models?window=quarter&model_name=gpt-5.4")
+    timeline_response = auth_session.get("/api/users/1/timeline?window=quarter&granularity=day&agent_type=codex")
+
+    assert projects_response.status_code == 200
+    assert models_response.status_code == 200
+    assert timeline_response.status_code == 200
+
+    projects = {row["project_name"]: row for row in projects_response.get_json()["projects"]}
+    assert projects_response.get_json()["window"] == "quarter"
+    assert set(projects) == {"Archive", "TokenLeague"}
+    assert projects["TokenLeague"]["total_token_count"] == 30
+    assert projects["TokenLeague"]["task_count"] == 1
+    assert projects["Archive"]["total_token_count"] == 100
+    assert projects["Archive"]["task_count"] == 1
+
+    models = models_response.get_json()["models"]
+    assert models_response.get_json()["window"] == "quarter"
+    assert [row["model_name"] for row in models] == ["gpt-5.4"]
+    assert models[0]["total_token_count"] == 30
+    assert models[0]["task_count"] == 1
+
+    timeline = timeline_response.get_json()
+    nonzero_buckets = {
+        bucket["time_bucket"]: bucket for bucket in timeline["timeline"] if bucket["total_token_count"] > 0
+    }
+    assert timeline["window"] == "quarter"
+    assert timeline["granularity"] == "day"
+    assert set(nonzero_buckets) == {"2026-02-07", "2026-03-24"}
+    assert nonzero_buckets["2026-03-24"]["project_breakdown"] == [
+        {"project_name": "TokenLeague", "total_token_count": 30}
+    ]
+    assert nonzero_buckets["2026-02-07"]["project_breakdown"] == [
+        {"project_name": "Archive", "total_token_count": 100}
+    ]
+
+
 def test_user_detail_page_renders_timeline_range_selector(auth_session):
     response = auth_session.get("/users/1")
 
@@ -749,6 +912,7 @@ def test_user_detail_page_renders_timeline_range_selector(auth_session):
     assert "今天" in html
     assert "过去7天" in html
     assert "过去30天" in html
+    assert "过去90天" in html
     assert "granularity" in html
     assert "project_breakdown" in html
     assert "stacked: true" in html

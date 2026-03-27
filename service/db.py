@@ -16,6 +16,11 @@ USER_ACTIVE = "active"
 USER_DISABLED = "disabled"
 DEFAULT_PROJECT_TITLE = "TokenLeague"
 DEFAULT_PROJECT_SUBTITLE = "Rank users by token usage across agent runs"
+USER_DETAIL_WINDOW_DAY_COUNTS = {
+    "week": 7,
+    "month": 30,
+    "quarter": 90,
+}
 DB_ENV_ALIASES = {
     "MY_APP_DB_HOST": ("MY_APP_DB_HOST", "MY_KMM_DB_HOST"),
     "MY_APP_DB_NAME": ("MY_APP_DB_NAME", "MY_KMM_DB_NAME"),
@@ -659,10 +664,8 @@ def _within_window(event_time: datetime | None, window: str, now: datetime) -> b
     if window in {"day", "today"}:
         start = now.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         return event_time >= start
-    if window == "week":
-        return event_time >= now.astimezone(UTC) - timedelta(days=7)
-    if window == "month":
-        return event_time >= now.astimezone(UTC) - timedelta(days=30)
+    if window in USER_DETAIL_WINDOW_DAY_COUNTS:
+        return event_time >= now.astimezone(UTC) - timedelta(days=USER_DETAIL_WINDOW_DAY_COUNTS[window])
     raise ValueError("Unsupported window")
 
 
@@ -1119,9 +1122,9 @@ def get_user_time_series(
         prompt_events = _fetch_prompt_events_from_db()
 
     daily_bucket_range: tuple[date, date] | None = None
-    if granularity == "day" and window in ("week", "month"):
+    if granularity == "day" and window in USER_DETAIL_WINDOW_DAY_COUNTS:
         end_date = now.astimezone(UTC).date()
-        day_count = 7 if window == "week" else 30
+        day_count = USER_DETAIL_WINDOW_DAY_COUNTS[window]
         start_date = end_date - timedelta(days=day_count - 1)
         daily_bucket_range = (start_date, end_date)
 

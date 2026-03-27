@@ -19,8 +19,15 @@ DOCS_DIR = BASE_DIR.parent / "docs"
 API_DOC_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 FILTER_FIELDS = ("agent_type", "agent_version", "model_name")
 VALID_WINDOWS = {"day", "week", "all"}
-VALID_USER_DETAIL_WINDOWS = {"today", "week", "month", "all"}
-VALID_TIMELINE_WINDOWS = {"today", "week", "month"}
+VALID_USER_DETAIL_WINDOWS = {"today", "week", "month", "quarter", "all"}
+VALID_TIMELINE_WINDOWS = {"today", "week", "month", "quarter"}
+USER_DETAIL_WINDOW_LABELS = {
+    "today": "today",
+    "week": "week",
+    "month": "30-day",
+    "quarter": "90-day",
+    "all": "all-time",
+}
 
 
 app = Flask(__name__)
@@ -75,6 +82,10 @@ def _requested_user_detail_window(default: str = "week") -> str:
     if raw == "day":
         return "today"
     return raw if raw in VALID_USER_DETAIL_WINDOWS else default
+
+
+def _user_detail_window_label(window: str) -> str:
+    return USER_DETAIL_WINDOW_LABELS.get(window, window)
 
 
 def _requested_filters() -> dict[str, str]:
@@ -349,6 +360,7 @@ def user_detail(user_id: int):
         "user_detail.html",
         stats=stats,
         window=window,
+        window_label=_user_detail_window_label(window),
         filters=filters,
     )
 
