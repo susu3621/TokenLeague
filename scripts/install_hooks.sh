@@ -161,6 +161,11 @@ payload = {
     }
 }
 
+target_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+print(f"  → Wrote hooks configuration to {target_path}")
+PY
+}
+
 write_cursor_hooks_config() {
     local target_path="$1"
     local command_base="$2"

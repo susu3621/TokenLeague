@@ -1,5 +1,6 @@
 import json
 import importlib.util
+import subprocess
 from pathlib import Path
 
 
@@ -84,6 +85,28 @@ def test_install_script_uses_codex_hooks_json_and_enables_feature_flag():
     assert "config.toml" in content
     assert "codex_hooks = true" in content
     assert ".codex/settings.json" not in content
+
+
+def test_install_script_can_install_codex_hooks_globally(tmp_path):
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+
+    result = subprocess.run(
+        ["bash", str(INSTALL_SCRIPT_PATH), "--codex", "--global"],
+        cwd=INSTALL_SCRIPT_PATH.parent.parent,
+        env={"HOME": str(home_dir)},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+    hooks_config_path = home_dir / ".codex" / "hooks.json"
+    payload = json.loads(hooks_config_path.read_text(encoding="utf-8"))
+
+    assert set(payload["hooks"]) == {"UserPromptSubmit", "Stop"}
+    assert payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]["timeoutSec"] == 10
+    assert payload["hooks"]["Stop"][0]["hooks"][0]["timeoutSec"] == 30
 
 
 def test_detect_project_name_uses_repo_root_for_git_worktree(tmp_path):
