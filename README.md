@@ -116,6 +116,42 @@ export TOKENLEAGUE_OPENCLAW_VERSION="0.1.0"
 
 更多详情请参考 [docs/HOOKS.md](docs/HOOKS.md)。
 
+## 历史补录脚本
+
+对于已经存在于本地、但当时没有成功上报到 TokenLeague 的历史记录，可以手动执行补录脚本。
+
+可用脚本：
+
+```bash
+python3 scripts/backfill_codex.py --dry-run
+python3 scripts/backfill_claude.py --dry-run
+python3 scripts/backfill_cursor.py --dry-run
+```
+
+默认扫描路径：
+
+- `scripts/backfill_codex.py`：`~/.codex/sessions`
+- `scripts/backfill_claude.py`：`~/.claude/projects`
+- `scripts/backfill_cursor.py`：`~/.cursor/projects`
+
+常用参数：
+
+```bash
+--dry-run   # 只扫描和解析，不发请求
+--limit N   # 只处理前 N 个 session
+--verbose   # 打印每个文件或 session 的处理结果
+--root PATH # 覆盖默认扫描根目录
+```
+
+实际上传时仍然需要：
+
+```bash
+export TOKENLEAGUE_HOOK_KEY="your-hook-key-here"
+export TOKENLEAGUE_API_URL="http://localhost:5006"  # 可选
+```
+
+Cursor 历史补录是 best-effort。若本地历史文件里没有可用的 token 用量字段，脚本会明确报告 `missing_token_usage`，并跳过这些记录，而不会伪造 0 token 数据。
+
 ---
 
 ## 模板说明 (Template Foundation)
