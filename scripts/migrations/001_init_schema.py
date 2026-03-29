@@ -95,6 +95,9 @@ def main():
             password_hash VARCHAR(255) NOT NULL,
             role ENUM('admin', 'user') NOT NULL DEFAULT 'user',
             status ENUM('active', 'disabled') NOT NULL DEFAULT 'active',
+            auth_source ENUM('local', 'ldap') NOT NULL DEFAULT 'local',
+            ldap_dn VARCHAR(255) NULL,
+            last_synced_at DATETIME NULL,
             hook_key VARCHAR(64) NULL,
             hook_key_created_at DATETIME NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -129,6 +132,14 @@ def main():
         "hook_key_created_at",
         "hook_key_created_at DATETIME NULL AFTER hook_key",
     )
+    _add_column_if_missing(
+        cursor,
+        "users",
+        "auth_source",
+        "auth_source ENUM('local', 'ldap') NOT NULL DEFAULT 'local' AFTER status",
+    )
+    _add_column_if_missing(cursor, "users", "ldap_dn", "ldap_dn VARCHAR(255) NULL AFTER auth_source")
+    _add_column_if_missing(cursor, "users", "last_synced_at", "last_synced_at DATETIME NULL AFTER ldap_dn")
     _add_unique_key_if_missing(cursor, "users", "uniq_users_hook_key", "hook_key")
 
     cursor.execute(

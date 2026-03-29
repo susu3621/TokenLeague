@@ -38,13 +38,30 @@ def admin_required(view_func):
     return decorated
 
 
-def verify_password(username: str, password: str):
+def verify_local_password(username: str, password: str):
     user = db.get_user_by_username(username)
     if not user:
         return None
     if check_password_hash(user["password_hash"], password):
         return user
     return None
+
+
+def verify_local_admin_password(username: str, password: str):
+    user = verify_local_password(username, password)
+    if not user:
+        return None
+    if user.get("role") != "admin":
+        return None
+    if user.get("auth_source", db.AUTH_SOURCE_LOCAL) != db.AUTH_SOURCE_LOCAL:
+        return None
+    if user.get("status", db.USER_ACTIVE) != db.USER_ACTIVE:
+        return None
+    return user
+
+
+def verify_password(username: str, password: str):
+    return verify_local_password(username, password)
 
 
 def change_password(user_id: int, new_password: str) -> None:

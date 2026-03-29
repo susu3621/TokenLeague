@@ -152,6 +152,8 @@ export TOKENLEAGUE_API_URL="http://localhost:5006"  # 可选
 
 ## 模板说明 (Template Foundation)
 
+This repository is intended to remain a reusable foundation for future Flask-based projects.
+
 ## What this template keeps
 
 - Flask + Jinja application wiring

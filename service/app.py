@@ -12,6 +12,7 @@ from flask import Flask, abort, g, jsonify, redirect, render_template, request, 
 import auth as auth_module
 import db
 import exception_logger
+import ldap_auth
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -119,6 +120,13 @@ def _missing_fields(payload: dict, required_fields: tuple[str, ...]) -> list[str
 
 def _json_error(message: str, status_code: int):
     return jsonify({"success": False, "error": message}), status_code
+
+
+def _login_user(user: dict):
+    session.clear()
+    session["user_id"] = user["id"]
+    session["username"] = user["username"]
+    session["role"] = user["role"]
 
 
 def _log_ingest(
@@ -316,16 +324,43 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        user = auth_module.verify_password(username, password)
+        ldap_settings = db.get_ldap_settings()
+        if ldap_settings["enabled"]:
+            profile = ldap_auth.authenticate_user(ldap_settings, username, password)
+            if profile:
+                user = db.upsert_ldap_user(
+                    username=profile["username"],
+                    display_name=profile["display_name"],
+                    ldap_dn=profile["ldap_dn"],
+                )
+            else:
+                user = None
+        else:
+            user = auth_module.verify_local_password(username, password)
         if user and user.get("status", db.USER_ACTIVE) == db.USER_ACTIVE:
-            session.clear()
-            session["user_id"] = user["id"]
-            session["username"] = user["username"]
-            session["role"] = user["role"]
+            _login_user(user)
             return redirect(url_for("leaderboard"))
         error = "Invalid username or password"
 
     return render_template("login.html", error=error)
+
+
+@app.route("/login/local-admin", methods=["GET", "POST"])
+def local_admin_login():
+    if session.get("user_id"):
+        return redirect(url_for("leaderboard"))
+
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        user = auth_module.verify_local_admin_password(username, password)
+        if user:
+            _login_user(user)
+            return redirect(url_for("leaderboard"))
+        error = "Invalid username or password"
+
+    return render_template("local_admin_login.html", error=error)
 
 
 @app.route("/logout", methods=["POST"])
@@ -382,6 +417,71 @@ def settings():
         project_title=db.get_setting("project_title") or db.DEFAULT_PROJECT_TITLE,
         project_subtitle=db.get_setting("project_subtitle") or db.DEFAULT_PROJECT_SUBTITLE,
         message=message,
+    )
+
+
+@app.route("/admin/ldap", methods=["GET", "POST"])
+@auth_module.admin_required
+def admin_ldap():
+    message = None
+    error = None
+    ldap_settings = db.get_ldap_settings()
+
+    if request.method == "POST":
+        action = (request.form.get("action") or "save_config").strip()
+        if action == "test_connection":
+            ok, ldap_error = ldap_auth.test_connection(ldap_settings)
+            if ok:
+                message = "LDAP connection successful"
+            else:
+                error = ldap_error or "LDAP connection failed"
+        elif action == "sync_users":
+            created_count = 0
+            updated_count = 0
+            skipped_count = 0
+            for entry in ldap_auth.list_users(ldap_settings):
+                existing = db.get_user_by_username(entry["username"])
+                db.upsert_ldap_user(
+                    username=entry["username"],
+                    display_name=entry["display_name"],
+                    ldap_dn=entry["ldap_dn"],
+                )
+                if existing:
+                    updated_count += 1
+                else:
+                    created_count += 1
+            message = (
+                f"Created {created_count} users, updated {updated_count} users, "
+                f"skipped {skipped_count} users"
+            )
+        else:
+            posted_bind_password = request.form.get("ldap_bind_password")
+            setting_values = {
+                "ldap_enabled": "1" if request.form.get("ldap_enabled") else "0",
+                "ldap_host": (request.form.get("ldap_host") or "").strip(),
+                "ldap_port": (request.form.get("ldap_port") or "").strip(),
+                "ldap_use_ssl": "1" if request.form.get("ldap_use_ssl") else "0",
+                "ldap_start_tls": "1" if request.form.get("ldap_start_tls") else "0",
+                "ldap_bind_dn": (request.form.get("ldap_bind_dn") or "").strip(),
+                "ldap_base_dn": (request.form.get("ldap_base_dn") or "").strip(),
+                "ldap_user_filter": (request.form.get("ldap_user_filter") or "").strip(),
+                "ldap_username_attribute": (request.form.get("ldap_username_attribute") or "").strip(),
+                "ldap_display_name_attribute": (request.form.get("ldap_display_name_attribute") or "").strip(),
+            }
+            for key, value in setting_values.items():
+                db.set_setting(key, value)
+            if posted_bind_password is not None and posted_bind_password != "":
+                db.set_setting("ldap_bind_password", posted_bind_password)
+            message = "LDAP settings updated"
+        ldap_settings = db.get_ldap_settings()
+
+    return render_template(
+        "admin_ldap.html",
+        ldap_settings=ldap_settings,
+        ldap_bind_password_set=bool(ldap_settings["bind_password"]),
+        users=db.get_all_users(),
+        message=message,
+        error=error,
     )
 
 
