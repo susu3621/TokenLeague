@@ -162,3 +162,99 @@ def test_authenticate_user_returns_normalized_profile():
             ("uid", "cn"),
         )
     ]
+
+
+def test_login_uses_ldap_when_enabled(client, monkeypatch):
+    ldap_auth = _load_ldap_auth_module()
+    db.set_setting("ldap_enabled", "true")
+    monkeypatch.setattr(
+        ldap_auth,
+        "authenticate_user",
+        lambda settings, username, password, **_: {
+            "username": username,
+            "display_name": "Alice",
+            "ldap_dn": "cn=alice,ou=people,dc=example,dc=com",
+        },
+    )
+
+    response = client.post(
+        "/login",
+        data={"username": "alice", "password": "secret123"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/leaderboard")
+    user = db.get_user_by_username("alice")
+    assert user["auth_source"] == "ldap"
+    assert user["ldap_dn"] == "cn=alice,ou=people,dc=example,dc=com"
+
+
+def test_login_local_password_is_rejected_when_ldap_is_enabled(client):
+    db.set_setting("ldap_enabled", "true")
+
+    response = client.post(
+        "/login",
+        data={"username": "admin", "password": "admin123"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "Invalid username or password" in response.get_data(as_text=True)
+
+
+def test_local_admin_login_allows_local_admin_when_ldap_is_enabled(client):
+    db.set_setting("ldap_enabled", "true")
+
+    response = client.post(
+        "/login/local-admin",
+        data={"username": "admin", "password": "admin123"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/leaderboard")
+
+
+def test_login_rejects_disabled_local_user_even_after_ldap_success(client, monkeypatch):
+    ldap_auth = _load_ldap_auth_module()
+    db.set_setting("ldap_enabled", "true")
+    db.create_user("alice", "placeholder123", display_name="Alice", status=db.USER_DISABLED)
+    monkeypatch.setattr(
+        ldap_auth,
+        "authenticate_user",
+        lambda settings, username, password, **_: {
+            "username": username,
+            "display_name": "Alice",
+            "ldap_dn": "cn=alice,ou=people,dc=example,dc=com",
+        },
+    )
+
+    response = client.post(
+        "/login",
+        data={"username": "alice", "password": "secret123"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "Invalid username or password" in response.get_data(as_text=True)
+
+
+def test_local_admin_login_rejects_ldap_managed_account(client):
+    db.set_setting("ldap_enabled", "true")
+    db.create_user(
+        "ops-admin",
+        "secret123",
+        display_name="Ops Admin",
+        role="admin",
+        auth_source=db.AUTH_SOURCE_LDAP,
+    )
+
+    response = client.post(
+        "/login/local-admin",
+        data={"username": "ops-admin", "password": "secret123"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "Invalid username or password" in response.get_data(as_text=True)

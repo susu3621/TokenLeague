@@ -12,6 +12,7 @@ from flask import Flask, abort, g, jsonify, redirect, render_template, request, 
 import auth as auth_module
 import db
 import exception_logger
+import ldap_auth
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -119,6 +120,13 @@ def _missing_fields(payload: dict, required_fields: tuple[str, ...]) -> list[str
 
 def _json_error(message: str, status_code: int):
     return jsonify({"success": False, "error": message}), status_code
+
+
+def _login_user(user: dict):
+    session.clear()
+    session["user_id"] = user["id"]
+    session["username"] = user["username"]
+    session["role"] = user["role"]
 
 
 def _log_ingest(
@@ -316,16 +324,43 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        user = auth_module.verify_password(username, password)
+        ldap_settings = db.get_ldap_settings()
+        if ldap_settings["enabled"]:
+            profile = ldap_auth.authenticate_user(ldap_settings, username, password)
+            if profile:
+                user = db.upsert_ldap_user(
+                    username=profile["username"],
+                    display_name=profile["display_name"],
+                    ldap_dn=profile["ldap_dn"],
+                )
+            else:
+                user = None
+        else:
+            user = auth_module.verify_local_password(username, password)
         if user and user.get("status", db.USER_ACTIVE) == db.USER_ACTIVE:
-            session.clear()
-            session["user_id"] = user["id"]
-            session["username"] = user["username"]
-            session["role"] = user["role"]
+            _login_user(user)
             return redirect(url_for("leaderboard"))
         error = "Invalid username or password"
 
     return render_template("login.html", error=error)
+
+
+@app.route("/login/local-admin", methods=["GET", "POST"])
+def local_admin_login():
+    if session.get("user_id"):
+        return redirect(url_for("leaderboard"))
+
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        user = auth_module.verify_local_admin_password(username, password)
+        if user:
+            _login_user(user)
+            return redirect(url_for("leaderboard"))
+        error = "Invalid username or password"
+
+    return render_template("local_admin_login.html", error=error)
 
 
 @app.route("/logout", methods=["POST"])

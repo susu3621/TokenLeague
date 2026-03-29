@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Login | {{ project_title }}{% endblock %}
+{% block title %}Local Admin Login | {{ project_title }}{% endblock %}
 
 {% block content %}
 <section class="card" style="max-width: 440px; margin: 40px auto;">
-    <h1 style="margin-top: 0;">TokenLeague</h1>
-    <p class="muted">Track token usage across agent runs and compare ranked users over day, week, and all time.</p>
+    <h1 style="margin-top: 0;">Local Admin Recovery</h1>
+    <p class="muted">Use this page only when LDAP login is unavailable and you need to repair the LDAP configuration.</p>
     {% if error %}
     <p style="color: #b42318;">{{ error }}</p>
     {% endif %}
@@ -18,10 +18,7 @@
             <label for="password">Password</label>
             <input id="password" name="password" type="password" required>
         </div>
-        <button class="btn-primary" type="submit">Sign in</button>
+        <button class="btn-primary" type="submit">Sign in as local admin</button>
     </form>
-    <p class="muted" style="margin-bottom: 0;">
-        Need recovery access? <a href="{{ url_for('local_admin_login') }}">Local admin sign in</a>
-    </p>
 </section>
 {% endblock %}
