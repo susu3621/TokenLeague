@@ -136,10 +136,13 @@ python3 scripts/backfill_claude.py --dry-run
 
 ```bash
 --dry-run   # 只扫描和解析，不发请求
+--days N    # 只处理最近 N 天内修改过的日志文件
 --limit N   # 只处理前 N 个 session
 --verbose   # 打印每个文件或 session 的处理结果
 --root PATH # 覆盖默认扫描根目录
 ```
+
+`--days N` 按日志文件的修改时间筛选，可以在手动补录时显著减少需要解析和上传的 session 数量。
 
 实际上传时仍然需要：
 

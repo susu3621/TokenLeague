@@ -97,7 +97,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = backfill_common.build_parser(_default_root(), "Backfill Codex transcript usage")
     args = parser.parse_args(argv)
     root = Path(args.root).expanduser()
-    summary = backfill_common.Summary(root=root)
+    summary = backfill_common.Summary(root=root, days=args.days)
 
     if not args.dry_run and not backfill_common.ensure_upload_env():
         print("Missing TOKENLEAGUE_HOOK_KEY")
@@ -109,6 +109,10 @@ def main(argv: list[str] | None = None) -> int:
 
     sessions: list[dict[str, Any]] = []
     for path in sorted(root.glob("**/*.jsonl")):
+        if args.days and not backfill_common.modified_within_days(path, days=args.days):
+            if args.verbose:
+                print(f"FILTERED {path}: older_than_days")
+            continue
         summary.scanned_files += 1
         try:
             session, skip_reason = _build_session(path)

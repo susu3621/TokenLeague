@@ -1,6 +1,8 @@
 import importlib.util
 import json
+import os
 from pathlib import Path
+import time
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -25,13 +27,13 @@ def _write_jsonl(path: Path, entries: list[dict]) -> None:
     )
 
 
-def _codex_entries() -> list[dict]:
+def _codex_entries(session_id: str = "session-1", turn_id: str = "turn-1") -> list[dict]:
     return [
         {
             "timestamp": "2026-03-27T08:00:00.000Z",
             "type": "session_meta",
             "payload": {
-                "id": "session-1",
+                "id": session_id,
                 "timestamp": "2026-03-27T08:00:00.000Z",
                 "cwd": "/Users/juns/project/TokenLeague",
                 "cli_version": "0.116.0",
@@ -49,7 +51,7 @@ def _codex_entries() -> list[dict]:
             "type": "event_msg",
             "payload": {
                 "type": "task_started",
-                "turn_id": "turn-1",
+                "turn_id": turn_id,
             },
         },
         {
@@ -71,13 +73,13 @@ def _codex_entries() -> list[dict]:
             "type": "event_msg",
             "payload": {
                 "type": "task_complete",
-                "turn_id": "turn-1",
+                "turn_id": turn_id,
             },
         },
     ]
 
 
-def _claude_entries(session_id: str = "claude-session-1") -> list[dict]:
+def _claude_entries(session_id: str = "claude-session-1", message_id: str = "msg-1") -> list[dict]:
     return [
         {
             "uuid": "user-1",
@@ -96,7 +98,7 @@ def _claude_entries(session_id: str = "claude-session-1") -> list[dict]:
             "sessionId": session_id,
             "version": "2.1.81",
             "message": {
-                "id": "msg-1",
+                "id": message_id,
                 "role": "assistant",
                 "model": "claude-3.7-sonnet",
                 "content": [{"type": "text", "text": "好的主人"}],
@@ -109,6 +111,11 @@ def _claude_entries(session_id: str = "claude-session-1") -> list[dict]:
             },
         },
     ]
+
+
+def _set_mtime(path: Path, *, days_ago: int) -> None:
+    timestamp = time.time() - (days_ago * 24 * 60 * 60)
+    os.utime(path, (timestamp, timestamp))
 
 
 def test_codex_dry_run_scans_default_root_and_counts_payloads(tmp_path, monkeypatch, capsys):
@@ -173,6 +180,45 @@ def test_backfill_uploads_prompt_events_before_task_run(tmp_path, monkeypatch):
     ]
 
 
+def test_codex_days_filter_only_processes_recent_files(tmp_path, monkeypatch, capsys):
+    home_dir = tmp_path / "home"
+    recent_path = (
+        home_dir
+        / ".codex"
+        / "sessions"
+        / "2026"
+        / "03"
+        / "28"
+        / "rollout-2026-03-28T08-00-00-session-recent.jsonl"
+    )
+    old_path = (
+        home_dir
+        / ".codex"
+        / "sessions"
+        / "2026"
+        / "03"
+        / "18"
+        / "rollout-2026-03-18T08-00-00-session-old.jsonl"
+    )
+    _write_jsonl(recent_path, _codex_entries("session-recent", "turn-recent"))
+    _write_jsonl(old_path, _codex_entries("session-old", "turn-old"))
+    _set_mtime(recent_path, days_ago=2)
+    _set_mtime(old_path, days_ago=10)
+    monkeypatch.setenv("HOME", str(home_dir))
+
+    module = _load_module("tokenleague_backfill_codex_days", CODEX_SCRIPT_PATH)
+
+    exit_code = module.main(["--dry-run", "--days", "3"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Days filter: last 3 day(s)" in captured.out
+    assert "Scanned files: 1" in captured.out
+    assert "Discovered sessions: 1" in captured.out
+    assert "session-recent:turn:turn-recent" in captured.out
+    assert "session-old:turn:turn-old" not in captured.out
+
+
 def test_claude_backfill_skips_subagent_transcripts(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
     main_path = home_dir / ".claude" / "projects" / "project-a" / "session-1.jsonl"
@@ -206,6 +252,47 @@ def test_claude_backfill_skips_subagent_transcripts(tmp_path, monkeypatch):
     assert uploads == [
         ("/api/ingest/prompt-event", "msg-1"),
         ("/api/ingest/task-run", "claude-session-main"),
+    ]
+
+
+def test_claude_days_filter_only_processes_recent_files(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    recent_path = home_dir / ".claude" / "projects" / "project-a" / "session-recent.jsonl"
+    old_path = home_dir / ".claude" / "projects" / "project-a" / "session-old.jsonl"
+    subagent_path = (
+        home_dir
+        / ".claude"
+        / "projects"
+        / "project-a"
+        / "session-recent"
+        / "subagents"
+        / "agent-a.jsonl"
+    )
+    _write_jsonl(recent_path, _claude_entries("claude-session-recent", "msg-recent"))
+    _write_jsonl(old_path, _claude_entries("claude-session-old", "msg-old"))
+    _write_jsonl(subagent_path, _claude_entries("claude-session-subagent", "msg-subagent"))
+    _set_mtime(recent_path, days_ago=1)
+    _set_mtime(old_path, days_ago=8)
+    _set_mtime(subagent_path, days_ago=1)
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("TOKENLEAGUE_HOOK_KEY", "hook-key")
+
+    module = _load_module("tokenleague_backfill_claude_days", CLAUDE_SCRIPT_PATH)
+    uploads: list[tuple[str, str]] = []
+
+    def fake_send_request(endpoint: str, payload: dict) -> bool:
+        payload_id = payload.get("external_event_id") or payload.get("external_task_id") or ""
+        uploads.append((endpoint, str(payload_id)))
+        return True
+
+    monkeypatch.setattr(module, "send_request", fake_send_request)
+
+    exit_code = module.main(["--days", "3"])
+
+    assert exit_code == 0
+    assert uploads == [
+        ("/api/ingest/prompt-event", "msg-recent"),
+        ("/api/ingest/task-run", "claude-session-recent"),
     ]
 
 

@@ -171,12 +171,14 @@ Shared options:
 
 ```bash
 --dry-run
+--days N
 --limit N
 --verbose
 --root PATH
 ```
 
 `--dry-run` scans and builds payloads without sending any HTTP requests. Real uploads still require `TOKENLEAGUE_HOOK_KEY`, and may optionally use `TOKENLEAGUE_API_URL`.
+`--days N` filters transcript files by filesystem modification time so you can replay only the last few days of history instead of the full archive.
 
 ## How It Works
 
