@@ -258,3 +258,78 @@ def test_local_admin_login_rejects_ldap_managed_account(client):
 
     assert response.status_code == 200
     assert "Invalid username or password" in response.get_data(as_text=True)
+
+
+def test_admin_ldap_page_requires_admin(client):
+    response = client.get("/admin/ldap", follow_redirects=False)
+
+    assert response.status_code == 302
+    assert "/login" in response.headers["Location"]
+
+
+def test_admin_can_save_ldap_config_without_overwriting_blank_password(auth_session):
+    auth_session.post(
+        "/admin/ldap",
+        data={
+            "action": "save_config",
+            "ldap_host": "ldap.example.com",
+            "ldap_bind_password": "first-secret",
+        },
+        follow_redirects=True,
+    )
+
+    auth_session.post(
+        "/admin/ldap",
+        data={
+            "action": "save_config",
+            "ldap_host": "ldap.internal",
+            "ldap_bind_password": "",
+        },
+        follow_redirects=True,
+    )
+
+    assert db.get_setting("ldap_bind_password") == "first-secret"
+    assert db.get_setting("ldap_host") == "ldap.internal"
+
+
+def test_admin_can_test_ldap_connection(auth_session, monkeypatch):
+    ldap_auth = _load_ldap_auth_module()
+    monkeypatch.setattr(
+        ldap_auth,
+        "test_connection",
+        lambda settings, **_: (True, None),
+    )
+
+    response = auth_session.post(
+        "/admin/ldap",
+        data={"action": "test_connection"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "LDAP connection successful" in response.get_data(as_text=True)
+
+
+def test_admin_sync_users_uses_ldap_results(auth_session, monkeypatch):
+    ldap_auth = _load_ldap_auth_module()
+    monkeypatch.setattr(
+        ldap_auth,
+        "list_users",
+        lambda settings, **_: [
+            {
+                "username": "alice",
+                "display_name": "Alice",
+                "ldap_dn": "cn=alice,ou=people,dc=example,dc=com",
+            }
+        ],
+    )
+
+    response = auth_session.post(
+        "/admin/ldap",
+        data={"action": "sync_users"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "Created 1 users" in response.get_data(as_text=True)
+    assert db.get_user_by_username("alice")["auth_source"] == "ldap"

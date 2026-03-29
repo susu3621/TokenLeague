@@ -420,6 +420,71 @@ def settings():
     )
 
 
+@app.route("/admin/ldap", methods=["GET", "POST"])
+@auth_module.admin_required
+def admin_ldap():
+    message = None
+    error = None
+    ldap_settings = db.get_ldap_settings()
+
+    if request.method == "POST":
+        action = (request.form.get("action") or "save_config").strip()
+        if action == "test_connection":
+            ok, ldap_error = ldap_auth.test_connection(ldap_settings)
+            if ok:
+                message = "LDAP connection successful"
+            else:
+                error = ldap_error or "LDAP connection failed"
+        elif action == "sync_users":
+            created_count = 0
+            updated_count = 0
+            skipped_count = 0
+            for entry in ldap_auth.list_users(ldap_settings):
+                existing = db.get_user_by_username(entry["username"])
+                db.upsert_ldap_user(
+                    username=entry["username"],
+                    display_name=entry["display_name"],
+                    ldap_dn=entry["ldap_dn"],
+                )
+                if existing:
+                    updated_count += 1
+                else:
+                    created_count += 1
+            message = (
+                f"Created {created_count} users, updated {updated_count} users, "
+                f"skipped {skipped_count} users"
+            )
+        else:
+            posted_bind_password = request.form.get("ldap_bind_password")
+            setting_values = {
+                "ldap_enabled": "1" if request.form.get("ldap_enabled") else "0",
+                "ldap_host": (request.form.get("ldap_host") or "").strip(),
+                "ldap_port": (request.form.get("ldap_port") or "").strip(),
+                "ldap_use_ssl": "1" if request.form.get("ldap_use_ssl") else "0",
+                "ldap_start_tls": "1" if request.form.get("ldap_start_tls") else "0",
+                "ldap_bind_dn": (request.form.get("ldap_bind_dn") or "").strip(),
+                "ldap_base_dn": (request.form.get("ldap_base_dn") or "").strip(),
+                "ldap_user_filter": (request.form.get("ldap_user_filter") or "").strip(),
+                "ldap_username_attribute": (request.form.get("ldap_username_attribute") or "").strip(),
+                "ldap_display_name_attribute": (request.form.get("ldap_display_name_attribute") or "").strip(),
+            }
+            for key, value in setting_values.items():
+                db.set_setting(key, value)
+            if posted_bind_password is not None and posted_bind_password != "":
+                db.set_setting("ldap_bind_password", posted_bind_password)
+            message = "LDAP settings updated"
+        ldap_settings = db.get_ldap_settings()
+
+    return render_template(
+        "admin_ldap.html",
+        ldap_settings=ldap_settings,
+        ldap_bind_password_set=bool(ldap_settings["bind_password"]),
+        users=db.get_all_users(),
+        message=message,
+        error=error,
+    )
+
+
 @app.route("/admin/users", methods=["GET", "POST"])
 @auth_module.admin_required
 def admin_users():

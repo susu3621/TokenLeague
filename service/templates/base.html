@@ -153,6 +153,7 @@
                 <a href="{{ url_for('api_list') }}">API</a>
                 {% if session.get('role') == 'admin' %}
                 <a href="{{ url_for('admin_users') }}">Admin Users</a>
+                <a href="{{ url_for('admin_ldap') }}">LDAP</a>
                 <a href="{{ url_for('admin_agents') }}">Agent Catalog</a>
                 {% endif %}
                 <form method="POST" action="{{ url_for('logout') }}" style="margin: 0;">

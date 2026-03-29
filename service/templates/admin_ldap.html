@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}LDAP | {{ project_title }}{% endblock %}
+
+{% block content %}
+<section class="stack">
+    <div class="card">
+        <h1 class="hero-title">LDAP</h1>
+        <p class="muted" style="margin-top: 10px;">Configure LDAP authentication, test the connection, and sync directory users into the local user table.</p>
+        {% if message %}
+        <p style="color: #027a48;">{{ message }}</p>
+        {% endif %}
+        {% if error %}
+        <p style="color: #b42318;">{{ error }}</p>
+        {% endif %}
+        <form method="POST" class="stack">
+            <input type="hidden" name="action" value="save_config">
+            <label><input type="checkbox" name="ldap_enabled" {% if ldap_settings.enabled %}checked{% endif %}> Enable LDAP</label>
+            <div>
+                <label for="ldap_host">Host</label>
+                <input id="ldap_host" name="ldap_host" value="{{ ldap_settings.host }}">
+            </div>
+            <div>
+                <label for="ldap_port">Port</label>
+                <input id="ldap_port" name="ldap_port" value="{{ ldap_settings.port }}">
+            </div>
+            <label><input type="checkbox" name="ldap_use_ssl" {% if ldap_settings.use_ssl %}checked{% endif %}> Use SSL</label>
+            <label><input type="checkbox" name="ldap_start_tls" {% if ldap_settings.start_tls %}checked{% endif %}> Start TLS</label>
+            <div>
+                <label for="ldap_bind_dn">Bind DN</label>
+                <input id="ldap_bind_dn" name="ldap_bind_dn" value="{{ ldap_settings.bind_dn }}">
+            </div>
+            <div>
+                <label for="ldap_bind_password">Bind Password</label>
+                <input id="ldap_bind_password" name="ldap_bind_password" type="password" placeholder="{% if ldap_bind_password_set %}Stored password unchanged when left blank{% else %}Enter bind password{% endif %}">
+            </div>
+            <div>
+                <label for="ldap_base_dn">Base DN</label>
+                <input id="ldap_base_dn" name="ldap_base_dn" value="{{ ldap_settings.base_dn }}">
+            </div>
+            <div>
+                <label for="ldap_user_filter">User Filter</label>
+                <input id="ldap_user_filter" name="ldap_user_filter" value="{{ ldap_settings.user_filter }}">
+            </div>
+            <div>
+                <label for="ldap_username_attribute">Username Attribute</label>
+                <input id="ldap_username_attribute" name="ldap_username_attribute" value="{{ ldap_settings.username_attribute }}">
+            </div>
+            <div>
+                <label for="ldap_display_name_attribute">Display Name Attribute</label>
+                <input id="ldap_display_name_attribute" name="ldap_display_name_attribute" value="{{ ldap_settings.display_name_attribute }}">
+            </div>
+            <button class="btn-primary" type="submit">Save Configuration</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-top: 0;">Directory Actions</h2>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <form method="POST" class="inline-form">
+                <input type="hidden" name="action" value="test_connection">
+                <button type="submit">Test Connection</button>
+            </form>
+            <form method="POST" class="inline-form">
+                <input type="hidden" name="action" value="sync_users">
+                <button type="submit">Sync LDAP Users</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-top: 0;">Current Local Users</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Display Name</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Auth Source</th>
+                    <th>LDAP DN</th>
+                    <th>Last Synced</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>{{ user.username }}</td>
+                    <td>{{ user.display_name }}</td>
+                    <td>{{ user.role }}</td>
+                    <td>{{ user.status }}</td>
+                    <td>{{ user.auth_source }}</td>
+                    <td>{{ user.ldap_dn or "-" }}</td>
+                    <td>{{ user.last_synced_at or "-" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
