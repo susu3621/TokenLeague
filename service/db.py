@@ -14,6 +14,8 @@ from werkzeug.security import generate_password_hash
 UTC = timezone.utc
 USER_ACTIVE = "active"
 USER_DISABLED = "disabled"
+AUTH_SOURCE_LOCAL = "local"
+AUTH_SOURCE_LDAP = "ldap"
 DEFAULT_PROJECT_TITLE = "TokenLeague"
 DEFAULT_PROJECT_SUBTITLE = "Rank users by token usage across agent runs"
 USER_DETAIL_WINDOW_DAY_COUNTS = {
@@ -101,6 +103,9 @@ def _public_user(user: dict[str, Any]) -> dict[str, Any]:
         "display_name": user.get("display_name") or user["username"],
         "role": user["role"],
         "status": user.get("status", USER_ACTIVE),
+        "auth_source": user.get("auth_source", AUTH_SOURCE_LOCAL),
+        "ldap_dn": user.get("ldap_dn"),
+        "last_synced_at": _serialize_datetime(user.get("last_synced_at")),
         "hook_key": user.get("hook_key"),
         "hook_key_created_at": _serialize_datetime(user.get("hook_key_created_at")),
         "created_at": _serialize_datetime(user.get("created_at")),
@@ -124,6 +129,9 @@ def _build_default_users() -> list[dict[str, Any]]:
             "password_hash": generate_password_hash("admin123"),
             "role": "admin",
             "status": USER_ACTIVE,
+            "auth_source": AUTH_SOURCE_LOCAL,
+            "ldap_dn": None,
+            "last_synced_at": None,
             "hook_key": _generate_hook_key(),
             "hook_key_created_at": now,
             "created_at": now,
@@ -182,6 +190,12 @@ def _find_memory_user(predicate):
     return None
 
 
+def _is_local_admin_fallback(user: dict[str, Any] | None) -> bool:
+    if not user:
+        return False
+    return user.get("role") == "admin" and user.get("auth_source", AUTH_SOURCE_LOCAL) == AUTH_SOURCE_LOCAL
+
+
 def get_user_by_id(user_id: int | None):
     if not user_id:
         return None
@@ -194,8 +208,8 @@ def get_user_by_id(user_id: int | None):
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
         """
-        SELECT id, username, display_name, password_hash, role, status, hook_key,
-               hook_key_created_at, created_at, updated_at
+        SELECT id, username, display_name, password_hash, role, status, auth_source,
+               ldap_dn, last_synced_at, hook_key, hook_key_created_at, created_at, updated_at
         FROM users WHERE id = %s
         """,
         (user_id,),
@@ -215,8 +229,8 @@ def get_user_by_username(username: str):
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
         """
-        SELECT id, username, display_name, password_hash, role, status, hook_key,
-               hook_key_created_at, created_at, updated_at
+        SELECT id, username, display_name, password_hash, role, status, auth_source,
+               ldap_dn, last_synced_at, hook_key, hook_key_created_at, created_at, updated_at
         FROM users WHERE username = %s
         """,
         (username,),
@@ -241,8 +255,8 @@ def get_user_by_hook_key(hook_key: str | None):
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
         """
-        SELECT id, username, display_name, password_hash, role, status, hook_key,
-               hook_key_created_at, created_at, updated_at
+        SELECT id, username, display_name, password_hash, role, status, auth_source,
+               ldap_dn, last_synced_at, hook_key, hook_key_created_at, created_at, updated_at
         FROM users WHERE hook_key = %s AND status = %s
         """,
         (hook_key, USER_ACTIVE),
@@ -261,8 +275,8 @@ def get_all_users() -> list[dict[str, Any]]:
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
         """
-        SELECT id, username, display_name, role, status, hook_key, hook_key_created_at,
-               created_at, updated_at
+        SELECT id, username, display_name, role, status, auth_source, ldap_dn,
+               last_synced_at, hook_key, hook_key_created_at, created_at, updated_at
         FROM users ORDER BY id ASC
         """
     )
@@ -279,6 +293,9 @@ def create_user(
     display_name: str | None = None,
     role: str = "user",
     status: str = USER_ACTIVE,
+    auth_source: str = AUTH_SOURCE_LOCAL,
+    ldap_dn: str | None = None,
+    last_synced_at: datetime | None = None,
 ):
     now = _utcnow()
     password_hash = generate_password_hash(password)
@@ -295,6 +312,9 @@ def create_user(
             "password_hash": password_hash,
             "role": role,
             "status": status,
+            "auth_source": auth_source,
+            "ldap_dn": ldap_dn,
+            "last_synced_at": _to_storage_datetime(last_synced_at),
             "hook_key": hook_key,
             "hook_key_created_at": now,
             "created_at": now,
@@ -308,12 +328,24 @@ def create_user(
     cursor.execute(
         """
         INSERT INTO users (
-            username, display_name, password_hash, role, status, hook_key,
-            hook_key_created_at, created_at, updated_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            username, display_name, password_hash, role, status, auth_source,
+            ldap_dn, last_synced_at, hook_key, hook_key_created_at, created_at, updated_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
-        (username, display_name, password_hash, role, status, hook_key,
-         now.replace(tzinfo=None), now.replace(tzinfo=None), now.replace(tzinfo=None)),
+        (
+            username,
+            display_name,
+            password_hash,
+            role,
+            status,
+            auth_source,
+            ldap_dn,
+            _to_storage_datetime(last_synced_at).replace(tzinfo=None) if last_synced_at else None,
+            hook_key,
+            now.replace(tzinfo=None),
+            now.replace(tzinfo=None),
+            now.replace(tzinfo=None),
+        ),
     )
     conn.commit()
     user_id = cursor.lastrowid
@@ -413,6 +445,89 @@ def get_setting(key: str):
     cursor.close()
     conn.close()
     return row["setting_value"] if row else None
+
+
+def get_ldap_settings() -> dict[str, Any]:
+    raw_port = (get_setting("ldap_port") or "389").strip() or "389"
+    try:
+        port = int(raw_port)
+    except ValueError:
+        port = 389
+
+    return {
+        "enabled": _is_truthy(get_setting("ldap_enabled")),
+        "host": (get_setting("ldap_host") or "").strip(),
+        "port": port,
+        "use_ssl": _is_truthy(get_setting("ldap_use_ssl")),
+        "start_tls": _is_truthy(get_setting("ldap_start_tls")),
+        "bind_dn": (get_setting("ldap_bind_dn") or "").strip(),
+        "bind_password": get_setting("ldap_bind_password") or "",
+        "base_dn": (get_setting("ldap_base_dn") or "").strip(),
+        "user_filter": (get_setting("ldap_user_filter") or "").strip(),
+        "username_attribute": (get_setting("ldap_username_attribute") or "uid").strip(),
+        "display_name_attribute": (get_setting("ldap_display_name_attribute") or "cn").strip(),
+    }
+
+
+def upsert_ldap_user(*, username: str, display_name: str, ldap_dn: str) -> dict[str, Any]:
+    normalized_username = (username or "").strip()
+    if not normalized_username:
+        raise ValueError("Username is required")
+
+    normalized_display_name = (display_name or normalized_username).strip() or normalized_username
+    normalized_ldap_dn = (ldap_dn or "").strip()
+    now = _utcnow()
+    existing = get_user_by_username(normalized_username)
+
+    if existing:
+        auth_source = (
+            AUTH_SOURCE_LOCAL if _is_local_admin_fallback(existing) else AUTH_SOURCE_LDAP
+        )
+        if use_in_memory_store():
+            user = _find_memory_user(lambda item: item["username"] == normalized_username)
+            if not user:
+                raise ValueError("User not found")
+            user["display_name"] = normalized_display_name
+            user["auth_source"] = auth_source
+            user["ldap_dn"] = normalized_ldap_dn
+            user["last_synced_at"] = now
+            user["updated_at"] = now
+            return _full_user(user)
+
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE users
+            SET display_name = %s,
+                auth_source = %s,
+                ldap_dn = %s,
+                last_synced_at = %s,
+                updated_at = %s
+            WHERE username = %s
+            """,
+            (
+                normalized_display_name,
+                auth_source,
+                normalized_ldap_dn,
+                now.replace(tzinfo=None),
+                now.replace(tzinfo=None),
+                normalized_username,
+            ),
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return get_user_by_username(normalized_username)
+
+    return create_user(
+        normalized_username,
+        secrets.token_hex(16),
+        display_name=normalized_display_name,
+        auth_source=AUTH_SOURCE_LDAP,
+        ldap_dn=normalized_ldap_dn,
+        last_synced_at=now,
+    )
 
 
 def set_setting(key: str, value: str) -> None:

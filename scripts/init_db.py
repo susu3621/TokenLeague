@@ -74,13 +74,14 @@ def main():
     cursor = conn.cursor()
     cursor.execute(
         """
-        INSERT INTO users (username, display_name, password_hash, role, status, hook_key, hook_key_created_at)
-        VALUES (%s, %s, %s, 'admin', 'active', %s, NOW())
+        INSERT INTO users (username, display_name, password_hash, role, status, auth_source, hook_key, hook_key_created_at)
+        VALUES (%s, %s, %s, 'admin', 'active', 'local', %s, NOW())
         ON DUPLICATE KEY UPDATE
             display_name = VALUES(display_name),
             password_hash = VALUES(password_hash),
             role = VALUES(role),
             status = VALUES(status),
+            auth_source = VALUES(auth_source),
             hook_key = COALESCE(users.hook_key, VALUES(hook_key)),
             hook_key_created_at = COALESCE(users.hook_key_created_at, VALUES(hook_key_created_at))
         """,
