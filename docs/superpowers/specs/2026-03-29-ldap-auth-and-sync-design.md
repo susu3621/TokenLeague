@@ -91,8 +91,8 @@ Rules:
 
 Behavioral meaning:
 
-- `auth_source='ldap'` indicates the user's normal authentication source is LDAP
-- `auth_source='local'` indicates a purely local account, primarily the emergency admin account
+- `auth_source='ldap'` indicates a directory-managed account with no local-password fallback path
+- `auth_source='local'` indicates an account that retains local-password fallback, primarily the emergency admin account
 - `ldap_dn` stores the last known distinguished name returned by LDAP
 - `last_synced_at` records when LDAP identity data was last refreshed by sync or successful login
 
@@ -133,7 +133,8 @@ When `ldap_enabled=true`:
 - ignore local password authentication for normal login
 - authenticate the submitted username/password against LDAP
 - on LDAP success, upsert the local user record by username
-- if the local user already exists, refresh `display_name`, `ldap_dn`, `auth_source`, and `last_synced_at`
+- if the local user already exists, refresh `display_name`, `ldap_dn`, and `last_synced_at`
+- set `auth_source='ldap'` only for non-emergency accounts; preserve `auth_source='local'` for local admin fallback accounts so `/login/local-admin` remains viable
 - if the local user does not exist, create it with:
   - `display_name` from LDAP, falling back to username
   - `role='user'`
@@ -179,8 +180,9 @@ Upsert rules:
 - if the local user exists, update:
   - `display_name`
   - `ldap_dn`
-  - `auth_source='ldap'`
   - `last_synced_at`
+- if the local user exists and is not an emergency local-admin fallback account, set `auth_source='ldap'`
+- if the local user exists and is an emergency local-admin fallback account, preserve `auth_source='local'`
 - if the local user does not exist, create it with:
   - default `role='user'`
   - default `status='active'`
@@ -223,6 +225,8 @@ Add a dedicated admin-only route and template:
 
 - `GET /admin/ldap`
 - `POST /admin/ldap`
+
+Handle save, test, and sync through the existing form-action pattern already used by `/admin/users`, using an `action` field such as `save_config`, `test_connection`, and `sync_users`.
 
 The page should contain three sections.
 
