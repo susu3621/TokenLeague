@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ stats.user.display_name }} | {{ project_title }}{% endblock %}
+{% block title %}{{ t('user_detail.title_page', display_name=stats.user.display_name) }} | {{ project_title }}{% endblock %}
 
 {% block styles %}
 <style>
@@ -75,7 +75,7 @@
 <section class="stack">
     <div class="card">
         <h1 class="hero-title">{{ stats.user.display_name }}</h1>
-        <p class="muted" style="margin-top: 10px;">{{ t('user_detail.title') }} for {{ stats.user.username }} within the selected {{ window_label }} window.</p>
+        <p class="muted" style="margin-top: 10px;">{{ t('user_detail.description', username=stats.user.username, window_label=window_label) }}</p>
 
         <div class="stats-grid">
             <div class="stat-card">
@@ -100,7 +100,6 @@
     <div class="card">
         <div class="section-header">
             <h2>Usage Timeline</h2>
-            <span hidden>今天 过去7天 过去30天 过去90天</span>
             <div class="timeline-range" aria-label="Timeline range selector" data-user-detail-window-selector="{{ window }}">
                 <button type="button" class="timeline-range-button{% if window == 'today' %} is-active{% endif %}" data-user-detail-window-option="today">{{ t('user_detail.window.today') }}</button>
                 <button type="button" class="timeline-range-button{% if window == 'week' %} is-active{% endif %}" data-user-detail-window-option="week">{{ t('user_detail.window.week') }}</button>
@@ -127,7 +126,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr><td colspan="6" class="muted">Loading...</td></tr>
+                <tr><td colspan="6" class="muted">{{ t('user_detail.loading') }}</td></tr>
             </tbody>
         </table>
     </div>
@@ -148,7 +147,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr><td colspan="5" class="muted">Loading...</td></tr>
+                <tr><td colspan="5" class="muted">{{ t('user_detail.loading') }}</td></tr>
             </tbody>
         </table>
     </div>
@@ -178,7 +177,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6" class="muted">No data in this window.</td>
+                    <td colspan="6" class="muted">{{ t('user_detail.no_data') }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -210,7 +209,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6" class="muted">No prompt events recorded.</td>
+                    <td colspan="6" class="muted">{{ t('user_detail.recent_prompt_events_empty') }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -224,6 +223,10 @@
     const userDetailMessages = {{ {
         "loading": t("user_detail.loading"),
         "no_data": t("user_detail.no_data"),
+        "project_empty": t("user_detail.project_empty"),
+        "model_empty": t("user_detail.model_empty"),
+        "recent_prompt_events_empty": t("user_detail.recent_prompt_events_empty"),
+        "timeline_empty": t("user_detail.timeline_empty"),
     } | tojson }};
     const userId = {{ stats.user.id }};
     let currentWindow = '{{ window }}';
@@ -382,7 +385,7 @@
     function renderRecentPromptEvents(rows) {
         const tbody = document.querySelector('[data-user-detail-recent-prompt-events-body]');
         if (!rows || rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="muted">No prompt events recorded.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="6" class="muted">${escapeHtml(userDetailMessages.recent_prompt_events_empty)}</td></tr>`;
             return;
         }
 
@@ -402,7 +405,7 @@
     function renderProjects(projects) {
         const tbody = document.querySelector('#project-table tbody');
         if (!projects || projects.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="muted">No project data.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="6" class="muted">${escapeHtml(userDetailMessages.project_empty)}</td></tr>`;
             return;
         }
 
@@ -427,7 +430,7 @@
         }
 
         if (!models || models.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="muted">No model data.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="5" class="muted">${escapeHtml(userDetailMessages.model_empty)}</td></tr>`;
             ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
             return;
         }
@@ -503,7 +506,7 @@
         ctx.font = '14px DM Sans';
         ctx.fillStyle = '#6b7280';
         ctx.textAlign = 'center';
-        ctx.fillText('No timeline data available', ctx.canvas.width / 2, ctx.canvas.height / 2);
+        ctx.fillText(userDetailMessages.timeline_empty, ctx.canvas.width / 2, ctx.canvas.height / 2);
     }
 
     function hashString(value) {

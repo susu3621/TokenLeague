@@ -6,18 +6,18 @@
 <section class="stack account-page">
     <div class="card">
         <h1 class="hero-title">{{ t('account.title') }}</h1>
-        <p class="muted" style="margin-top: 10px;">Manage your API key and password from one place.</p>
+        <p class="muted" style="margin-top: 10px;">{{ t('account.description') }}</p>
     </div>
 
     <div class="card stack">
         <div>
-            <h2 style="margin-top: 0;">API Key</h2>
-            <p class="muted">Use this hook key to send usage events for your own account.</p>
+            <h2 style="margin-top: 0;">{{ t('account.api_heading') }}</h2>
+            <p class="muted">{{ t('account.api_description') }}</p>
         </div>
 
         <div class="stack">
             <div>
-                <label for="hook_key">Current API key</label>
+                <label for="hook_key">{{ t('account.current_key_label') }}</label>
                 <input
                     id="hook_key"
                     data-account-hook-key
@@ -30,7 +30,7 @@
             </div>
 
             <p class="muted" data-account-hook-key-created-at>
-                Generated: {{ account_user.hook_key_created_at or "Unknown" }}
+                {{ t('account.generated', value=account_user.hook_key_created_at or t('account.unknown')) }}
             </p>
 
             <div class="account-actions">
@@ -45,13 +45,13 @@
     {% if account_user.auth_source != 'ldap' %}
     <div class="card stack">
         <div>
-            <h2 style="margin-top: 0;">Password</h2>
-            <p class="muted">Set a new password for the account currently signed in.</p>
+            <h2 style="margin-top: 0;">{{ t('account.password_heading') }}</h2>
+            <p class="muted">{{ t('account.password_description') }}</p>
         </div>
 
         <form class="stack" data-account-password-form>
             <div>
-                <label for="new_password">New Password</label>
+                <label for="new_password">{{ t('account.password_label') }}</label>
                 <input id="new_password" name="new_password" type="password" autocomplete="new-password" required>
             </div>
 
@@ -65,8 +65,8 @@
     {% else %}
     <div class="card stack">
         <div>
-            <h2 style="margin-top: 0;">Password</h2>
-            <p class="muted">This account is managed through LDAP. Password changes must be made there.</p>
+            <h2 style="margin-top: 0;">{{ t('account.password_heading') }}</h2>
+            <p class="muted">{{ t('account.password_ldap_description') }}</p>
         </div>
     </div>
     {% endif %}
@@ -107,8 +107,15 @@
 <script>
     const accountMessages = {{ {
         "copied": t("account.copied"),
+        "copy_failed": t("account.copy_failed"),
+        "rotating": t("account.rotating"),
         "rotated": t("account.rotated"),
+        "rotate_failed": t("account.rotate_failed"),
+        "password_required": t("account.password_required"),
+        "password_saving": t("account.password_saving"),
+        "password_save_failed": t("account.password_save_failed"),
         "password_updated": t("account.password_updated"),
+        "generated": t("account.generated", value="__VALUE__"),
     } | tojson }};
     const hookKeyInput = document.querySelector('[data-account-hook-key]');
     const hookKeyCreatedAt = document.querySelector('[data-account-hook-key-created-at]');
@@ -126,7 +133,7 @@
 
     function formatTimestamp(value) {
         if (!value) {
-            return 'Unknown';
+            return {{ t("account.unknown") | tojson }};
         }
         const date = new Date(value);
         if (Number.isNaN(date.getTime())) {
@@ -140,7 +147,7 @@
             hookKeyInput.value = payload.hook_key;
         }
         if (hookKeyCreatedAt) {
-            hookKeyCreatedAt.textContent = `Generated: ${formatTimestamp(payload.hook_key_created_at)}`;
+            hookKeyCreatedAt.textContent = accountMessages.generated.replace('__VALUE__', formatTimestamp(payload.hook_key_created_at));
         }
     }
 
@@ -149,12 +156,12 @@
             await navigator.clipboard.writeText(hookKeyInput?.value || '');
             setStatus(keyStatus, accountMessages.copied);
         } catch (error) {
-            setStatus(keyStatus, 'Could not copy API key', true);
+            setStatus(keyStatus, accountMessages.copy_failed, true);
         }
     });
 
     rotateButton?.addEventListener('click', async () => {
-        setStatus(keyStatus, 'Rotating API key...');
+        setStatus(keyStatus, accountMessages.rotating);
         rotateButton.disabled = true;
         try {
             const response = await fetch('/api/account/rotate-hook-key', {
@@ -170,7 +177,7 @@
             updateHookKey(payload);
             setStatus(keyStatus, accountMessages.rotated);
         } catch (error) {
-            setStatus(keyStatus, error.message || 'Failed to rotate API key', true);
+            setStatus(keyStatus, error.message || accountMessages.rotate_failed, true);
         } finally {
             rotateButton.disabled = false;
         }
@@ -186,11 +193,11 @@
         const submitButton = passwordForm.querySelector('button[type="submit"]');
         const newPassword = (passwordInput?.value || '').trim();
         if (!newPassword) {
-            setStatus(passwordStatus, 'New password is required', true);
+            setStatus(passwordStatus, accountMessages.password_required, true);
             return;
         }
 
-        setStatus(passwordStatus, 'Saving password...');
+        setStatus(passwordStatus, accountMessages.password_saving);
         if (submitButton) {
             submitButton.disabled = true;
         }
@@ -212,7 +219,7 @@
             }
             setStatus(passwordStatus, accountMessages.password_updated);
         } catch (error) {
-            setStatus(passwordStatus, error.message || 'Failed to save password', true);
+            setStatus(passwordStatus, error.message || accountMessages.password_save_failed, true);
         } finally {
             if (submitButton) {
                 submitButton.disabled = false;
