@@ -6,7 +6,7 @@
 <section class="stack">
     <div class="card">
         <h1 style="margin-top: 0;">{{ t('settings.title') }}</h1>
-        <p class="muted">Configure the TokenLeague shell title and subtitle shown across the authenticated pages.</p>
+        <p class="muted">{{ t('settings.description') }}</p>
         {% if message %}
         <p style="color: #027a48;">{{ message }}</p>
         {% endif %}
@@ -24,7 +24,7 @@
     </div>
 
     <div class="card">
-        <h2 style="margin-top: 0;">Current Users</h2>
+        <h2 style="margin-top: 0;">{{ t('settings.current_users') }}</h2>
         <table>
             <thead>
                 <tr>

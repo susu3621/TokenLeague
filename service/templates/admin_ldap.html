@@ -6,7 +6,7 @@
 <section class="stack">
     <div class="card">
         <h1 class="hero-title">{{ t('admin_ldap.title') }}</h1>
-        <p class="muted" style="margin-top: 10px;">Configure LDAP authentication, test the connection, and sync directory users into the local user table.</p>
+        <p class="muted" style="margin-top: 10px;">{{ t('admin_ldap.description') }}</p>
         {% if message %}
         <p style="color: #027a48;">{{ message }}</p>
         {% endif %}
@@ -55,7 +55,7 @@
     </div>
 
     <div class="card">
-        <h2 style="margin-top: 0;">Directory Actions</h2>
+        <h2 style="margin-top: 0;">{{ t('admin_ldap.directory_actions') }}</h2>
         <div style="display: flex; gap: 12px; flex-wrap: wrap;">
             <form method="POST" class="inline-form">
                 <input type="hidden" name="action" value="test_connection">
@@ -69,7 +69,7 @@
     </div>
 
     <div class="card">
-        <h2 style="margin-top: 0;">Current Local Users</h2>
+        <h2 style="margin-top: 0;">{{ t('admin_ldap.current_local_users') }}</h2>
         <table>
             <thead>
                 <tr>

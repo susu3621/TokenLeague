@@ -109,3 +109,26 @@ def test_user_detail_page_renders_chinese_copy(auth_session):
     assert "过去30天" in html
     assert "过去90天" in html
     assert "<span hidden>今天 过去7天 过去30天 过去90天</span>" not in html
+    assert 'aria-label="时间范围选择器"' in html
+
+
+def test_admin_pages_render_chinese_shell_copy(auth_session):
+    pages = {
+        "/settings": ["配置已登录页面中显示的 TokenLeague 标题和副标题。", "当前用户"],
+        "/api": ["此页面根据 Flask 路由表自动生成。"],
+        "/admin/users": ["创建排行榜用户，并轮换他们专用的上报 Hook Key。"],
+        "/admin/ldap": [
+            "配置 LDAP 认证、测试连接，并将目录用户同步到本地用户表。",
+            "目录操作",
+            "当前本地用户",
+        ],
+        "/admin/agents": ["这里展示用量上报中观察到的 Agent 类型、版本和模型组合。"],
+    }
+
+    for path, snippets in pages.items():
+        response = auth_session.get(path, headers={"Accept-Language": "zh-CN,zh;q=0.9"})
+
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        for snippet in snippets:
+            assert snippet in html

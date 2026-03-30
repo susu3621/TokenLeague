@@ -100,7 +100,7 @@
     <div class="card">
         <div class="section-header">
             <h2>{{ t('user_detail.timeline_heading') }}</h2>
-            <div class="timeline-range" aria-label="Timeline range selector" data-user-detail-window-selector="{{ window }}">
+            <div class="timeline-range" aria-label="{{ t('user_detail.timeline_range_selector') }}" data-user-detail-window-selector="{{ window }}">
                 <button type="button" class="timeline-range-button{% if window == 'today' %} is-active{% endif %}" data-user-detail-window-option="today">{{ t('user_detail.window.today') }}</button>
                 <button type="button" class="timeline-range-button{% if window == 'week' %} is-active{% endif %}" data-user-detail-window-option="week">{{ t('user_detail.window.week') }}</button>
                 <button type="button" class="timeline-range-button{% if window == 'month' %} is-active{% endif %}" data-user-detail-window-option="month">{{ t('user_detail.window.month') }}</button>
