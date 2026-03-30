@@ -178,8 +178,13 @@ def before_request():
     if request.method in {"POST", "PUT", "PATCH", "DELETE"} and session.get("user_id"):
         if not _is_origin_valid_for_state_change():
             if request.path.startswith("/api/"):
-                return jsonify({"success": False, "error": "Origin validation failed"}), 403
-            return "Origin validation failed", 403
+                return jsonify(
+                    {
+                        "success": False,
+                        "error": i18n.translate(g.locale, "error.origin_validation_failed"),
+                    }
+                ), 403
+            return i18n.translate(g.locale, "error.origin_validation_failed"), 403
 
 
 @app.after_request
@@ -255,25 +260,37 @@ def format_token_count(value: int | float | None) -> str:
     return f"{sign}{_trim_trailing_decimal(abs_value)}"
 
 
-def _infer_api_description(rule, methods, view_func):
-    if view_func:
+def _infer_api_description(rule, methods, view_func, locale: str = "en"):
+    if locale == "en" and view_func:
         doc = inspect.getdoc(view_func)
         if doc:
             return doc.splitlines()[0].strip()
     action_map = {
-        "GET": "Get",
-        "POST": "Create",
-        "PUT": "Update",
-        "PATCH": "Update",
-        "DELETE": "Delete",
+        "GET": "api.action.get",
+        "POST": "api.action.create",
+        "PUT": "api.action.update",
+        "PATCH": "api.action.update",
+        "DELETE": "api.action.delete",
     }
-    resource = _format_api_resource_name(rule.rule)
+    resource_map = {
+        "/api/change-password": ("api.action.modify", "api.resource.current_user_password"),
+        "/api/account/rotate-hook-key": ("api.action.update", "api.resource.current_user_hook_key"),
+    }
+    if rule.rule in resource_map:
+        action_key, resource_key = resource_map[rule.rule]
+        resource = i18n.translate(locale, resource_key)
+    else:
+        action_key = action_map.get(methods[0], "api.action.operate") if methods else "api.action.operate"
+        resource = _format_api_resource_name(rule.rule)
     if len(methods) == 1:
-        return f"{action_map.get(methods[0], 'Operate')} {resource}"
-    return f"Operate {resource}"
+        action = i18n.translate(locale, action_key)
+        if locale == "zh-CN" and rule.rule in resource_map:
+            return f"{action}{resource}"
+        return f"{action} {resource}"
+    return f"{i18n.translate(locale, 'api.action.operate')} {resource}"
 
 
-def _build_api_list():
+def _build_api_list(locale: str = "en"):
     api_items = []
     for rule in app.url_map.iter_rules():
         if not rule.rule.startswith("/api"):
@@ -285,7 +302,7 @@ def _build_api_list():
         api_items.append(
             {
                 "name": _format_api_resource_name(rule.rule),
-                "description": _infer_api_description(rule, methods, view_func),
+                "description": _infer_api_description(rule, methods, view_func, locale=locale),
                 "endpoint": rule.rule,
                 "methods": methods,
             }
@@ -417,7 +434,7 @@ def settings():
         if project_title:
             db.set_setting("project_title", project_title)
             db.set_setting("project_subtitle", project_subtitle)
-            message = "Project settings updated"
+            message = i18n.translate(g.locale, "settings.updated")
     return render_template(
         "settings.html",
         users=db.get_all_users(),
@@ -439,9 +456,9 @@ def admin_ldap():
         if action == "test_connection":
             ok, ldap_error = ldap_auth.test_connection(ldap_settings)
             if ok:
-                message = "LDAP connection successful"
+                message = i18n.translate(g.locale, "admin_ldap.connection_successful")
             else:
-                error = ldap_error or "LDAP connection failed"
+                error = ldap_error or i18n.translate(g.locale, "admin_ldap.connection_failed")
         elif action == "sync_users":
             created_count = 0
             updated_count = 0
@@ -457,9 +474,12 @@ def admin_ldap():
                     updated_count += 1
                 else:
                     created_count += 1
-            message = (
-                f"Created {created_count} users, updated {updated_count} users, "
-                f"skipped {skipped_count} users"
+            message = i18n.translate(
+                g.locale,
+                "admin_ldap.sync_result",
+                created_count=created_count,
+                updated_count=updated_count,
+                skipped_count=skipped_count,
             )
         else:
             posted_bind_password = request.form.get("ldap_bind_password")
@@ -479,7 +499,7 @@ def admin_ldap():
                 db.set_setting(key, value)
             if posted_bind_password is not None and posted_bind_password != "":
                 db.set_setting("ldap_bind_password", posted_bind_password)
-            message = "LDAP settings updated"
+            message = i18n.translate(g.locale, "admin_ldap.settings_updated")
         ldap_settings = db.get_ldap_settings()
 
     return render_template(
@@ -503,23 +523,26 @@ def admin_users():
             if action == "rotate_hook_key":
                 user_id = int(request.form.get("user_id") or "0")
                 db.rotate_user_hook_key(user_id)
-                message = "Hook key rotated"
+                message = i18n.translate(g.locale, "admin_users.hook_key_rotated")
             elif action == "toggle_status":
                 user_id = int(request.form.get("user_id") or "0")
                 next_status = (request.form.get("status") or db.USER_ACTIVE).strip()
                 db.set_user_status(user_id, next_status)
-                message = "User status updated"
+                message = i18n.translate(g.locale, "admin_users.status_updated")
             else:
                 username = (request.form.get("username") or "").strip()
                 display_name = (request.form.get("display_name") or "").strip()
                 password = request.form.get("password") or ""
                 if not username or not password:
-                    error = "Username and password are required"
+                    error = i18n.translate(g.locale, "admin_users.required")
                 else:
                     db.create_user(username, password, display_name=display_name or username)
-                    message = f"User {username} created"
+                    message = i18n.translate(g.locale, "admin_users.created", username=username)
         except ValueError as exc:
-            error = str(exc)
+            if str(exc) == "Username already exists":
+                error = i18n.translate(g.locale, "admin_users.username_exists")
+            else:
+                error = str(exc)
 
     return render_template(
         "admin_users.html",
@@ -543,13 +566,18 @@ def api_change_password():
         return jsonify(
             {
                 "success": False,
-                "error": "Password changes are not available for LDAP users",
+                "error": i18n.translate(g.locale, "error.ldap_password_change_unavailable"),
             }
         ), 403
     data = request.get_json(silent=True) or {}
     new_password = (data.get("new_password") or "").strip()
     if not new_password:
-        return jsonify({"success": False, "error": "new_password is required"}), 400
+        return jsonify(
+            {
+                "success": False,
+                "error": i18n.translate(g.locale, "error.new_password_required"),
+            }
+        ), 400
     auth_module.change_password(session["user_id"], new_password)
     return jsonify({"success": True})
 
@@ -760,7 +788,7 @@ def api_user_timeline(user_id: int):
 @auth_module.admin_required
 def api_list():
     """TokenLeague API list page"""
-    return render_template("api_list.html", apis=_build_api_list())
+    return render_template("api_list.html", apis=_build_api_list(locale=getattr(g, "locale", "en")))
 
 
 @app.route("/docs")

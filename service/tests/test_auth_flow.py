@@ -112,6 +112,33 @@ def test_change_password_api_rejects_ldap_users(client):
     assert db.get_user_by_username("ldap-alice")["password_hash"] == original_password_hash
 
 
+def test_change_password_api_rejects_ldap_users_in_chinese(client):
+    import db
+
+    user = db.create_user(
+        "ldap-alice",
+        "secret123",
+        display_name="LDAP Alice",
+        auth_source=db.AUTH_SOURCE_LDAP,
+    )
+    with client.session_transaction() as session:
+        session["user_id"] = user["id"]
+        session["username"] = user["username"]
+        session["role"] = user["role"]
+
+    response = client.post(
+        "/api/change-password",
+        json={"new_password": "changed123"},
+        headers={"Accept-Language": "zh-CN,zh;q=0.9"},
+    )
+
+    assert response.status_code == 403
+    assert response.get_json() == {
+        "success": False,
+        "error": "LDAP 用户无法修改密码",
+    }
+
+
 def test_api_list_page_returns_403_for_normal_user(user_session):
     response = user_session.get("/api")
 
@@ -173,10 +200,41 @@ def test_change_password_api_requires_login(client):
     assert response.status_code == 401
 
 
+def test_change_password_api_requires_new_password_in_chinese(auth_session):
+    response = auth_session.post(
+        "/api/change-password",
+        json={},
+        headers={"Accept-Language": "zh-CN,zh;q=0.9"},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json() == {
+        "success": False,
+        "error": "必须提供 new_password",
+    }
+
+
 def test_rotate_hook_key_api_requires_login(client):
     response = client.post("/api/account/rotate-hook-key")
 
     assert response.status_code == 401
+
+
+def test_change_password_api_rejects_invalid_origin_in_chinese(auth_session):
+    response = auth_session.post(
+        "/api/change-password",
+        json={"new_password": "changed123"},
+        headers={
+            "Accept-Language": "zh-CN,zh;q=0.9",
+            "Origin": "https://evil.example.com",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.get_json() == {
+        "success": False,
+        "error": "来源校验失败",
+    }
 
 
 def test_change_password_api_updates_password(auth_session):

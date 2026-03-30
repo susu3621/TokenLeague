@@ -17,11 +17,11 @@
             <input type="hidden" name="action" value="create_user">
             <div>
                 <label for="display_name">{{ t('admin_users.display_name') }}</label>
-                <input id="display_name" name="display_name" placeholder="Alice">
+                <input id="display_name" name="display_name" placeholder="{{ t('admin_users.placeholder.display_name') }}">
             </div>
             <div>
                 <label for="username">{{ t('admin_users.username') }}</label>
-                <input id="username" name="username" placeholder="alice">
+                <input id="username" name="username" placeholder="{{ t('admin_users.placeholder.username') }}">
             </div>
             <div>
                 <label for="password">{{ t('admin_users.password') }}</label>
@@ -35,10 +35,11 @@
         <table>
             <thead>
                 <tr>
-                    <th>ID</th>
+                    <th>{{ t('admin_users.id') }}</th>
                     <th>{{ t('admin_users.display_name') }}</th>
                     <th>{{ t('admin_users.username') }}</th>
-                    <th>Status</th>
+                    <th>{{ t('admin_users.role') }}</th>
+                    <th>{{ t('admin_users.status') }}</th>
                     <th>{{ t('admin_users.hook_key') }}</th>
                     <th>{{ t('admin_users.actions') }}</th>
                 </tr>
@@ -49,6 +50,7 @@
                     <td>{{ user.id }}</td>
                     <td>{{ user.display_name }}</td>
                     <td>{{ user.username }}</td>
+                    <td>{{ user.role }}</td>
                     <td>{{ user.status }}</td>
                     <td style="font-family: monospace;">{{ user.hook_key }}</td>
                     <td>

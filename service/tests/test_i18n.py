@@ -6,6 +6,8 @@ def test_resolve_locale_prefers_chinese_variants():
     assert resolve_locale("en-US,en;q=0.9") == "en"
     assert resolve_locale("zh;q=0.1,en-US;q=0.9") == "en"
     assert resolve_locale("fr-FR;q=0.4,zh-TW;q=0.8,en;q=0.7") == "zh-CN"
+    assert resolve_locale("zh;q=0,en;q=0.5") == "en"
+    assert resolve_locale("zh-CN;q=0,en;q=0") == "en"
 
 
 def test_login_page_renders_chinese_copy(client):
@@ -116,9 +118,9 @@ def test_user_detail_page_renders_chinese_copy(auth_session):
 
 def test_admin_pages_render_chinese_shell_copy(auth_session):
     pages = {
-        "/settings": ["配置已登录页面中显示的 TokenLeague 标题和副标题。", "当前用户", "项目标题", "保存"],
+        "/settings": ["配置已登录页面中显示的 TokenLeague 标题和副标题。", "当前用户", "项目标题", "角色", "状态", "保存"],
         "/api": ["此页面根据 Flask 路由表自动生成。", "方法", "说明"],
-        "/admin/users": ["创建排行榜用户，并轮换他们专用的上报 Hook Key。", "创建用户", "操作", "轮换 Hook Key"],
+        "/admin/users": ["创建排行榜用户，并轮换他们专用的上报 Hook Key。", "创建用户", "操作", "轮换 Hook Key", "角色", "状态"],
         "/admin/ldap": [
             "配置 LDAP 认证、测试连接，并将目录用户同步到本地用户表。",
             "目录操作",
@@ -126,8 +128,10 @@ def test_admin_pages_render_chinese_shell_copy(auth_session):
             "启用 LDAP",
             "保存配置",
             "同步 LDAP 用户",
+            "认证来源",
+            "上次同步",
         ],
-        "/admin/agents": ["这里展示用量上报中观察到的 Agent 类型、版本和模型组合。", "Prompt 事件数", "尚未记录任何 Agent 活动。"],
+        "/admin/agents": ["这里展示用量上报中观察到的 Agent 类型、版本和模型组合。", "Prompt 事件数", "任务运行数", "尚未记录任何 Agent 活动。"],
     }
 
     for path, snippets in pages.items():
@@ -137,3 +141,29 @@ def test_admin_pages_render_chinese_shell_copy(auth_session):
         html = response.get_data(as_text=True)
         for snippet in snippets:
             assert snippet in html
+
+
+def test_admin_pages_render_chinese_post_feedback(auth_session):
+    settings_response = auth_session.post(
+        "/settings",
+        data={"project_title": "新标题", "project_subtitle": "新副标题"},
+        headers={"Accept-Language": "zh-CN,zh;q=0.9"},
+    )
+    assert settings_response.status_code == 200
+    assert "项目设置已更新" in settings_response.get_data(as_text=True)
+
+    users_response = auth_session.post(
+        "/admin/users",
+        data={"action": "create_user", "username": "", "password": ""},
+        headers={"Accept-Language": "zh-CN,zh;q=0.9"},
+    )
+    assert users_response.status_code == 200
+    assert "用户名和密码均为必填项" in users_response.get_data(as_text=True)
+
+    ldap_response = auth_session.post(
+        "/admin/ldap",
+        data={"action": "save_config", "ldap_host": "ldap.example.com", "ldap_port": "389"},
+        headers={"Accept-Language": "zh-CN,zh;q=0.9"},
+    )
+    assert ldap_response.status_code == 200
+    assert "LDAP 设置已更新" in ldap_response.get_data(as_text=True)
