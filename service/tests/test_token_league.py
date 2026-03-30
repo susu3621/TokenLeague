@@ -241,6 +241,21 @@ def test_normal_user_other_user_breakdown_apis_are_forbidden(user_session):
     assert timeline_response.get_json() == {"success": False, "error": "Forbidden"}
 
 
+def test_downgraded_admin_no_longer_sees_admin_nav(auth_session):
+    import db
+
+    db._memory_users[0]["role"] = "user"
+    response = auth_session.get("/leaderboard")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Settings" not in html
+    assert "API" not in html
+    assert "Admin Users" not in html
+    assert "LDAP" not in html
+    assert "Agent Catalog" not in html
+
+
 def test_default_leaderboard_snapshot_round_trip_in_memory():
     import db
 

@@ -45,7 +45,7 @@
 {% block scripts %}
 <script>
     const viewerUserId = {{ g.user["id"] if g.user else "null" }};
-    const viewerIsAdmin = {{ "true" if session.get("role") == "admin" else "false" }};
+    const viewerIsAdmin = {{ "true" if g.user and g.user.role == "admin" else "false" }};
 
     function escapeHtml(value) {
         return String(value ?? '')
