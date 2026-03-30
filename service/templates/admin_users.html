@@ -50,8 +50,8 @@
                     <td>{{ user.id }}</td>
                     <td>{{ user.display_name }}</td>
                     <td>{{ user.username }}</td>
-                    <td>{{ user.role }}</td>
-                    <td>{{ user.status }}</td>
+                    <td>{{ t('enum.role.' ~ user.role) }}</td>
+                    <td>{{ t('enum.status.' ~ user.status) }}</td>
                     <td style="font-family: monospace;">{{ user.hook_key }}</td>
                     <td>
                         <form method="POST" class="inline-form">

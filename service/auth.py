@@ -34,10 +34,10 @@ def _login_required_response():
 
 
 def _forbidden_response():
+    locale = i18n.resolve_locale(request.headers.get("Accept-Language"))
     if _is_api_request():
-        locale = i18n.resolve_locale(request.headers.get("Accept-Language"))
         return jsonify({"success": False, "error": i18n.translate(locale, "error.forbidden")}), 403
-    return "Forbidden", 403
+    return i18n.translate(locale, "error.forbidden"), 403
 
 
 def login_required(view_func):

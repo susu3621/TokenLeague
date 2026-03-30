@@ -26,6 +26,16 @@ def test_settings_page_returns_403_for_normal_user(user_session):
     assert response.get_data(as_text=True) == "Forbidden"
 
 
+def test_settings_page_returns_localized_403_for_normal_user(user_session):
+    response = user_session.get(
+        "/settings",
+        headers={"Accept-Language": "zh-CN,zh;q=0.9"},
+    )
+
+    assert response.status_code == 403
+    assert response.get_data(as_text=True) == "禁止访问"
+
+
 def test_account_page_renders_current_user_hook_key(user_session):
     import db
 

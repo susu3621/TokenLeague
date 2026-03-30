@@ -116,6 +116,7 @@
         "password_save_failed": t("account.password_save_failed"),
         "password_updated": t("account.password_updated"),
         "generated": t("account.generated", value="__VALUE__"),
+        "utc_suffix": t("time.utc_suffix"),
     } | tojson }};
     const hookKeyInput = document.querySelector('[data-account-hook-key]');
     const hookKeyCreatedAt = document.querySelector('[data-account-hook-key-created-at]');
@@ -139,7 +140,7 @@
         if (Number.isNaN(date.getTime())) {
             return value;
         }
-        return `${date.toISOString().replace('T', ' ').slice(0, 19)} UTC`;
+        return `${date.toISOString().replace('T', ' ').slice(0, 19)} ${accountMessages.utc_suffix}`;
     }
 
     function updateHookKey(payload) {

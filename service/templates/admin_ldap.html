@@ -87,9 +87,9 @@
                 <tr>
                     <td>{{ user.username }}</td>
                     <td>{{ user.display_name }}</td>
-                    <td>{{ user.role }}</td>
-                    <td>{{ user.status }}</td>
-                    <td>{{ user.auth_source }}</td>
+                    <td>{{ t('enum.role.' ~ user.role) }}</td>
+                    <td>{{ t('enum.status.' ~ user.status) }}</td>
+                    <td>{{ t('enum.auth_source.' ~ user.auth_source) }}</td>
                     <td>{{ user.ldap_dn or "-" }}</td>
                     <td>{{ user.last_synced_at or "-" }}</td>
                 </tr>

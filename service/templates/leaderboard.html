@@ -52,6 +52,7 @@
         "preparing": t("leaderboard.preparing"),
         "failed": t("leaderboard.failed"),
         "last_updated": t("leaderboard.last_updated", value="__VALUE__"),
+        "utc_suffix": t("time.utc_suffix"),
     } | tojson }};
 
     function escapeHtml(value) {
@@ -71,7 +72,7 @@
         if (Number.isNaN(date.getTime())) {
             return value;
         }
-        return `${date.toISOString().replace('T', ' ').slice(0, 19)} UTC`;
+        return `${date.toISOString().replace('T', ' ').slice(0, 19)} ${leaderboardMessages.utc_suffix}`;
     }
 
     function renderUserCell(row) {

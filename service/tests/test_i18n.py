@@ -50,6 +50,8 @@ def test_leaderboard_page_renders_chinese_shell_copy(auth_session):
     assert "用户" in html
     assert "总 Token" in html
     assert "最近活跃时间" in html
+    assert "slice(0, 19)} UTC" not in html
+    assert "leaderboardMessages.utc_suffix" in html
 
 
 def test_unknown_browser_language_falls_back_to_english(auth_session):
@@ -81,6 +83,8 @@ def test_account_page_renders_chinese_copy(auth_session):
     assert "New password is required" not in html
     assert "Saving password..." not in html
     assert "Failed to save password" not in html
+    assert "slice(0, 19)} UTC" not in html
+    assert "accountMessages.utc_suffix" in html
 
 
 def test_user_detail_page_renders_chinese_copy(auth_session):
@@ -141,6 +145,28 @@ def test_admin_pages_render_chinese_shell_copy(auth_session):
         html = response.get_data(as_text=True)
         for snippet in snippets:
             assert snippet in html
+
+
+def test_admin_pages_render_chinese_enum_values(auth_session):
+    import db
+
+    db.create_user("enum-user", "secret123", display_name="Enum User")
+
+    settings_html = auth_session.get(
+        "/settings",
+        headers={"Accept-Language": "zh-CN,zh;q=0.9"},
+    ).get_data(as_text=True)
+    assert "<td>管理员</td>" in settings_html
+    assert "<td>普通用户</td>" in settings_html
+    assert "<td>启用</td>" in settings_html
+    assert "<td>active</td>" not in settings_html
+
+    ldap_html = auth_session.get(
+        "/admin/ldap",
+        headers={"Accept-Language": "zh-CN,zh;q=0.9"},
+    ).get_data(as_text=True)
+    assert "<td>本地</td>" in ldap_html
+    assert "<td>local</td>" not in ldap_html
 
 
 def test_admin_pages_render_chinese_post_feedback(auth_session):
