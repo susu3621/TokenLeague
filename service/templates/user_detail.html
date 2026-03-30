@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ stats.user.display_name }} | {{ project_title }}{% endblock %}
+{% block title %}{{ t('user_detail.title_page', display_name=stats.user.display_name) }} | {{ project_title }}{% endblock %}
 
 {% block styles %}
 <style>
@@ -75,36 +75,36 @@
 <section class="stack">
     <div class="card">
         <h1 class="hero-title">{{ stats.user.display_name }}</h1>
-        <p class="muted" style="margin-top: 10px;">User detail for {{ stats.user.username }} within the selected {{ window_label }} window.</p>
+        <p class="muted" style="margin-top: 10px;">{{ t('user_detail.description', username=stats.user.username, window_label=t('user_detail.window.' ~ window)) }}</p>
 
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-value" data-user-detail-summary-value="total-token-count">{{ format_token_count(stats.summary.total_token_count) }}</div>
-                <div class="stat-label">Total Tokens</div>
+                <div class="stat-label">{{ t('user_detail.total_tokens') }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" data-user-detail-summary-value="prompt-count">{{ "{:,}".format(stats.summary.prompt_count) }}</div>
-                <div class="stat-label">Prompts</div>
+                <div class="stat-label">{{ t('user_detail.prompt_count') }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" data-user-detail-summary-value="task-count">{{ "{:,}".format(stats.summary.task_count) }}</div>
-                <div class="stat-label">Tasks</div>
+                <div class="stat-label">{{ t('user_detail.task_count') }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" data-user-detail-summary-value="avg-token-per-prompt">{{ format_token_count(stats.summary.avg_token_per_prompt) }}</div>
-                <div class="stat-label">Avg Tokens / Prompt</div>
+                <div class="stat-label">{{ t('user_detail.avg_tokens_per_prompt') }}</div>
             </div>
         </div>
     </div>
 
     <div class="card">
         <div class="section-header">
-            <h2>Usage Timeline</h2>
-            <div class="timeline-range" aria-label="Timeline range selector" data-user-detail-window-selector="{{ window }}">
-                <button type="button" class="timeline-range-button{% if window == 'today' %} is-active{% endif %}" data-user-detail-window-option="today">今天</button>
-                <button type="button" class="timeline-range-button{% if window == 'week' %} is-active{% endif %}" data-user-detail-window-option="week">过去7天</button>
-                <button type="button" class="timeline-range-button{% if window == 'month' %} is-active{% endif %}" data-user-detail-window-option="month">过去30天</button>
-                <button type="button" class="timeline-range-button{% if window == 'quarter' %} is-active{% endif %}" data-user-detail-window-option="quarter">过去90天</button>
+            <h2>{{ t('user_detail.timeline_heading') }}</h2>
+            <div class="timeline-range" aria-label="{{ t('user_detail.timeline_range_selector') }}" data-user-detail-window-selector="{{ window }}">
+                <button type="button" class="timeline-range-button{% if window == 'today' %} is-active{% endif %}" data-user-detail-window-option="today">{{ t('user_detail.window.today') }}</button>
+                <button type="button" class="timeline-range-button{% if window == 'week' %} is-active{% endif %}" data-user-detail-window-option="week">{{ t('user_detail.window.week') }}</button>
+                <button type="button" class="timeline-range-button{% if window == 'month' %} is-active{% endif %}" data-user-detail-window-option="month">{{ t('user_detail.window.month') }}</button>
+                <button type="button" class="timeline-range-button{% if window == 'quarter' %} is-active{% endif %}" data-user-detail-window-option="quarter">{{ t('user_detail.window.quarter') }}</button>
             </div>
         </div>
         <div class="chart-container">
@@ -113,56 +113,56 @@
     </div>
 
     <div class="card">
-        <h2 style="margin-top: 0;">Project Breakdown</h2>
+        <h2 style="margin-top: 0;">{{ t('user_detail.project_breakdown') }}</h2>
         <table id="project-table">
             <thead>
                 <tr>
-                    <th>Project</th>
-                    <th>Total Token</th>
-                    <th>Input</th>
-                    <th>Output</th>
-                    <th>Prompts</th>
-                    <th>Tasks</th>
+                    <th>{{ t('user_detail.project') }}</th>
+                    <th>{{ t('user_detail.total_token') }}</th>
+                    <th>{{ t('user_detail.input') }}</th>
+                    <th>{{ t('user_detail.output') }}</th>
+                    <th>{{ t('user_detail.prompts') }}</th>
+                    <th>{{ t('user_detail.tasks') }}</th>
                 </tr>
             </thead>
             <tbody>
-                <tr><td colspan="6" class="muted">Loading...</td></tr>
+                <tr><td colspan="6" class="muted">{{ t('user_detail.loading') }}</td></tr>
             </tbody>
         </table>
     </div>
 
     <div class="card">
-        <h2 style="margin-top: 0;">Model Breakdown</h2>
+        <h2 style="margin-top: 0;">{{ t('user_detail.model_breakdown') }}</h2>
         <div class="chart-container">
             <canvas id="model-chart"></canvas>
         </div>
         <table id="model-table" style="margin-top: 20px;">
             <thead>
                 <tr>
-                    <th>Model</th>
-                    <th>Total Token</th>
-                    <th>Input</th>
-                    <th>Output</th>
-                    <th>Prompts</th>
+                    <th>{{ t('user_detail.model') }}</th>
+                    <th>{{ t('user_detail.total_token') }}</th>
+                    <th>{{ t('user_detail.input') }}</th>
+                    <th>{{ t('user_detail.output') }}</th>
+                    <th>{{ t('user_detail.prompts') }}</th>
                 </tr>
             </thead>
             <tbody>
-                <tr><td colspan="5" class="muted">Loading...</td></tr>
+                <tr><td colspan="5" class="muted">{{ t('user_detail.loading') }}</td></tr>
             </tbody>
         </table>
     </div>
 
     <div class="card">
-        <h2 style="margin-top: 0;">Agent Breakdown</h2>
+        <h2 style="margin-top: 0;">{{ t('user_detail.agent_breakdown') }}</h2>
         <table>
             <thead>
                 <tr>
-                    <th>Agent Type</th>
-                    <th>Version</th>
-                    <th>Model</th>
-                    <th>Total Token</th>
-                    <th>Prompts</th>
-                    <th>Tasks</th>
+                    <th>{{ t('user_detail.agent_type') }}</th>
+                    <th>{{ t('user_detail.version') }}</th>
+                    <th>{{ t('user_detail.model') }}</th>
+                    <th>{{ t('user_detail.total_token') }}</th>
+                    <th>{{ t('user_detail.prompts') }}</th>
+                    <th>{{ t('user_detail.tasks') }}</th>
                 </tr>
             </thead>
             <tbody data-user-detail-agent-breakdown-body>
@@ -177,7 +177,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6" class="muted">No data in this window.</td>
+                    <td colspan="6" class="muted">{{ t('user_detail.no_data') }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -185,16 +185,16 @@
     </div>
 
     <div class="card">
-        <h2 style="margin-top: 0;">Recent Prompt Events</h2>
+        <h2 style="margin-top: 0;">{{ t('user_detail.recent_prompt_events') }}</h2>
         <table>
             <thead>
                 <tr>
-                    <th>Event</th>
-                    <th>Project</th>
-                    <th>Task</th>
-                    <th>Total Token</th>
-                    <th>Model</th>
-                    <th>Completed At</th>
+                    <th>{{ t('user_detail.event') }}</th>
+                    <th>{{ t('user_detail.project') }}</th>
+                    <th>{{ t('user_detail.task') }}</th>
+                    <th>{{ t('user_detail.total_token') }}</th>
+                    <th>{{ t('user_detail.model') }}</th>
+                    <th>{{ t('user_detail.completed_at') }}</th>
                 </tr>
             </thead>
             <tbody data-user-detail-recent-prompt-events-body>
@@ -209,7 +209,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6" class="muted">No prompt events recorded.</td>
+                    <td colspan="6" class="muted">{{ t('user_detail.recent_prompt_events_empty') }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -220,6 +220,16 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 (function() {
+    const userDetailMessages = {{ {
+        "loading": t("user_detail.loading"),
+        "no_data": t("user_detail.no_data"),
+        "project_empty": t("user_detail.project_empty"),
+        "model_empty": t("user_detail.model_empty"),
+        "recent_prompt_events_empty": t("user_detail.recent_prompt_events_empty"),
+        "timeline_empty": t("user_detail.timeline_empty"),
+        "input_tokens": t("user_detail.input_tokens"),
+        "output_tokens": t("user_detail.output_tokens"),
+    } | tojson }};
     const userId = {{ stats.user.id }};
     let currentWindow = '{{ window }}';
     let modelChart = null;
@@ -358,7 +368,7 @@
     function renderAgentBreakdown(rows) {
         const tbody = document.querySelector('[data-user-detail-agent-breakdown-body]');
         if (!rows || rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="muted">No data in this window.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="6" class="muted">${escapeHtml(userDetailMessages.no_data)}</td></tr>`;
             return;
         }
 
@@ -377,7 +387,7 @@
     function renderRecentPromptEvents(rows) {
         const tbody = document.querySelector('[data-user-detail-recent-prompt-events-body]');
         if (!rows || rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="muted">No prompt events recorded.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="6" class="muted">${escapeHtml(userDetailMessages.recent_prompt_events_empty)}</td></tr>`;
             return;
         }
 
@@ -397,7 +407,7 @@
     function renderProjects(projects) {
         const tbody = document.querySelector('#project-table tbody');
         if (!projects || projects.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="muted">No project data.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="6" class="muted">${escapeHtml(userDetailMessages.project_empty)}</td></tr>`;
             return;
         }
 
@@ -422,7 +432,7 @@
         }
 
         if (!models || models.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="muted">No model data.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="5" class="muted">${escapeHtml(userDetailMessages.model_empty)}</td></tr>`;
             ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
             return;
         }
@@ -443,12 +453,12 @@
                 labels: models.map(model => model.model_name),
                 datasets: [
                     {
-                        label: 'Input Tokens',
+                        label: userDetailMessages.input_tokens,
                         data: models.map(model => model.input_token_count),
                         backgroundColor: '#374151',
                     },
                     {
-                        label: 'Output Tokens',
+                        label: userDetailMessages.output_tokens,
                         data: models.map(model => model.output_token_count),
                         backgroundColor: '#9ca3af',
                     }
@@ -498,7 +508,7 @@
         ctx.font = '14px DM Sans';
         ctx.fillStyle = '#6b7280';
         ctx.textAlign = 'center';
-        ctx.fillText('No timeline data available', ctx.canvas.width / 2, ctx.canvas.height / 2);
+        ctx.fillText(userDetailMessages.timeline_empty, ctx.canvas.width / 2, ctx.canvas.height / 2);
     }
 
     function hashString(value) {

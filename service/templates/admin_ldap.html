@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}LDAP | {{ project_title }}{% endblock %}
+{% block title %}{{ t('admin_ldap.title') }} | {{ project_title }}{% endblock %}
 
 {% block content %}
 <section class="stack">
     <div class="card">
-        <h1 class="hero-title">LDAP</h1>
-        <p class="muted" style="margin-top: 10px;">Configure LDAP authentication, test the connection, and sync directory users into the local user table.</p>
+        <h1 class="hero-title">{{ t('admin_ldap.title') }}</h1>
+        <p class="muted" style="margin-top: 10px;">{{ t('admin_ldap.description') }}</p>
         {% if message %}
         <p style="color: #027a48;">{{ message }}</p>
         {% endif %}
@@ -15,71 +15,71 @@
         {% endif %}
         <form method="POST" class="stack">
             <input type="hidden" name="action" value="save_config">
-            <label><input type="checkbox" name="ldap_enabled" {% if ldap_settings.enabled %}checked{% endif %}> Enable LDAP</label>
+            <label><input type="checkbox" name="ldap_enabled" {% if ldap_settings.enabled %}checked{% endif %}> {{ t('admin_ldap.enable_ldap') }}</label>
             <div>
-                <label for="ldap_host">Host</label>
+                <label for="ldap_host">{{ t('admin_ldap.host') }}</label>
                 <input id="ldap_host" name="ldap_host" value="{{ ldap_settings.host }}">
             </div>
             <div>
-                <label for="ldap_port">Port</label>
+                <label for="ldap_port">{{ t('admin_ldap.port') }}</label>
                 <input id="ldap_port" name="ldap_port" value="{{ ldap_settings.port }}">
             </div>
-            <label><input type="checkbox" name="ldap_use_ssl" {% if ldap_settings.use_ssl %}checked{% endif %}> Use SSL</label>
-            <label><input type="checkbox" name="ldap_start_tls" {% if ldap_settings.start_tls %}checked{% endif %}> Start TLS</label>
+            <label><input type="checkbox" name="ldap_use_ssl" {% if ldap_settings.use_ssl %}checked{% endif %}> {{ t('admin_ldap.use_ssl') }}</label>
+            <label><input type="checkbox" name="ldap_start_tls" {% if ldap_settings.start_tls %}checked{% endif %}> {{ t('admin_ldap.start_tls') }}</label>
             <div>
-                <label for="ldap_bind_dn">Bind DN</label>
+                <label for="ldap_bind_dn">{{ t('admin_ldap.bind_dn') }}</label>
                 <input id="ldap_bind_dn" name="ldap_bind_dn" value="{{ ldap_settings.bind_dn }}">
             </div>
             <div>
-                <label for="ldap_bind_password">Bind Password</label>
-                <input id="ldap_bind_password" name="ldap_bind_password" type="password" placeholder="{% if ldap_bind_password_set %}Stored password unchanged when left blank{% else %}Enter bind password{% endif %}">
+                <label for="ldap_bind_password">{{ t('admin_ldap.bind_password') }}</label>
+                <input id="ldap_bind_password" name="ldap_bind_password" type="password" placeholder="{% if ldap_bind_password_set %}{{ t('admin_ldap.bind_password_placeholder_stored') }}{% else %}{{ t('admin_ldap.bind_password_placeholder_new') }}{% endif %}">
             </div>
             <div>
-                <label for="ldap_base_dn">Base DN</label>
+                <label for="ldap_base_dn">{{ t('admin_ldap.base_dn') }}</label>
                 <input id="ldap_base_dn" name="ldap_base_dn" value="{{ ldap_settings.base_dn }}">
             </div>
             <div>
-                <label for="ldap_user_filter">User Filter</label>
+                <label for="ldap_user_filter">{{ t('admin_ldap.user_filter') }}</label>
                 <input id="ldap_user_filter" name="ldap_user_filter" value="{{ ldap_settings.user_filter }}">
             </div>
             <div>
-                <label for="ldap_username_attribute">Username Attribute</label>
+                <label for="ldap_username_attribute">{{ t('admin_ldap.username_attribute') }}</label>
                 <input id="ldap_username_attribute" name="ldap_username_attribute" value="{{ ldap_settings.username_attribute }}">
             </div>
             <div>
-                <label for="ldap_display_name_attribute">Display Name Attribute</label>
+                <label for="ldap_display_name_attribute">{{ t('admin_ldap.display_name_attribute') }}</label>
                 <input id="ldap_display_name_attribute" name="ldap_display_name_attribute" value="{{ ldap_settings.display_name_attribute }}">
             </div>
-            <button class="btn-primary" type="submit">Save Configuration</button>
+            <button class="btn-primary" type="submit">{{ t('admin_ldap.save_configuration') }}</button>
         </form>
     </div>
 
     <div class="card">
-        <h2 style="margin-top: 0;">Directory Actions</h2>
+        <h2 style="margin-top: 0;">{{ t('admin_ldap.directory_actions') }}</h2>
         <div style="display: flex; gap: 12px; flex-wrap: wrap;">
             <form method="POST" class="inline-form">
                 <input type="hidden" name="action" value="test_connection">
-                <button type="submit">Test Connection</button>
+                <button type="submit">{{ t('admin_ldap.test_connection') }}</button>
             </form>
             <form method="POST" class="inline-form">
                 <input type="hidden" name="action" value="sync_users">
-                <button type="submit">Sync LDAP Users</button>
+                <button type="submit">{{ t('admin_ldap.sync_users') }}</button>
             </form>
         </div>
     </div>
 
     <div class="card">
-        <h2 style="margin-top: 0;">Current Local Users</h2>
+        <h2 style="margin-top: 0;">{{ t('admin_ldap.current_local_users') }}</h2>
         <table>
             <thead>
                 <tr>
-                    <th>Username</th>
-                    <th>Display Name</th>
-                    <th>Role</th>
-                    <th>Status</th>
-                    <th>Auth Source</th>
-                    <th>LDAP DN</th>
-                    <th>Last Synced</th>
+                    <th>{{ t('admin_users.username') }}</th>
+                    <th>{{ t('admin_users.display_name') }}</th>
+                    <th>{{ t('admin_ldap.role') }}</th>
+                    <th>{{ t('admin_ldap.status') }}</th>
+                    <th>{{ t('admin_ldap.auth_source') }}</th>
+                    <th>{{ t('admin_ldap.ldap_dn') }}</th>
+                    <th>{{ t('admin_ldap.last_synced') }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -87,9 +87,9 @@
                 <tr>
                     <td>{{ user.username }}</td>
                     <td>{{ user.display_name }}</td>
-                    <td>{{ user.role }}</td>
-                    <td>{{ user.status }}</td>
-                    <td>{{ user.auth_source }}</td>
+                    <td>{{ t('enum.role.' ~ user.role) }}</td>
+                    <td>{{ t('enum.status.' ~ user.status) }}</td>
+                    <td>{{ t('enum.auth_source.' ~ user.auth_source) }}</td>
                     <td>{{ user.ldap_dn or "-" }}</td>
                     <td>{{ user.last_synced_at or "-" }}</td>
                 </tr>

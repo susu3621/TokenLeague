@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}Admin Users | {{ project_title }}{% endblock %}
+{% block title %}{{ t('admin_users.title') }} | {{ project_title }}{% endblock %}
 
 {% block content %}
 <section class="stack">
     <div class="card">
-        <h1 class="hero-title">Admin Users</h1>
-        <p class="muted" style="margin-top: 10px;">Create ranked users and rotate their dedicated ingestion hook keys.</p>
+        <h1 class="hero-title">{{ t('admin_users.title') }}</h1>
+        <p class="muted" style="margin-top: 10px;">{{ t('admin_users.description') }}</p>
         {% if message %}
         <p style="color: #027a48;">{{ message }}</p>
         {% endif %}
@@ -16,18 +16,18 @@
         <form method="POST" class="stack">
             <input type="hidden" name="action" value="create_user">
             <div>
-                <label for="display_name">Display Name</label>
-                <input id="display_name" name="display_name" placeholder="Alice">
+                <label for="display_name">{{ t('admin_users.display_name') }}</label>
+                <input id="display_name" name="display_name" placeholder="{{ t('admin_users.placeholder.display_name') }}">
             </div>
             <div>
-                <label for="username">Username</label>
-                <input id="username" name="username" placeholder="alice">
+                <label for="username">{{ t('admin_users.username') }}</label>
+                <input id="username" name="username" placeholder="{{ t('admin_users.placeholder.username') }}">
             </div>
             <div>
-                <label for="password">Password</label>
+                <label for="password">{{ t('admin_users.password') }}</label>
                 <input id="password" name="password" type="password" required>
             </div>
-            <button class="btn-primary" type="submit">Create User</button>
+            <button class="btn-primary" type="submit">{{ t('admin_users.create_user') }}</button>
         </form>
     </div>
 
@@ -35,12 +35,13 @@
         <table>
             <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>Display Name</th>
-                    <th>Username</th>
-                    <th>Status</th>
-                    <th>Hook Key</th>
-                    <th>Actions</th>
+                    <th>{{ t('admin_users.id') }}</th>
+                    <th>{{ t('admin_users.display_name') }}</th>
+                    <th>{{ t('admin_users.username') }}</th>
+                    <th>{{ t('admin_users.role') }}</th>
+                    <th>{{ t('admin_users.status') }}</th>
+                    <th>{{ t('admin_users.hook_key') }}</th>
+                    <th>{{ t('admin_users.actions') }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -49,20 +50,21 @@
                     <td>{{ user.id }}</td>
                     <td>{{ user.display_name }}</td>
                     <td>{{ user.username }}</td>
-                    <td>{{ user.status }}</td>
+                    <td>{{ t('enum.role.' ~ user.role) }}</td>
+                    <td>{{ t('enum.status.' ~ user.status) }}</td>
                     <td style="font-family: monospace;">{{ user.hook_key }}</td>
                     <td>
                         <form method="POST" class="inline-form">
                             <input type="hidden" name="action" value="rotate_hook_key">
                             <input type="hidden" name="user_id" value="{{ user.id }}">
-                            <button type="submit">Rotate Hook Key</button>
+                            <button type="submit">{{ t('admin_users.rotate_hook_key') }}</button>
                         </form>
                         {% if user.role != 'admin' %}
                         <form method="POST" class="inline-form">
                             <input type="hidden" name="action" value="toggle_status">
                             <input type="hidden" name="user_id" value="{{ user.id }}">
                             <input type="hidden" name="status" value="{{ 'disabled' if user.status == 'active' else 'active' }}">
-                            <button type="submit">{{ 'Disable' if user.status == 'active' else 'Enable' }}</button>
+                            <button type="submit">{{ t('admin_users.disable') if user.status == 'active' else t('admin_users.enable') }}</button>
                         </form>
                         {% endif %}
                     </td>

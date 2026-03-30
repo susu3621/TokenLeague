@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP
+from datetime import datetime, timezone
 import inspect
 import os
 from pathlib import Path
@@ -12,6 +13,7 @@ from flask import Flask, abort, g, jsonify, redirect, render_template, request, 
 import auth as auth_module
 import db
 import exception_logger
+import i18n
 import ldap_auth
 
 
@@ -172,12 +174,18 @@ def _log_ingest(
 @app.before_request
 def before_request():
     auth_module.load_user()
+    g.locale = i18n.resolve_locale(request.headers.get("Accept-Language"))
 
     if request.method in {"POST", "PUT", "PATCH", "DELETE"} and session.get("user_id"):
         if not _is_origin_valid_for_state_change():
             if request.path.startswith("/api/"):
-                return jsonify({"success": False, "error": "Origin validation failed"}), 403
-            return "Origin validation failed", 403
+                return jsonify(
+                    {
+                        "success": False,
+                        "error": i18n.translate(g.locale, "error.origin_validation_failed"),
+                    }
+                ), 403
+            return i18n.translate(g.locale, "error.origin_validation_failed"), 403
 
 
 @app.after_request
@@ -194,10 +202,14 @@ def add_security_headers(response):
 
 @app.context_processor
 def inject_shell_context():
+    locale = getattr(g, "locale", "en")
     return {
         "project_title": db.get_setting("project_title") or db.DEFAULT_PROJECT_TITLE,
         "project_subtitle": db.get_setting("project_subtitle") or db.DEFAULT_PROJECT_SUBTITLE,
         "format_token_count": format_token_count,
+        "format_utc_timestamp": lambda value: format_utc_timestamp(value, locale),
+        "locale": locale,
+        "t": lambda key, **values: i18n.translate(locale, key, **values),
     }
 
 
@@ -250,25 +262,60 @@ def format_token_count(value: int | float | None) -> str:
     return f"{sign}{_trim_trailing_decimal(abs_value)}"
 
 
-def _infer_api_description(rule, methods, view_func):
-    if view_func:
+def format_utc_timestamp(value, locale: str = "en") -> str:
+    if not value:
+        return i18n.translate(locale, "account.unknown")
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text = str(value).strip()
+        if text.endswith("Z"):
+            text = f"{text[:-1]}+00:00"
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            return str(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    else:
+        parsed = parsed.astimezone(timezone.utc)
+    return f"{parsed.strftime('%Y-%m-%d %H:%M:%S')} {i18n.translate(locale, 'time.utc_suffix')}"
+
+
+def _infer_api_description(rule, methods, view_func, locale: str = "en"):
+    description_key = f"api.description.{rule.rule}"
+    if description_key in i18n.MESSAGES.get(locale, {}):
+        return i18n.translate(locale, description_key)
+    if locale == "en" and view_func:
         doc = inspect.getdoc(view_func)
         if doc:
             return doc.splitlines()[0].strip()
     action_map = {
-        "GET": "Get",
-        "POST": "Create",
-        "PUT": "Update",
-        "PATCH": "Update",
-        "DELETE": "Delete",
+        "GET": "api.action.get",
+        "POST": "api.action.create",
+        "PUT": "api.action.update",
+        "PATCH": "api.action.update",
+        "DELETE": "api.action.delete",
     }
-    resource = _format_api_resource_name(rule.rule)
+    resource_map = {
+        "/api/change-password": ("api.action.modify", "api.resource.current_user_password"),
+        "/api/account/rotate-hook-key": ("api.action.update", "api.resource.current_user_hook_key"),
+    }
+    if rule.rule in resource_map:
+        action_key, resource_key = resource_map[rule.rule]
+        resource = i18n.translate(locale, resource_key)
+    else:
+        action_key = action_map.get(methods[0], "api.action.operate") if methods else "api.action.operate"
+        resource = _format_api_resource_name(rule.rule)
     if len(methods) == 1:
-        return f"{action_map.get(methods[0], 'Operate')} {resource}"
-    return f"Operate {resource}"
+        action = i18n.translate(locale, action_key)
+        if locale == "zh-CN" and rule.rule in resource_map:
+            return f"{action}{resource}"
+        return f"{action} {resource}"
+    return f"{i18n.translate(locale, 'api.action.operate')} {resource}"
 
 
-def _build_api_list():
+def _build_api_list(locale: str = "en"):
     api_items = []
     for rule in app.url_map.iter_rules():
         if not rule.rule.startswith("/api"):
@@ -280,7 +327,7 @@ def _build_api_list():
         api_items.append(
             {
                 "name": _format_api_resource_name(rule.rule),
-                "description": _infer_api_description(rule, methods, view_func),
+                "description": _infer_api_description(rule, methods, view_func, locale=locale),
                 "endpoint": rule.rule,
                 "methods": methods,
             }
@@ -289,18 +336,63 @@ def _build_api_list():
     return api_items
 
 
-def _get_doc_list():
+def _localized_doc_name(filepath: str, locale: str) -> str:
+    if locale != "zh-CN":
+        return filepath
+    path = Path(filepath)
+    return str(path.with_name(f"{path.stem}.zh-CN{path.suffix}"))
+
+
+def _find_localized_doc_variant(filepath: str) -> Path | None:
+    path = Path(filepath)
+    for candidate in sorted(DOCS_DIR.glob(f"{path.stem}.*{path.suffix}")):
+        if candidate.name != path.name:
+            return candidate
+    return None
+
+
+def _resolve_doc_target(filepath: str, locale: str) -> Path:
+    localized_target = DOCS_DIR / _localized_doc_name(filepath, locale)
+    if localized_target.exists():
+        return localized_target
+    default_target = DOCS_DIR / filepath
+    if default_target.exists():
+        return default_target
+    fallback_target = _find_localized_doc_variant(filepath)
+    if fallback_target is not None:
+        return fallback_target
+    return default_target
+
+
+def _logical_doc_path(filename: str) -> str:
+    return filename.replace(".zh-CN.md", ".md")
+
+
+def _read_doc_title(path: Path) -> str:
+    title = path.stem.replace("-", " ").replace("_", " ").title()
+    with path.open("r", encoding="utf-8") as handle:
+        first_line = handle.readline().strip()
+    if first_line.startswith("# "):
+        return first_line[2:].strip()
+    return title
+
+
+def _get_doc_list(locale: str):
     if not DOCS_DIR.exists():
         return []
-    docs = []
+    docs = {}
     for path in sorted(DOCS_DIR.glob("*.md")):
-        title = path.stem.replace("-", " ").replace("_", " ").title()
-        with path.open("r", encoding="utf-8") as handle:
-            first_line = handle.readline().strip()
-        if first_line.startswith("# "):
-            title = first_line[2:].strip()
-        docs.append({"path": path.name, "title": title})
-    return docs
+        logical_path = _logical_doc_path(path.name)
+        if logical_path in docs:
+            continue
+        title_source = _resolve_doc_target(logical_path, locale)
+        if not title_source.exists():
+            title_source = path
+        docs[logical_path] = {
+            "path": logical_path,
+            "title": _read_doc_title(title_source),
+        }
+    return list(docs.values())
 
 
 @app.route("/health")
@@ -340,7 +432,7 @@ def login():
         if user and user.get("status", db.USER_ACTIVE) == db.USER_ACTIVE:
             _login_user(user)
             return redirect(url_for("leaderboard"))
-        error = "Invalid username or password"
+        error = i18n.translate(g.locale, "login.invalid_credentials")
 
     return render_template("login.html", error=error)
 
@@ -358,7 +450,7 @@ def local_admin_login():
         if user:
             _login_user(user)
             return redirect(url_for("leaderboard"))
-        error = "Invalid username or password"
+        error = i18n.translate(g.locale, "login.invalid_credentials")
 
     return render_template("local_admin_login.html", error=error)
 
@@ -375,8 +467,18 @@ def leaderboard():
     return render_template("leaderboard.html")
 
 
+@app.route("/account")
+@auth_module.login_required
+def account():
+    account_user = db.get_user_by_id(session["user_id"])
+    if not account_user:
+        abort(404)
+    return render_template("account.html", account_user=account_user)
+
+
 @app.route("/users/<int:user_id>")
 @auth_module.login_required
+@auth_module.self_or_admin_required("user_id")
 def user_detail(user_id: int):
     window = _requested_user_detail_window()
     filters = _requested_filters()
@@ -393,7 +495,7 @@ def user_detail(user_id: int):
 
 
 @app.route("/settings", methods=["GET", "POST"])
-@auth_module.login_required
+@auth_module.admin_required
 def settings():
     message = None
     if request.method == "POST":
@@ -402,7 +504,7 @@ def settings():
         if project_title:
             db.set_setting("project_title", project_title)
             db.set_setting("project_subtitle", project_subtitle)
-            message = "Project settings updated"
+            message = i18n.translate(g.locale, "settings.updated")
     return render_template(
         "settings.html",
         users=db.get_all_users(),
@@ -424,9 +526,20 @@ def admin_ldap():
         if action == "test_connection":
             ok, ldap_error = ldap_auth.test_connection(ldap_settings)
             if ok:
-                message = "LDAP connection successful"
+                message = i18n.translate(g.locale, "admin_ldap.connection_successful")
             else:
-                error = ldap_error or "LDAP connection failed"
+                detail = (ldap_error or "").strip()
+                normalized = detail.lower()
+                if normalized.startswith("missing ldap settings:"):
+                    error = i18n.translate(g.locale, "admin_ldap.connection_failed_missing_settings")
+                elif normalized == "ldap bind failed":
+                    error = i18n.translate(g.locale, "admin_ldap.connection_failed_bind")
+                else:
+                    error = i18n.translate(
+                        g.locale,
+                        "admin_ldap.connection_failed_with_detail",
+                        detail=detail or i18n.translate(g.locale, "admin_ldap.connection_failed_generic"),
+                    )
         elif action == "sync_users":
             created_count = 0
             updated_count = 0
@@ -442,9 +555,12 @@ def admin_ldap():
                     updated_count += 1
                 else:
                     created_count += 1
-            message = (
-                f"Created {created_count} users, updated {updated_count} users, "
-                f"skipped {skipped_count} users"
+            message = i18n.translate(
+                g.locale,
+                "admin_ldap.sync_result",
+                created_count=created_count,
+                updated_count=updated_count,
+                skipped_count=skipped_count,
             )
         else:
             posted_bind_password = request.form.get("ldap_bind_password")
@@ -464,7 +580,7 @@ def admin_ldap():
                 db.set_setting(key, value)
             if posted_bind_password is not None and posted_bind_password != "":
                 db.set_setting("ldap_bind_password", posted_bind_password)
-            message = "LDAP settings updated"
+            message = i18n.translate(g.locale, "admin_ldap.settings_updated")
         ldap_settings = db.get_ldap_settings()
 
     return render_template(
@@ -488,23 +604,26 @@ def admin_users():
             if action == "rotate_hook_key":
                 user_id = int(request.form.get("user_id") or "0")
                 db.rotate_user_hook_key(user_id)
-                message = "Hook key rotated"
+                message = i18n.translate(g.locale, "admin_users.hook_key_rotated")
             elif action == "toggle_status":
                 user_id = int(request.form.get("user_id") or "0")
                 next_status = (request.form.get("status") or db.USER_ACTIVE).strip()
                 db.set_user_status(user_id, next_status)
-                message = "User status updated"
+                message = i18n.translate(g.locale, "admin_users.status_updated")
             else:
                 username = (request.form.get("username") or "").strip()
                 display_name = (request.form.get("display_name") or "").strip()
                 password = request.form.get("password") or ""
                 if not username or not password:
-                    error = "Username and password are required"
+                    error = i18n.translate(g.locale, "admin_users.required")
                 else:
                     db.create_user(username, password, display_name=display_name or username)
-                    message = f"User {username} created"
+                    message = i18n.translate(g.locale, "admin_users.created", username=username)
         except ValueError as exc:
-            error = str(exc)
+            if str(exc) == "Username already exists":
+                error = i18n.translate(g.locale, "admin_users.username_exists")
+            else:
+                error = i18n.translate(g.locale, "admin_users.error_with_detail", detail=str(exc))
 
     return render_template(
         "admin_users.html",
@@ -524,12 +643,39 @@ def admin_agents():
 @auth_module.login_required
 def api_change_password():
     """Change current user password"""
+    if (g.user or {}).get("auth_source", db.AUTH_SOURCE_LOCAL) == db.AUTH_SOURCE_LDAP:
+        return jsonify(
+            {
+                "success": False,
+                "error": i18n.translate(g.locale, "error.ldap_password_change_unavailable"),
+            }
+        ), 403
     data = request.get_json(silent=True) or {}
     new_password = (data.get("new_password") or "").strip()
     if not new_password:
-        return jsonify({"success": False, "error": "new_password is required"}), 400
+        return jsonify(
+            {
+                "success": False,
+                "error": i18n.translate(g.locale, "error.new_password_required"),
+            }
+        ), 400
     auth_module.change_password(session["user_id"], new_password)
     return jsonify({"success": True})
+
+
+@app.route("/api/account/rotate-hook-key", methods=["POST"])
+@auth_module.login_required
+def api_account_rotate_hook_key():
+    """Rotate current user hook key"""
+    db.rotate_user_hook_key(session["user_id"])
+    account_user = db.get_user_by_id(session["user_id"])
+    return jsonify(
+        {
+            "success": True,
+            "hook_key": account_user["hook_key"],
+            "hook_key_created_at": account_user["hook_key_created_at"],
+        }
+    )
 
 
 @app.route("/api/ingest/prompt-event", methods=["POST"])
@@ -644,6 +790,7 @@ def api_default_leaderboard():
 
 @app.route("/api/users/<int:user_id>/stats")
 @auth_module.login_required
+@auth_module.self_or_admin_required("user_id")
 def api_user_stats(user_id: int):
     """Get single user token statistics"""
     window = _requested_user_detail_window()
@@ -656,6 +803,7 @@ def api_user_stats(user_id: int):
 
 @app.route("/api/users/<int:user_id>/projects")
 @auth_module.login_required
+@auth_module.self_or_admin_required("user_id")
 def api_user_projects(user_id: int):
     """Get user token statistics grouped by project"""
     window = _requested_user_detail_window()
@@ -672,6 +820,7 @@ def api_user_projects(user_id: int):
 
 @app.route("/api/users/<int:user_id>/models")
 @auth_module.login_required
+@auth_module.self_or_admin_required("user_id")
 def api_user_models(user_id: int):
     """Get user token statistics grouped by model"""
     window = _requested_user_detail_window()
@@ -688,6 +837,7 @@ def api_user_models(user_id: int):
 
 @app.route("/api/users/<int:user_id>/timeline")
 @auth_module.login_required
+@auth_module.self_or_admin_required("user_id")
 def api_user_timeline(user_id: int):
     """Get user token usage timeline"""
     window = _requested_user_detail_window()
@@ -716,10 +866,10 @@ def api_user_timeline(user_id: int):
 
 
 @app.route("/api")
-@auth_module.login_required
+@auth_module.admin_required
 def api_list():
     """TokenLeague API list page"""
-    return render_template("api_list.html", apis=_build_api_list())
+    return render_template("api_list.html", apis=_build_api_list(locale=getattr(g, "locale", "en")))
 
 
 @app.route("/docs")
@@ -728,14 +878,14 @@ def api_list():
 def docs_page(filepath: str = "README.md"):
     if ".." in filepath or filepath.startswith("/"):
         return "Invalid path", 403
-    target = DOCS_DIR / filepath
+    target = _resolve_doc_target(filepath, g.locale)
     if not target.exists():
         raw_markdown = f"# Not Found\n\nMissing document: {filepath}"
     else:
         raw_markdown = target.read_text(encoding="utf-8")
     return render_template(
         "docs.html",
-        doc_list=_get_doc_list(),
+        doc_list=_get_doc_list(g.locale),
         current_doc=filepath,
         raw_markdown=raw_markdown,
     )

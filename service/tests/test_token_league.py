@@ -139,11 +139,130 @@ def _seed_user_detail_filter_data(monkeypatch, *, archive_event_days=2):
         db.upsert_task_run(1, task_payload)
 
 
+def _seed_minimal_user_usage(user_id):
+    import db
+
+    started_at = datetime(2026, 3, 24, 12, 0, 0, tzinfo=timezone.utc)
+    db.upsert_prompt_event(
+        user_id,
+        _prompt_payload("visibility-check-prompt", started_at, input_tokens=20, output_tokens=10),
+    )
+    db.upsert_task_run(
+        user_id,
+        _task_payload("visibility-check-task", started_at, prompt_count=1, input_tokens=20, output_tokens=10),
+    )
+
+
 def test_leaderboard_requires_login(client):
     response = client.get("/leaderboard")
 
     assert response.status_code == 302
     assert "/login" in response.headers["Location"]
+
+
+def test_normal_user_can_only_open_their_own_user_detail(user_session):
+    import db
+
+    alice = db.get_user_by_username("alice")
+    bob = db.create_user("bob", "secret123", display_name="Bob")
+    _seed_minimal_user_usage(alice["id"])
+
+    own_response = user_session.get(f"/users/{alice['id']}")
+    other_response = user_session.get(f"/users/{bob['id']}")
+
+    assert own_response.status_code == 200
+    assert other_response.status_code == 403
+    assert other_response.get_data(as_text=True) == "Forbidden"
+
+
+def test_normal_user_stats_api_rejects_other_user_ids(user_session):
+    import db
+
+    alice = db.get_user_by_username("alice")
+    bob = db.create_user("bob", "secret123", display_name="Bob")
+    _seed_minimal_user_usage(alice["id"])
+
+    own_response = user_session.get(f"/api/users/{alice['id']}/stats?window=month")
+    other_response = user_session.get(f"/api/users/{bob['id']}/stats?window=month")
+
+    assert own_response.status_code == 200
+    assert other_response.status_code == 403
+    assert other_response.get_json() == {"success": False, "error": "Forbidden"}
+
+
+def test_normal_user_shell_hides_admin_and_system_links(user_session):
+    response = user_session.get("/leaderboard")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Leaderboard" in html
+    assert "Docs" in html
+    assert "Settings" not in html
+    assert "API" not in html
+    assert "Admin Users" not in html
+
+
+def test_normal_user_shell_shows_account_menu_entry(user_session):
+    response = user_session.get("/leaderboard")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "/account" in html
+    assert "Alice" in html
+
+
+def test_disabled_user_session_is_revoked_from_leaderboard_and_detail(user_session):
+    import db
+
+    alice = db.get_user_by_username("alice")
+    _seed_minimal_user_usage(alice["id"])
+    db.set_user_status(alice["id"], db.USER_DISABLED)
+
+    leaderboard_response = user_session.get("/leaderboard")
+    detail_response = user_session.get(f"/users/{alice['id']}")
+
+    assert leaderboard_response.status_code == 302
+    assert "/login" in leaderboard_response.headers["Location"]
+    assert detail_response.status_code == 302
+    assert "/login" in detail_response.headers["Location"]
+
+    with user_session.session_transaction() as session:
+        assert "user_id" not in session
+        assert "role" not in session
+
+
+def test_normal_user_other_user_breakdown_apis_are_forbidden(user_session):
+    import db
+
+    alice = db.get_user_by_username("alice")
+    bob = db.create_user("bob", "secret123", display_name="Bob")
+    _seed_minimal_user_usage(alice["id"])
+
+    projects_response = user_session.get(f"/api/users/{bob['id']}/projects?window=month")
+    models_response = user_session.get(f"/api/users/{bob['id']}/models?window=month")
+    timeline_response = user_session.get(f"/api/users/{bob['id']}/timeline?window=month&granularity=day")
+
+    assert projects_response.status_code == 403
+    assert projects_response.get_json() == {"success": False, "error": "Forbidden"}
+    assert models_response.status_code == 403
+    assert models_response.get_json() == {"success": False, "error": "Forbidden"}
+    assert timeline_response.status_code == 403
+    assert timeline_response.get_json() == {"success": False, "error": "Forbidden"}
+
+
+def test_downgraded_admin_no_longer_sees_admin_nav(auth_session):
+    import db
+
+    db._memory_users[0]["role"] = "user"
+    response = auth_session.get("/leaderboard")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Settings" not in html
+    assert "API" not in html
+    assert "Admin Users" not in html
+    assert "LDAP" not in html
+    assert "Agent Catalog" not in html
 
 
 def test_default_leaderboard_snapshot_round_trip_in_memory():
@@ -793,7 +912,8 @@ def test_user_detail_defaults_to_week_window(auth_session, monkeypatch):
 
     assert response.status_code == 200
     html = response.get_data(as_text=True)
-    assert "within the selected week window" in html
+    assert "Past 7 Days" in html
+    assert "details in the selected" in html
     assert "let currentWindow = 'week';" in html
     assert "today-event" in html
     assert "yesterday-event" in html
@@ -810,7 +930,8 @@ def test_user_detail_page_uses_week_as_default_window(auth_session, monkeypatch)
 
     assert response.status_code == 200
     html = response.get_data(as_text=True)
-    assert "within the selected week window" in html
+    assert "Past 7 Days" in html
+    assert "details in the selected" in html
     assert "let currentWindow = 'week';" in html
     assert "const windowParam = 'week';" not in html
 
@@ -963,7 +1084,7 @@ def test_user_detail_day_window_aliases_to_today(auth_session, monkeypatch):
     day_html = day_response.get_data(as_text=True)
     today_html = today_response.get_data(as_text=True)
     assert day_html == today_html
-    assert "within the selected today window" in day_html
+    assert "details in the selected Today window." in day_html
     assert "let currentWindow = 'today';" in day_html
     assert "today-event" in day_html
     assert "yesterday-event" not in day_html
@@ -1125,7 +1246,7 @@ def test_user_detail_refresh_apis_honor_filters_with_quarter_window(auth_session
 
 
 def test_user_detail_page_renders_timeline_range_selector(auth_session):
-    response = auth_session.get("/users/1")
+    response = auth_session.get("/users/1", headers={"Accept-Language": "zh-CN,zh;q=0.9"})
 
     assert response.status_code == 200
     html = response.get_data(as_text=True)
@@ -1136,6 +1257,17 @@ def test_user_detail_page_renders_timeline_range_selector(auth_session):
     assert "granularity" in html
     assert "project_breakdown" in html
     assert "stacked: true" in html
+
+
+def test_user_detail_page_renders_english_timeline_range_selector_by_default(auth_session):
+    response = auth_session.get("/users/1")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Today" in html
+    assert "Past 7 Days" in html
+    assert "Past 30 Days" in html
+    assert "Past 90 Days" in html
 
 
 def test_compact_token_count_formats_human_readable_suffixes():

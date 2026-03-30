@@ -1,17 +1,17 @@
 {% extends "base.html" %}
 
-{% block title %}API List | Template Project{% endblock %}
+{% block title %}{{ t('api_list.title') }} | {{ project_title }}{% endblock %}
 
 {% block content %}
 <section class="card">
-    <h1 style="margin-top: 0;">API List</h1>
-    <p class="muted">This page is generated from the Flask route table.</p>
+    <h1 style="margin-top: 0;">{{ t('api_list.title') }}</h1>
+    <p class="muted">{{ t('api_list.description') }}</p>
     <table>
         <thead>
             <tr>
-                <th>Methods</th>
-                <th>Endpoint</th>
-                <th>Description</th>
+                <th>{{ t('api_list.methods') }}</th>
+                <th>{{ t('api_list.endpoint') }}</th>
+                <th>{{ t('api_list.description_header') }}</th>
             </tr>
         </thead>
         <tbody>

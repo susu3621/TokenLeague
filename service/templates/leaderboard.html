@@ -1,32 +1,32 @@
 {% extends "base.html" %}
 
-{% block title %}Leaderboard | {{ project_title }}{% endblock %}
+{% block title %}{{ t('leaderboard.title') }} | {{ project_title }}{% endblock %}
 
 {% block content %}
 <section class="stack">
     <div class="card">
-        <h1 class="hero-title">Token Leaderboard</h1>
-        <p class="muted" style="margin-top: 10px;">This page loads the latest precomputed default leaderboard snapshot. Rankings may be up to one hour behind the newest usage events.</p>
-        <p class="muted" data-leaderboard-last-updated>Last updated: pending</p>
-        <p class="muted" data-leaderboard-status>Loading leaderboard...</p>
+        <h1 class="hero-title">{{ t('leaderboard.title') }}</h1>
+        <p class="muted" style="margin-top: 10px;">{{ t('leaderboard.description') }}</p>
+        <p class="muted" data-leaderboard-last-updated>{{ t('leaderboard.last_updated', value=t('leaderboard.pending')) }}</p>
+        <p class="muted" data-leaderboard-status data-leaderboard-preparing-message="{{ t('leaderboard.preparing') }}">{{ t('leaderboard.loading') }}</p>
     </div>
 
     <div class="card">
         <table>
             <thead>
                 <tr>
-                    <th>Rank</th>
-                    <th>User</th>
-                    <th>Total Token</th>
-                    <th>Prompts</th>
-                    <th>Tasks</th>
-                    <th>Total Duration (ms)</th>
-                    <th>Last Active</th>
+                    <th>{{ t('leaderboard.rank') }}</th>
+                    <th>{{ t('leaderboard.user') }}</th>
+                    <th>{{ t('leaderboard.total_token') }}</th>
+                    <th>{{ t('leaderboard.prompts') }}</th>
+                    <th>{{ t('leaderboard.tasks') }}</th>
+                    <th>{{ t('leaderboard.total_duration_ms') }}</th>
+                    <th>{{ t('leaderboard.last_active') }}</th>
                 </tr>
             </thead>
             <tbody data-leaderboard-body>
                 <tr>
-                    <td colspan="7" class="muted">Loading leaderboard...</td>
+                    <td colspan="7" class="muted">{{ t('leaderboard.loading') }}</td>
                 </tr>
             </tbody>
         </table>
@@ -44,6 +44,17 @@
 
 {% block scripts %}
 <script>
+    const viewerUserId = {{ g.user["id"] if g.user else "null" }};
+    const viewerIsAdmin = {{ "true" if g.user and g.user.role == "admin" else "false" }};
+    const leaderboardMessages = {{ {
+        "pending": t("leaderboard.pending"),
+        "loading": t("leaderboard.loading"),
+        "preparing": t("leaderboard.preparing"),
+        "failed": t("leaderboard.failed"),
+        "last_updated": t("leaderboard.last_updated", value="__VALUE__"),
+        "utc_suffix": t("time.utc_suffix"),
+    } | tojson }};
+
     function escapeHtml(value) {
         return String(value ?? '')
             .replace(/&/g, '&amp;')
@@ -55,13 +66,24 @@
 
     function formatLastUpdated(value) {
         if (!value) {
-            return 'pending';
+            return leaderboardMessages.pending;
         }
         const date = new Date(value);
         if (Number.isNaN(date.getTime())) {
             return value;
         }
-        return `${date.toISOString().replace('T', ' ').slice(0, 19)} UTC`;
+        return `${date.toISOString().replace('T', ' ').slice(0, 19)} ${leaderboardMessages.utc_suffix}`;
+    }
+
+    function renderUserCell(row) {
+        const displayName = escapeHtml(row.display_name);
+        const username = escapeHtml(row.username);
+        const userId = Number(row.user_id);
+        const canLink = viewerIsAdmin || Number(viewerUserId) === userId;
+        if (!canLink) {
+            return `${displayName}<div class="muted">${username}</div>`;
+        }
+        return `<a href="/users/${encodeURIComponent(row.user_id)}">${displayName}</a><div class="muted">${username}</div>`;
     }
 
     function renderLeaderboardRows(rows) {
@@ -70,13 +92,13 @@
             return;
         }
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="7" class="muted">Leaderboard is being prepared</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="7" class="muted">${escapeHtml(leaderboardMessages.preparing)}</td></tr>`;
             return;
         }
         tbody.innerHTML = rows.map((row) => `
             <tr>
                 <td>${escapeHtml(row.rank)}</td>
-                <td><a href="/users/${encodeURIComponent(row.user_id)}">${escapeHtml(row.display_name)}</a><div class="muted">${escapeHtml(row.username)}</div></td>
+                <td>${renderUserCell(row)}</td>
                 <td>${escapeHtml(row.total_token_count)}</td>
                 <td>${escapeHtml(row.prompt_count)}</td>
                 <td>${escapeHtml(row.task_count)}</td>
@@ -100,7 +122,7 @@
         if (!lastUpdated) {
             return;
         }
-        lastUpdated.textContent = `Last updated: ${formatLastUpdated(value)}`;
+        lastUpdated.textContent = leaderboardMessages.last_updated.replace('__VALUE__', formatLastUpdated(value));
     }
 
     async function loadDefaultLeaderboard() {
@@ -112,17 +134,17 @@
             const payload = await response.json();
             renderLeaderboardLastUpdated(payload.generated_at);
             if (!payload.generated_at && !(payload.rows || []).length) {
-                renderLeaderboardStatus('Leaderboard is being prepared');
+                renderLeaderboardStatus(leaderboardMessages.preparing);
                 renderLeaderboardRows([]);
                 return;
             }
             renderLeaderboardStatus('');
             renderLeaderboardRows(payload.rows || []);
         } catch (error) {
-            renderLeaderboardStatus('Failed to load leaderboard', true);
+            renderLeaderboardStatus(leaderboardMessages.failed, true);
             const tbody = document.querySelector('[data-leaderboard-body]');
             if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="7" class="muted">Failed to load leaderboard</td></tr>';
+                tbody.innerHTML = `<tr><td colspan="7" class="muted">${escapeHtml(leaderboardMessages.failed)}</td></tr>`;
             }
         }
     }

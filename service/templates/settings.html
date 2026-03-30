@@ -1,38 +1,38 @@
 {% extends "base.html" %}
 
-{% block title %}Settings | {{ project_title }}{% endblock %}
+{% block title %}{{ t('settings.title') }} | {{ project_title }}{% endblock %}
 
 {% block content %}
 <section class="stack">
     <div class="card">
-        <h1 style="margin-top: 0;">League Settings</h1>
-        <p class="muted">Configure the TokenLeague shell title and subtitle shown across the authenticated pages.</p>
+        <h1 style="margin-top: 0;">{{ t('settings.title') }}</h1>
+        <p class="muted">{{ t('settings.description') }}</p>
         {% if message %}
         <p style="color: #027a48;">{{ message }}</p>
         {% endif %}
         <form method="POST" class="stack">
             <div>
-                <label for="project_title">Project title</label>
+                <label for="project_title">{{ t('settings.project_title') }}</label>
                 <input id="project_title" name="project_title" value="{{ project_title }}">
             </div>
             <div>
-                <label for="project_subtitle">Project subtitle</label>
+                <label for="project_subtitle">{{ t('settings.project_subtitle') }}</label>
                 <input id="project_subtitle" name="project_subtitle" value="{{ project_subtitle }}">
             </div>
-            <button class="btn-primary" type="submit">Save</button>
+            <button class="btn-primary" type="submit">{{ t('settings.save') }}</button>
         </form>
     </div>
 
     <div class="card">
-        <h2 style="margin-top: 0;">Current Users</h2>
+        <h2 style="margin-top: 0;">{{ t('settings.current_users') }}</h2>
         <table>
             <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>Display Name</th>
-                    <th>Username</th>
-                    <th>Role</th>
-                    <th>Status</th>
+                    <th>{{ t('settings.id') }}</th>
+                    <th>{{ t('settings.display_name') }}</th>
+                    <th>{{ t('settings.username') }}</th>
+                    <th>{{ t('settings.role') }}</th>
+                    <th>{{ t('settings.status') }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -41,8 +41,8 @@
                     <td>{{ user.id }}</td>
                     <td>{{ user.display_name }}</td>
                     <td>{{ user.username }}</td>
-                    <td>{{ user.role }}</td>
-                    <td>{{ user.status }}</td>
+                    <td>{{ t('enum.role.' ~ user.role) }}</td>
+                    <td>{{ t('enum.status.' ~ user.status) }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

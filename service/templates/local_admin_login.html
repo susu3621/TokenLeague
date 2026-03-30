@@ -1,24 +1,24 @@
 {% extends "base.html" %}
 
-{% block title %}Local Admin Login | {{ project_title }}{% endblock %}
+{% block title %}{{ t('local_admin.title') }} | {{ project_title }}{% endblock %}
 
 {% block content %}
 <section class="card" style="max-width: 440px; margin: 40px auto;">
-    <h1 style="margin-top: 0;">Local Admin Recovery</h1>
-    <p class="muted">Use this page only when LDAP login is unavailable and you need to repair the LDAP configuration.</p>
+    <h1 style="margin-top: 0;">{{ t('local_admin.title') }}</h1>
+    <p class="muted">{{ t('local_admin.description') }}</p>
     {% if error %}
     <p style="color: #b42318;">{{ error }}</p>
     {% endif %}
     <form method="POST" class="stack">
         <div>
-            <label for="username">Username</label>
+            <label for="username">{{ t('login.username') }}</label>
             <input id="username" name="username" value="admin" required>
         </div>
         <div>
-            <label for="password">Password</label>
+            <label for="password">{{ t('login.password') }}</label>
             <input id="password" name="password" type="password" required>
         </div>
-        <button class="btn-primary" type="submit">Sign in as local admin</button>
+        <button class="btn-primary" type="submit">{{ t('local_admin.submit') }}</button>
     </form>
 </section>
 {% endblock %}

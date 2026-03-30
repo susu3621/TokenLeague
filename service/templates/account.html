@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('account.title') }} | {{ project_title }}{% endblock %}
+
+{% block content %}
+<section class="stack account-page">
+    <div class="card">
+        <h1 class="hero-title">{{ t('account.title') }}</h1>
+        <p class="muted" style="margin-top: 10px;">{{ t('account.description') }}</p>
+    </div>
+
+    <div class="card stack">
+        <div>
+            <h2 style="margin-top: 0;">{{ t('account.api_heading') }}</h2>
+            <p class="muted">{{ t('account.api_description') }}</p>
+        </div>
+
+        <div class="stack">
+            <div>
+                <label for="hook_key">{{ t('account.current_key_label') }}</label>
+                <input
+                    id="hook_key"
+                    data-account-hook-key
+                    type="text"
+                    value="{{ account_user.hook_key }}"
+                    readonly
+                    spellcheck="false"
+                    autocomplete="off"
+                >
+            </div>
+
+            <p class="muted" data-account-hook-key-created-at>
+                {{ t('account.generated', value=format_utc_timestamp(account_user.hook_key_created_at)) }}
+            </p>
+
+            <div class="account-actions">
+                <button type="button" class="btn-primary" data-account-copy-key>{{ t('account.copy') }}</button>
+                <button type="button" data-account-rotate-key>{{ t('account.rotate') }}</button>
+            </div>
+
+            <p class="muted" data-account-key-status aria-live="polite"></p>
+        </div>
+    </div>
+
+    {% if account_user.auth_source != 'ldap' %}
+    <div class="card stack">
+        <div>
+            <h2 style="margin-top: 0;">{{ t('account.password_heading') }}</h2>
+            <p class="muted">{{ t('account.password_description') }}</p>
+        </div>
+
+        <form class="stack" data-account-password-form>
+            <div>
+                <label for="new_password">{{ t('account.password_label') }}</label>
+                <input id="new_password" name="new_password" type="password" autocomplete="new-password" required>
+            </div>
+
+            <div class="account-actions">
+                <button class="btn-primary" type="submit">{{ t('account.password_submit') }}</button>
+            </div>
+        </form>
+
+        <p class="muted" data-account-password-status aria-live="polite"></p>
+    </div>
+    {% else %}
+    <div class="card stack">
+        <div>
+            <h2 style="margin-top: 0;">{{ t('account.password_heading') }}</h2>
+            <p class="muted">{{ t('account.password_ldap_description') }}</p>
+        </div>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block styles %}
+<style>
+    .account-page {
+        max-width: 760px;
+    }
+
+    .account-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .account-actions button {
+        width: auto;
+    }
+
+    [data-account-hook-key] {
+        font-family: monospace;
+    }
+
+    .account-status-error {
+        color: #b42318;
+    }
+
+    .account-status-success {
+        color: #027a48;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const accountMessages = {{ {
+        "copied": t("account.copied"),
+        "copy_failed": t("account.copy_failed"),
+        "rotating": t("account.rotating"),
+        "rotated": t("account.rotated"),
+        "rotate_failed": t("account.rotate_failed"),
+        "password_required": t("account.password_required"),
+        "password_saving": t("account.password_saving"),
+        "password_save_failed": t("account.password_save_failed"),
+        "password_updated": t("account.password_updated"),
+        "generated": t("account.generated", value="__VALUE__"),
+        "utc_suffix": t("time.utc_suffix"),
+    } | tojson }};
+    const hookKeyInput = document.querySelector('[data-account-hook-key]');
+    const hookKeyCreatedAt = document.querySelector('[data-account-hook-key-created-at]');
+    const copyButton = document.querySelector('[data-account-copy-key]');
+    const rotateButton = document.querySelector('[data-account-rotate-key]');
+    const keyStatus = document.querySelector('[data-account-key-status]');
+    function setStatus(element, message, isError = false) {
+        if (!element) {
+            return;
+        }
+        element.textContent = message;
+        element.classList.toggle('account-status-error', isError);
+        element.classList.toggle('account-status-success', !isError && Boolean(message));
+    }
+
+    function formatTimestamp(value) {
+        if (!value) {
+            return {{ t("account.unknown") | tojson }};
+        }
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return value;
+        }
+        return `${date.toISOString().replace('T', ' ').slice(0, 19)} ${accountMessages.utc_suffix}`;
+    }
+
+    function updateHookKey(payload) {
+        if (hookKeyInput && payload.hook_key) {
+            hookKeyInput.value = payload.hook_key;
+        }
+        if (hookKeyCreatedAt) {
+            hookKeyCreatedAt.textContent = accountMessages.generated.replace('__VALUE__', formatTimestamp(payload.hook_key_created_at));
+        }
+    }
+
+    copyButton?.addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText(hookKeyInput?.value || '');
+            setStatus(keyStatus, accountMessages.copied);
+        } catch (error) {
+            setStatus(keyStatus, accountMessages.copy_failed, true);
+        }
+    });
+
+    rotateButton?.addEventListener('click', async () => {
+        setStatus(keyStatus, accountMessages.rotating);
+        rotateButton.disabled = true;
+        try {
+            const response = await fetch('/api/account/rotate-hook-key', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.success) {
+                throw new Error(payload.error || `HTTP ${response.status}`);
+            }
+            updateHookKey(payload);
+            setStatus(keyStatus, accountMessages.rotated);
+        } catch (error) {
+            setStatus(keyStatus, error.message || accountMessages.rotate_failed, true);
+        } finally {
+            rotateButton.disabled = false;
+        }
+    });
+
+    {% if account_user.auth_source != 'ldap' %}
+    const passwordForm = document.querySelector('[data-account-password-form]');
+    const passwordInput = document.getElementById('new_password');
+    const passwordStatus = document.querySelector('[data-account-password-status]');
+
+    passwordForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const submitButton = passwordForm.querySelector('button[type="submit"]');
+        const newPassword = (passwordInput?.value || '').trim();
+        if (!newPassword) {
+            setStatus(passwordStatus, accountMessages.password_required, true);
+            return;
+        }
+
+        setStatus(passwordStatus, accountMessages.password_saving);
+        if (submitButton) {
+            submitButton.disabled = true;
+        }
+        try {
+            const response = await fetch('/api/change-password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({new_password: newPassword}),
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.success) {
+                throw new Error(payload.error || `HTTP ${response.status}`);
+            }
+
+            if (passwordInput) {
+                passwordInput.value = '';
+            }
+            setStatus(passwordStatus, accountMessages.password_updated);
+        } catch (error) {
+            setStatus(passwordStatus, error.message || accountMessages.password_save_failed, true);
+        } finally {
+            if (submitButton) {
+                submitButton.disabled = false;
+            }
+        }
+    });
+    {% endif %}
+</script>
+{% endblock %}
