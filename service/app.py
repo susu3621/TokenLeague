@@ -336,18 +336,49 @@ def _build_api_list(locale: str = "en"):
     return api_items
 
 
-def _get_doc_list():
+def _localized_doc_name(filepath: str, locale: str) -> str:
+    if locale != "zh-CN":
+        return filepath
+    path = Path(filepath)
+    return str(path.with_name(f"{path.stem}.zh-CN{path.suffix}"))
+
+
+def _resolve_doc_target(filepath: str, locale: str) -> Path:
+    localized_target = DOCS_DIR / _localized_doc_name(filepath, locale)
+    if localized_target.exists():
+        return localized_target
+    return DOCS_DIR / filepath
+
+
+def _logical_doc_path(filename: str) -> str:
+    return filename.replace(".zh-CN.md", ".md")
+
+
+def _read_doc_title(path: Path) -> str:
+    title = path.stem.replace("-", " ").replace("_", " ").title()
+    with path.open("r", encoding="utf-8") as handle:
+        first_line = handle.readline().strip()
+    if first_line.startswith("# "):
+        return first_line[2:].strip()
+    return title
+
+
+def _get_doc_list(locale: str):
     if not DOCS_DIR.exists():
         return []
-    docs = []
+    docs = {}
     for path in sorted(DOCS_DIR.glob("*.md")):
-        title = path.stem.replace("-", " ").replace("_", " ").title()
-        with path.open("r", encoding="utf-8") as handle:
-            first_line = handle.readline().strip()
-        if first_line.startswith("# "):
-            title = first_line[2:].strip()
-        docs.append({"path": path.name, "title": title})
-    return docs
+        logical_path = _logical_doc_path(path.name)
+        if logical_path in docs:
+            continue
+        title_source = _resolve_doc_target(logical_path, locale)
+        if not title_source.exists():
+            title_source = DOCS_DIR / logical_path
+        docs[logical_path] = {
+            "path": logical_path,
+            "title": _read_doc_title(title_source),
+        }
+    return list(docs.values())
 
 
 @app.route("/health")
@@ -833,14 +864,14 @@ def api_list():
 def docs_page(filepath: str = "README.md"):
     if ".." in filepath or filepath.startswith("/"):
         return "Invalid path", 403
-    target = DOCS_DIR / filepath
+    target = _resolve_doc_target(filepath, g.locale)
     if not target.exists():
         raw_markdown = f"# Not Found\n\nMissing document: {filepath}"
     else:
         raw_markdown = target.read_text(encoding="utf-8")
     return render_template(
         "docs.html",
-        doc_list=_get_doc_list(),
+        doc_list=_get_doc_list(g.locale),
         current_doc=filepath,
         raw_markdown=raw_markdown,
     )
