@@ -12,14 +12,14 @@
         {% endif %}
         <form method="POST" class="stack">
             <div>
-                <label for="project_title">Project title</label>
+                <label for="project_title">{{ t('settings.project_title') }}</label>
                 <input id="project_title" name="project_title" value="{{ project_title }}">
             </div>
             <div>
-                <label for="project_subtitle">Project subtitle</label>
+                <label for="project_subtitle">{{ t('settings.project_subtitle') }}</label>
                 <input id="project_subtitle" name="project_subtitle" value="{{ project_subtitle }}">
             </div>
-            <button class="btn-primary" type="submit">Save</button>
+            <button class="btn-primary" type="submit">{{ t('settings.save') }}</button>
         </form>
     </div>
 
@@ -29,8 +29,8 @@
             <thead>
                 <tr>
                     <th>ID</th>
-                    <th>Display Name</th>
-                    <th>Username</th>
+                    <th>{{ t('settings.display_name') }}</th>
+                    <th>{{ t('settings.username') }}</th>
                     <th>Role</th>
                     <th>Status</th>
                 </tr>

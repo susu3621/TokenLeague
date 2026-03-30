@@ -102,16 +102,58 @@ MESSAGES = {
         "settings.title": "League Settings",
         "settings.description": "Configure the TokenLeague shell title and subtitle shown across the authenticated pages.",
         "settings.current_users": "Current Users",
+        "settings.project_title": "Project title",
+        "settings.project_subtitle": "Project subtitle",
+        "settings.save": "Save",
+        "settings.display_name": "Display Name",
+        "settings.username": "Username",
         "api_list.title": "API List",
         "api_list.description": "This page is generated from the Flask route table.",
+        "api_list.methods": "Methods",
+        "api_list.endpoint": "Endpoint",
+        "api_list.description_header": "Description",
         "admin_users.title": "Admin Users",
         "admin_users.description": "Create ranked users and rotate their dedicated ingestion hook keys.",
+        "admin_users.display_name": "Display Name",
+        "admin_users.username": "Username",
+        "admin_users.password": "Password",
+        "admin_users.create_user": "Create User",
+        "admin_users.hook_key": "Hook Key",
+        "admin_users.actions": "Actions",
+        "admin_users.rotate_hook_key": "Rotate Hook Key",
+        "admin_users.disable": "Disable",
+        "admin_users.enable": "Enable",
         "admin_ldap.title": "LDAP Settings",
         "admin_ldap.description": "Configure LDAP authentication, test the connection, and sync directory users into the local user table.",
         "admin_ldap.directory_actions": "Directory Actions",
         "admin_ldap.current_local_users": "Current Local Users",
+        "admin_ldap.enable_ldap": "Enable LDAP",
+        "admin_ldap.host": "Host",
+        "admin_ldap.port": "Port",
+        "admin_ldap.use_ssl": "Use SSL",
+        "admin_ldap.start_tls": "Start TLS",
+        "admin_ldap.bind_dn": "Bind DN",
+        "admin_ldap.bind_password": "Bind Password",
+        "admin_ldap.bind_password_placeholder_stored": "Stored password unchanged when left blank",
+        "admin_ldap.bind_password_placeholder_new": "Enter bind password",
+        "admin_ldap.base_dn": "Base DN",
+        "admin_ldap.user_filter": "User Filter",
+        "admin_ldap.username_attribute": "Username Attribute",
+        "admin_ldap.display_name_attribute": "Display Name Attribute",
+        "admin_ldap.save_configuration": "Save Configuration",
+        "admin_ldap.test_connection": "Test Connection",
+        "admin_ldap.sync_users": "Sync LDAP Users",
+        "admin_ldap.auth_source": "Auth Source",
+        "admin_ldap.ldap_dn": "LDAP DN",
+        "admin_ldap.last_synced": "Last Synced",
         "admin_agents.title": "Agent Catalog",
         "admin_agents.description": "Observed combinations of agent type, version, and model from usage ingestion.",
+        "admin_agents.agent_type": "Agent Type",
+        "admin_agents.version": "Version",
+        "admin_agents.model": "Model",
+        "admin_agents.prompt_events": "Prompt Events",
+        "admin_agents.task_runs": "Task Runs",
+        "admin_agents.empty": "No agent activity recorded yet.",
     },
     "zh-CN": {
         "nav.leaderboard": "排行榜",
@@ -214,25 +256,86 @@ MESSAGES = {
         "settings.title": "系统设置",
         "settings.description": "配置已登录页面中显示的 TokenLeague 标题和副标题。",
         "settings.current_users": "当前用户",
+        "settings.project_title": "项目标题",
+        "settings.project_subtitle": "项目副标题",
+        "settings.save": "保存",
+        "settings.display_name": "显示名称",
+        "settings.username": "用户名",
         "api_list.title": "接口列表",
         "api_list.description": "此页面根据 Flask 路由表自动生成。",
+        "api_list.methods": "方法",
+        "api_list.endpoint": "端点",
+        "api_list.description_header": "说明",
         "admin_users.title": "用户管理",
         "admin_users.description": "创建排行榜用户，并轮换他们专用的上报 Hook Key。",
+        "admin_users.display_name": "显示名称",
+        "admin_users.username": "用户名",
+        "admin_users.password": "密码",
+        "admin_users.create_user": "创建用户",
+        "admin_users.hook_key": "Hook Key",
+        "admin_users.actions": "操作",
+        "admin_users.rotate_hook_key": "轮换 Hook Key",
+        "admin_users.disable": "禁用",
+        "admin_users.enable": "启用",
         "admin_ldap.title": "LDAP 设置",
         "admin_ldap.description": "配置 LDAP 认证、测试连接，并将目录用户同步到本地用户表。",
         "admin_ldap.directory_actions": "目录操作",
         "admin_ldap.current_local_users": "当前本地用户",
+        "admin_ldap.enable_ldap": "启用 LDAP",
+        "admin_ldap.host": "主机",
+        "admin_ldap.port": "端口",
+        "admin_ldap.use_ssl": "使用 SSL",
+        "admin_ldap.start_tls": "启用 Start TLS",
+        "admin_ldap.bind_dn": "绑定 DN",
+        "admin_ldap.bind_password": "绑定密码",
+        "admin_ldap.bind_password_placeholder_stored": "留空则保持已存储密码不变",
+        "admin_ldap.bind_password_placeholder_new": "输入绑定密码",
+        "admin_ldap.base_dn": "基础 DN",
+        "admin_ldap.user_filter": "用户过滤器",
+        "admin_ldap.username_attribute": "用户名属性",
+        "admin_ldap.display_name_attribute": "显示名称属性",
+        "admin_ldap.save_configuration": "保存配置",
+        "admin_ldap.test_connection": "测试连接",
+        "admin_ldap.sync_users": "同步 LDAP 用户",
+        "admin_ldap.auth_source": "认证来源",
+        "admin_ldap.ldap_dn": "LDAP DN",
+        "admin_ldap.last_synced": "上次同步",
         "admin_agents.title": "Agent 目录",
         "admin_agents.description": "这里展示用量上报中观察到的 Agent 类型、版本和模型组合。",
+        "admin_agents.agent_type": "Agent 类型",
+        "admin_agents.version": "版本",
+        "admin_agents.model": "模型",
+        "admin_agents.prompt_events": "Prompt 事件数",
+        "admin_agents.task_runs": "任务运行数",
+        "admin_agents.empty": "尚未记录任何 Agent 活动。",
     },
 }
 
 
 def resolve_locale(header_value: str | None) -> str:
-    for raw_part in (header_value or "").split(","):
-        code = raw_part.split(";")[0].strip().lower()
+    candidates = []
+    for index, raw_part in enumerate((header_value or "").split(",")):
+        segment = raw_part.strip()
+        if not segment:
+            continue
+        parts = [item.strip() for item in segment.split(";") if item.strip()]
+        code = parts[0].lower()
+        quality = 1.0
+        for option in parts[1:]:
+            if not option.lower().startswith("q="):
+                continue
+            try:
+                quality = float(option.split("=", 1)[1])
+            except ValueError:
+                quality = 0.0
+            break
+        candidates.append((quality, -index, code))
+
+    for _, _, code in sorted(candidates, reverse=True):
         if code.startswith("zh"):
             return "zh-CN"
+        if code.startswith("en"):
+            return "en"
     return "en"
 
 

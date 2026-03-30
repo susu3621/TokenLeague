@@ -16,18 +16,18 @@
         <form method="POST" class="stack">
             <input type="hidden" name="action" value="create_user">
             <div>
-                <label for="display_name">Display Name</label>
+                <label for="display_name">{{ t('admin_users.display_name') }}</label>
                 <input id="display_name" name="display_name" placeholder="Alice">
             </div>
             <div>
-                <label for="username">Username</label>
+                <label for="username">{{ t('admin_users.username') }}</label>
                 <input id="username" name="username" placeholder="alice">
             </div>
             <div>
-                <label for="password">Password</label>
+                <label for="password">{{ t('admin_users.password') }}</label>
                 <input id="password" name="password" type="password" required>
             </div>
-            <button class="btn-primary" type="submit">Create User</button>
+            <button class="btn-primary" type="submit">{{ t('admin_users.create_user') }}</button>
         </form>
     </div>
 
@@ -36,11 +36,11 @@
             <thead>
                 <tr>
                     <th>ID</th>
-                    <th>Display Name</th>
-                    <th>Username</th>
+                    <th>{{ t('admin_users.display_name') }}</th>
+                    <th>{{ t('admin_users.username') }}</th>
                     <th>Status</th>
-                    <th>Hook Key</th>
-                    <th>Actions</th>
+                    <th>{{ t('admin_users.hook_key') }}</th>
+                    <th>{{ t('admin_users.actions') }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -55,14 +55,14 @@
                         <form method="POST" class="inline-form">
                             <input type="hidden" name="action" value="rotate_hook_key">
                             <input type="hidden" name="user_id" value="{{ user.id }}">
-                            <button type="submit">Rotate Hook Key</button>
+                            <button type="submit">{{ t('admin_users.rotate_hook_key') }}</button>
                         </form>
                         {% if user.role != 'admin' %}
                         <form method="POST" class="inline-form">
                             <input type="hidden" name="action" value="toggle_status">
                             <input type="hidden" name="user_id" value="{{ user.id }}">
                             <input type="hidden" name="status" value="{{ 'disabled' if user.status == 'active' else 'active' }}">
-                            <button type="submit">{{ 'Disable' if user.status == 'active' else 'Enable' }}</button>
+                            <button type="submit">{{ t('admin_users.disable') if user.status == 'active' else t('admin_users.enable') }}</button>
                         </form>
                         {% endif %}
                     </td>

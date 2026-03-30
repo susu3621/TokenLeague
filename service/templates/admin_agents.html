@@ -13,11 +13,11 @@
         <table>
             <thead>
                 <tr>
-                    <th>Agent Type</th>
-                    <th>Version</th>
-                    <th>Model</th>
-                    <th>Prompt Events</th>
-                    <th>Task Runs</th>
+                    <th>{{ t('admin_agents.agent_type') }}</th>
+                    <th>{{ t('admin_agents.version') }}</th>
+                    <th>{{ t('admin_agents.model') }}</th>
+                    <th>{{ t('admin_agents.prompt_events') }}</th>
+                    <th>{{ t('admin_agents.task_runs') }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -31,7 +31,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="5" class="muted">No agent activity recorded yet.</td>
+                    <td colspan="5" class="muted">{{ t('admin_agents.empty') }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

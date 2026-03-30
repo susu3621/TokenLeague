@@ -912,7 +912,8 @@ def test_user_detail_defaults_to_week_window(auth_session, monkeypatch):
 
     assert response.status_code == 200
     html = response.get_data(as_text=True)
-    assert "within the selected week window" in html
+    assert "Past 7 Days" in html
+    assert "details in the selected" in html
     assert "let currentWindow = 'week';" in html
     assert "today-event" in html
     assert "yesterday-event" in html
@@ -929,7 +930,8 @@ def test_user_detail_page_uses_week_as_default_window(auth_session, monkeypatch)
 
     assert response.status_code == 200
     html = response.get_data(as_text=True)
-    assert "within the selected week window" in html
+    assert "Past 7 Days" in html
+    assert "details in the selected" in html
     assert "let currentWindow = 'week';" in html
     assert "const windowParam = 'week';" not in html
 
