@@ -39,6 +39,8 @@ python3 scripts/init_db.py --admin-password <your-password>
 python -m service.app
 ```
 
+如果你使用 Docker Compose 部署，`web` 容器之外还会有一个独立 `worker` 容器。它会在启动时立即刷新一次默认排行榜快照，之后每 1 小时刷新一次。`/leaderboard` 页面只读取这份预计算快照，因此登录后的落地页不会再同步扫描全量历史事件。
+
 访问 `http://localhost:5006/login`
 
 默认测试账号：

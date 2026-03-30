@@ -199,6 +199,19 @@ def main():
         """
     )
 
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS leaderboard_snapshots (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            snapshot_key VARCHAR(128) NOT NULL UNIQUE,
+            generated_at DATETIME NULL,
+            rows_json JSON NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """
+    )
+
     conn.commit()
 
     cursor.execute("SELECT id, hook_key FROM users WHERE username = 'admin' LIMIT 1")

@@ -9,3 +9,14 @@ services:
       PORT: 5006
     ports:
       - "5006:5006"
+  worker:
+    build: .
+    env_file:
+      - .env
+    restart: unless-stopped
+    depends_on:
+      - web
+    command:
+      - bash
+      - -lc
+      - python3 /app/scripts/run_leaderboard_snapshot_worker.py

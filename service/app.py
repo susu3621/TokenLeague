@@ -372,15 +372,7 @@ def logout():
 @app.route("/leaderboard")
 @auth_module.login_required
 def leaderboard():
-    window = _requested_window()
-    filters = _requested_filters()
-    rows = db.get_leaderboard(window=window, filters=filters)
-    return render_template(
-        "leaderboard.html",
-        window=window,
-        filters=filters,
-        rows=rows,
-    )
+    return render_template("leaderboard.html")
 
 
 @app.route("/users/<int:user_id>")
@@ -632,6 +624,20 @@ def api_leaderboard():
             "window": window,
             "filters": filters,
             "rows": db.get_leaderboard(window=window, filters=filters),
+        }
+    )
+
+
+@app.route("/api/leaderboard/default")
+@auth_module.login_required
+def api_default_leaderboard():
+    snapshot = db.get_leaderboard_snapshot()
+    return jsonify(
+        {
+            "success": True,
+            "snapshot_key": snapshot["snapshot_key"],
+            "generated_at": db._serialize_datetime(snapshot["generated_at"]),
+            "rows": snapshot["rows"],
         }
     )
 

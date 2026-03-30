@@ -18,6 +18,7 @@ AUTH_SOURCE_LOCAL = "local"
 AUTH_SOURCE_LDAP = "ldap"
 DEFAULT_PROJECT_TITLE = "TokenLeague"
 DEFAULT_PROJECT_SUBTITLE = "Rank users by token usage across agent runs"
+DEFAULT_LEADERBOARD_SNAPSHOT_KEY = "default_all_time"
 USER_DETAIL_WINDOW_DAY_COUNTS = {
     "week": 7,
     "month": 30,
@@ -144,10 +145,11 @@ _memory_users: list[dict[str, Any]] = []
 _memory_settings: dict[str, str] = {}
 _memory_prompt_events: list[dict[str, Any]] = []
 _memory_task_runs: list[dict[str, Any]] = []
+_memory_leaderboard_snapshots: dict[str, dict[str, Any]] = {}
 
 
 def reset_in_memory_state() -> None:
-    global _memory_users, _memory_settings, _memory_prompt_events, _memory_task_runs
+    global _memory_users, _memory_settings, _memory_prompt_events, _memory_task_runs, _memory_leaderboard_snapshots
     _memory_users = [dict(user) for user in _build_default_users()]
     _memory_settings = {
         "project_title": DEFAULT_PROJECT_TITLE,
@@ -155,6 +157,7 @@ def reset_in_memory_state() -> None:
     }
     _memory_prompt_events = []
     _memory_task_runs = []
+    _memory_leaderboard_snapshots = {}
 
 
 reset_in_memory_state()
@@ -445,6 +448,101 @@ def get_setting(key: str):
     cursor.close()
     conn.close()
     return row["setting_value"] if row else None
+
+
+def _clone_snapshot_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return json.loads(json.dumps(rows))
+
+
+def get_leaderboard_snapshot(snapshot_key: str = DEFAULT_LEADERBOARD_SNAPSHOT_KEY) -> dict[str, Any]:
+    if use_in_memory_store():
+        snapshot = _memory_leaderboard_snapshots.get(snapshot_key)
+        if not snapshot:
+            return {
+                "snapshot_key": snapshot_key,
+                "generated_at": None,
+                "rows": [],
+            }
+        return {
+            "snapshot_key": snapshot["snapshot_key"],
+            "generated_at": _parse_datetime(snapshot.get("generated_at")),
+            "rows": _clone_snapshot_rows(snapshot.get("rows") or []),
+        }
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """
+        SELECT snapshot_key, generated_at, rows_json
+        FROM leaderboard_snapshots
+        WHERE snapshot_key = %s
+        """,
+        (snapshot_key,),
+    )
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    if not row:
+        return {
+            "snapshot_key": snapshot_key,
+            "generated_at": None,
+            "rows": [],
+        }
+
+    rows_value = row.get("rows_json")
+    if isinstance(rows_value, str):
+        rows = json.loads(rows_value or "[]")
+    elif isinstance(rows_value, list):
+        rows = rows_value
+    else:
+        rows = []
+    return {
+        "snapshot_key": str(row.get("snapshot_key") or snapshot_key),
+        "generated_at": _parse_datetime(row.get("generated_at")),
+        "rows": rows,
+    }
+
+
+def save_leaderboard_snapshot(
+    snapshot_key: str,
+    rows: list[dict[str, Any]],
+    generated_at: datetime,
+) -> dict[str, Any]:
+    normalized_generated_at = _to_storage_datetime(generated_at)
+    normalized_rows = _clone_snapshot_rows(rows)
+
+    if use_in_memory_store():
+        _memory_leaderboard_snapshots[snapshot_key] = {
+            "snapshot_key": snapshot_key,
+            "generated_at": normalized_generated_at,
+            "rows": normalized_rows,
+        }
+        return get_leaderboard_snapshot(snapshot_key)
+
+    now = _utcnow()
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO leaderboard_snapshots (snapshot_key, generated_at, rows_json, created_at, updated_at)
+        VALUES (%s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+            generated_at = VALUES(generated_at),
+            rows_json = VALUES(rows_json),
+            updated_at = VALUES(updated_at)
+        """,
+        (
+            snapshot_key,
+            normalized_generated_at.replace(tzinfo=None) if normalized_generated_at else None,
+            json.dumps(normalized_rows),
+            now.replace(tzinfo=None),
+            now.replace(tzinfo=None),
+        ),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return get_leaderboard_snapshot(snapshot_key)
 
 
 def get_ldap_settings() -> dict[str, Any]:

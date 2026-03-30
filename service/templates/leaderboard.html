@@ -6,32 +6,9 @@
 <section class="stack">
     <div class="card">
         <h1 class="hero-title">Token Leaderboard</h1>
-        <p class="muted" style="margin-top: 10px;">Main ranking is ordered by total token consumption. Use filters to inspect specific agent types, versions, or models.</p>
-        <form method="GET" class="stack" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end;">
-            <div>
-                <label for="window">Window</label>
-                <select id="window" name="window" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;">
-                    <option value="day" {% if window == 'day' %}selected{% endif %}>Day</option>
-                    <option value="week" {% if window == 'week' %}selected{% endif %}>Week</option>
-                    <option value="all" {% if window == 'all' %}selected{% endif %}>All Time</option>
-                </select>
-            </div>
-            <div>
-                <label for="agent_type">Agent Type</label>
-                <input id="agent_type" name="agent_type" value="{{ filters.get('agent_type', '') }}" placeholder="codex">
-            </div>
-            <div>
-                <label for="agent_version">Agent Version</label>
-                <input id="agent_version" name="agent_version" value="{{ filters.get('agent_version', '') }}" placeholder="1.0.0">
-            </div>
-            <div>
-                <label for="model_name">Model</label>
-                <input id="model_name" name="model_name" value="{{ filters.get('model_name', '') }}" placeholder="gpt-5.4">
-            </div>
-            <div>
-                <button class="btn-primary" type="submit">Apply Filters</button>
-            </div>
-        </form>
+        <p class="muted" style="margin-top: 10px;">This page loads the latest precomputed default leaderboard snapshot. Rankings may be up to one hour behind the newest usage events.</p>
+        <p class="muted" data-leaderboard-last-updated>Last updated: pending</p>
+        <p class="muted" data-leaderboard-status>Loading leaderboard...</p>
     </div>
 
     <div class="card">
@@ -47,24 +24,109 @@
                     <th>Last Active</th>
                 </tr>
             </thead>
-            <tbody>
-                {% for row in rows %}
+            <tbody data-leaderboard-body>
                 <tr>
-                    <td>{{ row.rank }}</td>
-                    <td><a href="{{ url_for('user_detail', user_id=row.user_id, window=window, agent_type=filters.get('agent_type', ''), agent_version=filters.get('agent_version', ''), model_name=filters.get('model_name', '')) }}">{{ row.display_name }}</a><div class="muted">{{ row.username }}</div></td>
-                    <td>{{ row.total_token_count }}</td>
-                    <td>{{ row.prompt_count }}</td>
-                    <td>{{ row.task_count }}</td>
-                    <td>{{ row.total_duration_ms }}</td>
-                    <td>{{ row.last_active_at or '-' }}</td>
+                    <td colspan="7" class="muted">Loading leaderboard...</td>
                 </tr>
-                {% else %}
-                <tr>
-                    <td colspan="7" class="muted">No usage data has been reported yet.</td>
-                </tr>
-                {% endfor %}
             </tbody>
         </table>
     </div>
 </section>
+{% endblock %}
+
+{% block styles %}
+<style>
+    .leaderboard-status-error {
+        color: #b91c1c;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function formatLastUpdated(value) {
+        if (!value) {
+            return 'pending';
+        }
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return value;
+        }
+        return `${date.toISOString().replace('T', ' ').slice(0, 19)} UTC`;
+    }
+
+    function renderLeaderboardRows(rows) {
+        const tbody = document.querySelector('[data-leaderboard-body]');
+        if (!tbody) {
+            return;
+        }
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="muted">Leaderboard is being prepared</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map((row) => `
+            <tr>
+                <td>${escapeHtml(row.rank)}</td>
+                <td><a href="/users/${encodeURIComponent(row.user_id)}">${escapeHtml(row.display_name)}</a><div class="muted">${escapeHtml(row.username)}</div></td>
+                <td>${escapeHtml(row.total_token_count)}</td>
+                <td>${escapeHtml(row.prompt_count)}</td>
+                <td>${escapeHtml(row.task_count)}</td>
+                <td>${escapeHtml(row.total_duration_ms)}</td>
+                <td>${escapeHtml(row.last_active_at || '-')}</td>
+            </tr>
+        `).join('');
+    }
+
+    function renderLeaderboardStatus(message, isError = false) {
+        const status = document.querySelector('[data-leaderboard-status]');
+        if (!status) {
+            return;
+        }
+        status.textContent = message;
+        status.classList.toggle('leaderboard-status-error', isError);
+    }
+
+    function renderLeaderboardLastUpdated(value) {
+        const lastUpdated = document.querySelector('[data-leaderboard-last-updated]');
+        if (!lastUpdated) {
+            return;
+        }
+        lastUpdated.textContent = `Last updated: ${formatLastUpdated(value)}`;
+    }
+
+    async function loadDefaultLeaderboard() {
+        try {
+            const response = await fetch('/api/leaderboard/default');
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            const payload = await response.json();
+            renderLeaderboardLastUpdated(payload.generated_at);
+            if (!payload.generated_at && !(payload.rows || []).length) {
+                renderLeaderboardStatus('Leaderboard is being prepared');
+                renderLeaderboardRows([]);
+                return;
+            }
+            renderLeaderboardStatus('');
+            renderLeaderboardRows(payload.rows || []);
+        } catch (error) {
+            renderLeaderboardStatus('Failed to load leaderboard', true);
+            const tbody = document.querySelector('[data-leaderboard-body]');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="7" class="muted">Failed to load leaderboard</td></tr>';
+            }
+        }
+    }
+
+    loadDefaultLeaderboard();
+</script>
 {% endblock %}

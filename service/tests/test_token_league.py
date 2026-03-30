@@ -1,4 +1,14 @@
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+import sys
+
+import pytest
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
 
 
 def _iso(dt):
@@ -134,6 +144,216 @@ def test_leaderboard_requires_login(client):
 
     assert response.status_code == 302
     assert "/login" in response.headers["Location"]
+
+
+def test_default_leaderboard_snapshot_round_trip_in_memory():
+    import db
+
+    generated_at = datetime(2026, 3, 30, 12, 0, 0, tzinfo=timezone.utc)
+    rows = [
+        {
+            "rank": 1,
+            "user_id": 2,
+            "username": "alice",
+            "display_name": "Alice",
+            "total_token_count": 190,
+            "prompt_count": 2,
+            "task_count": 1,
+            "total_duration_ms": 24000,
+            "last_active_at": "2026-03-30T11:40:00+00:00",
+            "avg_token_per_prompt": 95.0,
+        }
+    ]
+
+    saved = db.save_leaderboard_snapshot(db.DEFAULT_LEADERBOARD_SNAPSHOT_KEY, rows, generated_at)
+    fetched = db.get_leaderboard_snapshot()
+
+    assert saved["snapshot_key"] == db.DEFAULT_LEADERBOARD_SNAPSHOT_KEY
+    assert fetched["snapshot_key"] == db.DEFAULT_LEADERBOARD_SNAPSHOT_KEY
+    assert fetched["generated_at"] == generated_at
+    assert fetched["rows"] == rows
+
+
+def test_refresh_default_leaderboard_snapshot_builds_ranked_rows(monkeypatch):
+    import db
+    import refresh_leaderboard_snapshot as refresh_module
+    from db import create_user, upsert_prompt_event, upsert_task_run
+
+    fixed_now = datetime(2026, 3, 30, 12, 0, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(db, "_utcnow", lambda: fixed_now)
+    monkeypatch.setattr(refresh_module.db, "_utcnow", lambda: fixed_now)
+
+    alice = create_user("alice", "secret123", display_name="Alice")
+    bob = create_user("bob", "secret123", display_name="Bob")
+    create_user("charlie", "secret123", display_name="Charlie", status=db.USER_DISABLED)
+
+    upsert_prompt_event(
+        alice["id"],
+        _prompt_payload("alice-new", fixed_now - timedelta(hours=1), input_tokens=100, output_tokens=40),
+    )
+    upsert_prompt_event(
+        alice["id"],
+        _prompt_payload("alice-old", fixed_now - timedelta(days=2), input_tokens=20, output_tokens=10),
+    )
+    upsert_task_run(
+        alice["id"],
+        _task_payload("alice-task", fixed_now - timedelta(hours=1), prompt_count=2, input_tokens=120, output_tokens=50),
+    )
+
+    upsert_prompt_event(
+        bob["id"],
+        _prompt_payload("bob-new", fixed_now - timedelta(hours=2), input_tokens=60, output_tokens=30),
+    )
+    upsert_task_run(
+        bob["id"],
+        _task_payload("bob-task", fixed_now - timedelta(hours=2), prompt_count=1, input_tokens=60, output_tokens=30),
+    )
+
+    upsert_prompt_event(
+        4,
+        _prompt_payload("charlie-new", fixed_now - timedelta(minutes=30), input_tokens=500, output_tokens=100),
+    )
+    upsert_task_run(
+        4,
+        _task_payload("charlie-task", fixed_now - timedelta(minutes=30), prompt_count=1, input_tokens=500, output_tokens=100),
+    )
+
+    snapshot = refresh_module.refresh_default_leaderboard_snapshot()
+
+    assert snapshot["snapshot_key"] == db.DEFAULT_LEADERBOARD_SNAPSHOT_KEY
+    assert snapshot["generated_at"] == fixed_now
+    assert [row["username"] for row in snapshot["rows"]] == ["alice", "bob"]
+
+    alice_row = snapshot["rows"][0]
+    bob_row = snapshot["rows"][1]
+
+    assert alice_row["rank"] == 1
+    assert alice_row["total_token_count"] == 170
+    assert alice_row["prompt_count"] == 2
+    assert alice_row["task_count"] == 1
+    assert alice_row["avg_token_per_prompt"] == 85.0
+    assert alice_row["last_active_at"] == "2026-03-30T11:00:12+00:00"
+
+    assert bob_row["rank"] == 2
+    assert bob_row["total_token_count"] == 90
+    assert bob_row["prompt_count"] == 1
+    assert bob_row["task_count"] == 1
+
+
+def test_refresh_default_leaderboard_snapshot_keeps_previous_snapshot_on_failure(monkeypatch):
+    import db
+    import refresh_leaderboard_snapshot as refresh_module
+
+    previous_generated_at = datetime(2026, 3, 30, 11, 0, 0, tzinfo=timezone.utc)
+    previous_rows = [
+        {
+            "rank": 1,
+            "user_id": 2,
+            "username": "alice",
+            "display_name": "Alice",
+            "total_token_count": 100,
+            "prompt_count": 1,
+            "task_count": 1,
+            "total_duration_ms": 12000,
+            "last_active_at": "2026-03-30T10:00:00+00:00",
+            "avg_token_per_prompt": 100.0,
+        }
+    ]
+    db.save_leaderboard_snapshot(db.DEFAULT_LEADERBOARD_SNAPSHOT_KEY, previous_rows, previous_generated_at)
+
+    monkeypatch.setattr(
+        refresh_module,
+        "build_default_leaderboard_rows",
+        lambda: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+
+    with pytest.raises(RuntimeError, match="boom"):
+        refresh_module.refresh_default_leaderboard_snapshot()
+
+    snapshot = db.get_leaderboard_snapshot()
+    assert snapshot["generated_at"] == previous_generated_at
+    assert snapshot["rows"] == previous_rows
+
+
+def test_default_leaderboard_api_returns_snapshot(auth_session):
+    import db
+
+    generated_at = datetime(2026, 3, 30, 12, 0, 0, tzinfo=timezone.utc)
+    rows = [
+        {
+            "rank": 1,
+            "user_id": 2,
+            "username": "alice",
+            "display_name": "Alice",
+            "total_token_count": 190,
+            "prompt_count": 2,
+            "task_count": 1,
+            "total_duration_ms": 24000,
+            "last_active_at": "2026-03-30T11:40:00+00:00",
+            "avg_token_per_prompt": 95.0,
+        }
+    ]
+    db.save_leaderboard_snapshot(db.DEFAULT_LEADERBOARD_SNAPSHOT_KEY, rows, generated_at)
+
+    response = auth_session.get("/api/leaderboard/default")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["snapshot_key"] == db.DEFAULT_LEADERBOARD_SNAPSHOT_KEY
+    assert payload["generated_at"] == "2026-03-30T12:00:00+00:00"
+    assert payload["rows"] == rows
+
+
+def test_default_leaderboard_api_returns_empty_payload_without_snapshot(auth_session):
+    import db
+
+    response = auth_session.get("/api/leaderboard/default")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["snapshot_key"] == db.DEFAULT_LEADERBOARD_SNAPSHOT_KEY
+    assert payload["generated_at"] is None
+    assert payload["rows"] == []
+
+
+def test_leaderboard_page_renders_loading_shell(auth_session):
+    response = auth_session.get("/leaderboard")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Token Leaderboard" in html
+    assert "Loading leaderboard..." in html
+    assert 'data-leaderboard-last-updated' in html
+    assert 'data-leaderboard-status' in html
+    assert 'data-leaderboard-body' in html
+    assert "fetch('/api/leaderboard/default')" in html
+    assert "function escapeHtml(value)" in html
+    assert "Leaderboard is being prepared" in html
+    assert "Failed to load leaderboard" in html
+
+
+def test_worker_loop_runs_immediate_refresh_before_sleep():
+    import run_leaderboard_snapshot_worker as worker
+
+    calls = []
+
+    class StopLoop(Exception):
+        pass
+
+    def fake_refresh():
+        calls.append("refresh")
+        return {"snapshot_key": "default_all_time", "rows": []}
+
+    def fake_sleep(seconds):
+        calls.append(("sleep", seconds))
+        raise StopLoop()
+
+    with pytest.raises(StopLoop):
+        worker.run_forever(refresh_func=fake_refresh, sleep_func=fake_sleep, interval_seconds=42)
+
+    assert calls == ["refresh", ("sleep", 42)]
 
 
 def test_admin_can_create_user_with_hook_key(auth_session):
