@@ -202,6 +202,45 @@ def test_normal_user_shell_hides_admin_and_system_links(user_session):
     assert "Admin Users" not in html
 
 
+def test_disabled_user_session_is_revoked_from_leaderboard_and_detail(user_session):
+    import db
+
+    alice = db.get_user_by_username("alice")
+    _seed_minimal_user_usage(alice["id"])
+    db.set_user_status(alice["id"], db.USER_DISABLED)
+
+    leaderboard_response = user_session.get("/leaderboard")
+    detail_response = user_session.get(f"/users/{alice['id']}")
+
+    assert leaderboard_response.status_code == 302
+    assert "/login" in leaderboard_response.headers["Location"]
+    assert detail_response.status_code == 302
+    assert "/login" in detail_response.headers["Location"]
+
+    with user_session.session_transaction() as session:
+        assert "user_id" not in session
+        assert "role" not in session
+
+
+def test_normal_user_other_user_breakdown_apis_are_forbidden(user_session):
+    import db
+
+    alice = db.get_user_by_username("alice")
+    bob = db.create_user("bob", "secret123", display_name="Bob")
+    _seed_minimal_user_usage(alice["id"])
+
+    projects_response = user_session.get(f"/api/users/{bob['id']}/projects?window=month")
+    models_response = user_session.get(f"/api/users/{bob['id']}/models?window=month")
+    timeline_response = user_session.get(f"/api/users/{bob['id']}/timeline?window=month&granularity=day")
+
+    assert projects_response.status_code == 403
+    assert projects_response.get_json() == {"success": False, "error": "Forbidden"}
+    assert models_response.status_code == 403
+    assert models_response.get_json() == {"success": False, "error": "Forbidden"}
+    assert timeline_response.status_code == 403
+    assert timeline_response.get_json() == {"success": False, "error": "Forbidden"}
+
+
 def test_default_leaderboard_snapshot_round_trip_in_memory():
     import db
 

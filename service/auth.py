@@ -7,7 +7,18 @@ import db
 
 
 def load_user():
-    g.user = db.get_user_by_id(session.get("user_id"))
+    user_id = session.get("user_id")
+    if not user_id:
+        g.user = None
+        return
+
+    user = db.get_user_by_id(user_id)
+    if not user or user.get("status", db.USER_ACTIVE) != db.USER_ACTIVE:
+        session.clear()
+        g.user = None
+        return
+
+    g.user = user
 
 
 def _is_api_request():
@@ -29,7 +40,7 @@ def _forbidden_response():
 def login_required(view_func):
     @wraps(view_func)
     def decorated(*args, **kwargs):
-        if not session.get("user_id"):
+        if not g.get("user"):
             return _login_required_response()
         return view_func(*args, **kwargs)
 
@@ -39,9 +50,9 @@ def login_required(view_func):
 def admin_required(view_func):
     @wraps(view_func)
     def decorated(*args, **kwargs):
-        if not session.get("user_id"):
+        if not g.get("user"):
             return _login_required_response()
-        if session.get("role") != "admin":
+        if g.user.get("role") != "admin":
             return _forbidden_response()
         return view_func(*args, **kwargs)
 
@@ -52,11 +63,12 @@ def self_or_admin_required(param_name: str = "user_id"):
     def decorator(view_func):
         @wraps(view_func)
         def decorated(*args, **kwargs):
-            if not session.get("user_id"):
+            user = g.get("user")
+            if not user:
                 return _login_required_response()
-            if session.get("role") == "admin":
+            if user.get("role") == "admin":
                 return view_func(*args, **kwargs)
-            current_user_id = int(session.get("user_id") or 0)
+            current_user_id = int(user.get("id") or 0)
             requested_user_id = int(kwargs.get(param_name) or 0)
             if current_user_id != requested_user_id:
                 return _forbidden_response()

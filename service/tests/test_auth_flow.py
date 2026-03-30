@@ -26,6 +26,21 @@ def test_api_list_page_returns_403_for_normal_user(user_session):
     assert response.get_data(as_text=True) == "Forbidden"
 
 
+def test_disabled_admin_loses_settings_access(auth_session):
+    import db
+
+    db.set_user_status(1, db.USER_DISABLED)
+
+    response = auth_session.get("/settings")
+
+    assert response.status_code == 302
+    assert "/login" in response.headers["Location"]
+
+    with auth_session.session_transaction() as session:
+        assert "user_id" not in session
+        assert "role" not in session
+
+
 def test_login_post_redirects_to_settings(client):
     response = client.post(
         "/login",
