@@ -42,6 +42,7 @@
         </div>
     </div>
 
+    {% if account_user.auth_source != 'ldap' %}
     <div class="card stack">
         <div>
             <h2 style="margin-top: 0;">Password</h2>
@@ -61,6 +62,14 @@
 
         <p class="muted" data-account-password-status aria-live="polite"></p>
     </div>
+    {% else %}
+    <div class="card stack">
+        <div>
+            <h2 style="margin-top: 0;">Password</h2>
+            <p class="muted">This account is managed through LDAP. Password changes must be made there.</p>
+        </div>
+    </div>
+    {% endif %}
 </section>
 {% endblock %}
 
@@ -101,10 +110,6 @@
     const copyButton = document.querySelector('[data-account-copy-key]');
     const rotateButton = document.querySelector('[data-account-rotate-key]');
     const keyStatus = document.querySelector('[data-account-key-status]');
-    const passwordForm = document.querySelector('[data-account-password-form]');
-    const passwordInput = document.getElementById('new_password');
-    const passwordStatus = document.querySelector('[data-account-password-status]');
-
     function setStatus(element, message, isError = false) {
         if (!element) {
             return;
@@ -166,8 +171,14 @@
         }
     });
 
+    {% if account_user.auth_source != 'ldap' %}
+    const passwordForm = document.querySelector('[data-account-password-form]');
+    const passwordInput = document.getElementById('new_password');
+    const passwordStatus = document.querySelector('[data-account-password-status]');
+
     passwordForm?.addEventListener('submit', async (event) => {
         event.preventDefault();
+        const submitButton = passwordForm.querySelector('button[type="submit"]');
         const newPassword = (passwordInput?.value || '').trim();
         if (!newPassword) {
             setStatus(passwordStatus, 'New password is required', true);
@@ -175,23 +186,34 @@
         }
 
         setStatus(passwordStatus, 'Saving password...');
-        const response = await fetch('/api/change-password', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({new_password: newPassword}),
-        });
-        const payload = await response.json();
-        if (!response.ok || !payload.success) {
-            setStatus(passwordStatus, payload.error || `HTTP ${response.status}`, true);
-            return;
+        if (submitButton) {
+            submitButton.disabled = true;
         }
+        try {
+            const response = await fetch('/api/change-password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({new_password: newPassword}),
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.success) {
+                throw new Error(payload.error || `HTTP ${response.status}`);
+            }
 
-        if (passwordInput) {
-            passwordInput.value = '';
+            if (passwordInput) {
+                passwordInput.value = '';
+            }
+            setStatus(passwordStatus, 'Password updated');
+        } catch (error) {
+            setStatus(passwordStatus, error.message || 'Failed to save password', true);
+        } finally {
+            if (submitButton) {
+                submitButton.disabled = false;
+            }
         }
-        setStatus(passwordStatus, 'Password updated');
     });
+    {% endif %}
 </script>
 {% endblock %}

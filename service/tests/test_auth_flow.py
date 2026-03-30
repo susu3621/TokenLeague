@@ -40,6 +40,30 @@ def test_account_page_renders_current_user_hook_key(user_session):
     assert "/api/change-password" in html
 
 
+def test_account_page_hides_password_form_for_ldap_user(client):
+    import db
+
+    user = db.create_user(
+        "ldap-alice",
+        "secret123",
+        display_name="LDAP Alice",
+        auth_source=db.AUTH_SOURCE_LDAP,
+    )
+    with client.session_transaction() as session:
+        session["user_id"] = user["id"]
+        session["username"] = user["username"]
+        session["role"] = user["role"]
+
+    response = client.get("/account")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "API Key" in html
+    assert "New Password" not in html
+    assert "Save Password" not in html
+    assert "/api/change-password" not in html
+
+
 def test_rotate_hook_key_api_rotates_only_the_current_user_key(user_session):
     import db
 
@@ -61,6 +85,31 @@ def test_rotate_hook_key_api_rotates_only_the_current_user_key(user_session):
     assert refreshed_current_user["hook_key"] != original_current_hook_key
     assert refreshed_current_user["hook_key"] == payload["hook_key"]
     assert refreshed_other_user["hook_key"] == original_other_hook_key
+
+
+def test_change_password_api_rejects_ldap_users(client):
+    import db
+
+    user = db.create_user(
+        "ldap-alice",
+        "secret123",
+        display_name="LDAP Alice",
+        auth_source=db.AUTH_SOURCE_LDAP,
+    )
+    original_password_hash = user["password_hash"]
+    with client.session_transaction() as session:
+        session["user_id"] = user["id"]
+        session["username"] = user["username"]
+        session["role"] = user["role"]
+
+    response = client.post("/api/change-password", json={"new_password": "changed123"})
+
+    assert response.status_code == 403
+    assert response.get_json() == {
+        "success": False,
+        "error": "Password changes are not available for LDAP users",
+    }
+    assert db.get_user_by_username("ldap-alice")["password_hash"] == original_password_hash
 
 
 def test_api_list_page_returns_403_for_normal_user(user_session):
@@ -98,6 +147,12 @@ def test_login_post_redirects_to_settings(client):
 
 def test_change_password_api_requires_login(client):
     response = client.post("/api/change-password", json={"new_password": "changed123"})
+
+    assert response.status_code == 401
+
+
+def test_rotate_hook_key_api_requires_login(client):
+    response = client.post("/api/account/rotate-hook-key")
 
     assert response.status_code == 401
 

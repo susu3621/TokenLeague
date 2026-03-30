@@ -534,6 +534,13 @@ def admin_agents():
 @auth_module.login_required
 def api_change_password():
     """Change current user password"""
+    if (g.user or {}).get("auth_source", db.AUTH_SOURCE_LOCAL) == db.AUTH_SOURCE_LDAP:
+        return jsonify(
+            {
+                "success": False,
+                "error": "Password changes are not available for LDAP users",
+            }
+        ), 403
     data = request.get_json(silent=True) or {}
     new_password = (data.get("new_password") or "").strip()
     if not new_password:
