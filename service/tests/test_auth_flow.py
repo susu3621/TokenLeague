@@ -12,6 +12,20 @@ def test_settings_requires_login(client):
     assert "/login" in response.headers["Location"]
 
 
+def test_settings_page_returns_403_for_normal_user(user_session):
+    response = user_session.get("/settings")
+
+    assert response.status_code == 403
+    assert response.get_data(as_text=True) == "Forbidden"
+
+
+def test_api_list_page_returns_403_for_normal_user(user_session):
+    response = user_session.get("/api")
+
+    assert response.status_code == 403
+    assert response.get_data(as_text=True) == "Forbidden"
+
+
 def test_login_post_redirects_to_settings(client):
     response = client.post(
         "/login",

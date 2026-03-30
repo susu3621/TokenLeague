@@ -377,6 +377,7 @@ def leaderboard():
 
 @app.route("/users/<int:user_id>")
 @auth_module.login_required
+@auth_module.self_or_admin_required("user_id")
 def user_detail(user_id: int):
     window = _requested_user_detail_window()
     filters = _requested_filters()
@@ -393,7 +394,7 @@ def user_detail(user_id: int):
 
 
 @app.route("/settings", methods=["GET", "POST"])
-@auth_module.login_required
+@auth_module.admin_required
 def settings():
     message = None
     if request.method == "POST":
@@ -644,6 +645,7 @@ def api_default_leaderboard():
 
 @app.route("/api/users/<int:user_id>/stats")
 @auth_module.login_required
+@auth_module.self_or_admin_required("user_id")
 def api_user_stats(user_id: int):
     """Get single user token statistics"""
     window = _requested_user_detail_window()
@@ -656,6 +658,7 @@ def api_user_stats(user_id: int):
 
 @app.route("/api/users/<int:user_id>/projects")
 @auth_module.login_required
+@auth_module.self_or_admin_required("user_id")
 def api_user_projects(user_id: int):
     """Get user token statistics grouped by project"""
     window = _requested_user_detail_window()
@@ -672,6 +675,7 @@ def api_user_projects(user_id: int):
 
 @app.route("/api/users/<int:user_id>/models")
 @auth_module.login_required
+@auth_module.self_or_admin_required("user_id")
 def api_user_models(user_id: int):
     """Get user token statistics grouped by model"""
     window = _requested_user_detail_window()
@@ -688,6 +692,7 @@ def api_user_models(user_id: int):
 
 @app.route("/api/users/<int:user_id>/timeline")
 @auth_module.login_required
+@auth_module.self_or_admin_required("user_id")
 def api_user_timeline(user_id: int):
     """Get user token usage timeline"""
     window = _requested_user_detail_window()
@@ -716,7 +721,7 @@ def api_user_timeline(user_id: int):
 
 
 @app.route("/api")
-@auth_module.login_required
+@auth_module.admin_required
 def api_list():
     """TokenLeague API list page"""
     return render_template("api_list.html", apis=_build_api_list())

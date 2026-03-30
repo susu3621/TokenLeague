@@ -36,6 +36,18 @@ def auth_session(client):
     return client
 
 
+@pytest.fixture
+def user_session(client):
+    from db import create_user
+
+    user = create_user("alice", "alice123", display_name="Alice")
+    with client.session_transaction() as session:
+        session["user_id"] = user["id"]
+        session["username"] = user["username"]
+        session["role"] = user["role"]
+    return client
+
+
 @pytest.fixture(autouse=True)
 def reset_store():
     try:

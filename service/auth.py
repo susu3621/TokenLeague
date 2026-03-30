@@ -10,13 +10,27 @@ def load_user():
     g.user = db.get_user_by_id(session.get("user_id"))
 
 
+def _is_api_request():
+    return request.path.startswith("/api/")
+
+
+def _login_required_response():
+    if _is_api_request():
+        return jsonify({"success": False, "error": "Authentication required"}), 401
+    return redirect(url_for("login"))
+
+
+def _forbidden_response():
+    if _is_api_request():
+        return jsonify({"success": False, "error": "Forbidden"}), 403
+    return "Forbidden", 403
+
+
 def login_required(view_func):
     @wraps(view_func)
     def decorated(*args, **kwargs):
         if not session.get("user_id"):
-            if request.path.startswith("/api/"):
-                return jsonify({"success": False, "error": "Authentication required"}), 401
-            return redirect(url_for("login"))
+            return _login_required_response()
         return view_func(*args, **kwargs)
 
     return decorated
@@ -26,16 +40,31 @@ def admin_required(view_func):
     @wraps(view_func)
     def decorated(*args, **kwargs):
         if not session.get("user_id"):
-            if request.path.startswith("/api/"):
-                return jsonify({"success": False, "error": "Authentication required"}), 401
-            return redirect(url_for("login"))
+            return _login_required_response()
         if session.get("role") != "admin":
-            if request.path.startswith("/api/"):
-                return jsonify({"success": False, "error": "Admin role required"}), 403
-            return redirect(url_for("settings"))
+            return _forbidden_response()
         return view_func(*args, **kwargs)
 
     return decorated
+
+
+def self_or_admin_required(param_name: str = "user_id"):
+    def decorator(view_func):
+        @wraps(view_func)
+        def decorated(*args, **kwargs):
+            if not session.get("user_id"):
+                return _login_required_response()
+            if session.get("role") == "admin":
+                return view_func(*args, **kwargs)
+            current_user_id = int(session.get("user_id") or 0)
+            requested_user_id = int(kwargs.get(param_name) or 0)
+            if current_user_id != requested_user_id:
+                return _forbidden_response()
+            return view_func(*args, **kwargs)
+
+        return decorated
+
+    return decorator
 
 
 def verify_local_password(username: str, password: str):

@@ -44,6 +44,9 @@
 
 {% block scripts %}
 <script>
+    const viewerUserId = {{ g.user["id"] if g.user else "null" }};
+    const viewerIsAdmin = {{ "true" if session.get("role") == "admin" else "false" }};
+
     function escapeHtml(value) {
         return String(value ?? '')
             .replace(/&/g, '&amp;')
@@ -64,6 +67,17 @@
         return `${date.toISOString().replace('T', ' ').slice(0, 19)} UTC`;
     }
 
+    function renderUserCell(row) {
+        const displayName = escapeHtml(row.display_name);
+        const username = escapeHtml(row.username);
+        const userId = Number(row.user_id);
+        const canLink = viewerIsAdmin || Number(viewerUserId) === userId;
+        if (!canLink) {
+            return `${displayName}<div class="muted">${username}</div>`;
+        }
+        return `<a href="/users/${encodeURIComponent(row.user_id)}">${displayName}</a><div class="muted">${username}</div>`;
+    }
+
     function renderLeaderboardRows(rows) {
         const tbody = document.querySelector('[data-leaderboard-body]');
         if (!tbody) {
@@ -76,7 +90,7 @@
         tbody.innerHTML = rows.map((row) => `
             <tr>
                 <td>${escapeHtml(row.rank)}</td>
-                <td><a href="/users/${encodeURIComponent(row.user_id)}">${escapeHtml(row.display_name)}</a><div class="muted">${escapeHtml(row.username)}</div></td>
+                <td>${renderUserCell(row)}</td>
                 <td>${escapeHtml(row.total_token_count)}</td>
                 <td>${escapeHtml(row.prompt_count)}</td>
                 <td>${escapeHtml(row.task_count)}</td>

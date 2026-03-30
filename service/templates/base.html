@@ -148,10 +148,10 @@
             {% if g.user %}
             <div class="nav">
                 <a href="{{ url_for('leaderboard') }}">Leaderboard</a>
-                <a href="{{ url_for('settings') }}">Settings</a>
                 <a href="{{ url_for('docs_page') }}">Docs</a>
-                <a href="{{ url_for('api_list') }}">API</a>
                 {% if session.get('role') == 'admin' %}
+                <a href="{{ url_for('settings') }}">Settings</a>
+                <a href="{{ url_for('api_list') }}">API</a>
                 <a href="{{ url_for('admin_users') }}">Admin Users</a>
                 <a href="{{ url_for('admin_ldap') }}">LDAP</a>
                 <a href="{{ url_for('admin_agents') }}">Agent Catalog</a>

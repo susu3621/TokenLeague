@@ -139,11 +139,67 @@ def _seed_user_detail_filter_data(monkeypatch, *, archive_event_days=2):
         db.upsert_task_run(1, task_payload)
 
 
+def _seed_minimal_user_usage(user_id):
+    import db
+
+    started_at = datetime(2026, 3, 24, 12, 0, 0, tzinfo=timezone.utc)
+    db.upsert_prompt_event(
+        user_id,
+        _prompt_payload("visibility-check-prompt", started_at, input_tokens=20, output_tokens=10),
+    )
+    db.upsert_task_run(
+        user_id,
+        _task_payload("visibility-check-task", started_at, prompt_count=1, input_tokens=20, output_tokens=10),
+    )
+
+
 def test_leaderboard_requires_login(client):
     response = client.get("/leaderboard")
 
     assert response.status_code == 302
     assert "/login" in response.headers["Location"]
+
+
+def test_normal_user_can_only_open_their_own_user_detail(user_session):
+    import db
+
+    alice = db.get_user_by_username("alice")
+    bob = db.create_user("bob", "secret123", display_name="Bob")
+    _seed_minimal_user_usage(alice["id"])
+
+    own_response = user_session.get(f"/users/{alice['id']}")
+    other_response = user_session.get(f"/users/{bob['id']}")
+
+    assert own_response.status_code == 200
+    assert other_response.status_code == 403
+    assert other_response.get_data(as_text=True) == "Forbidden"
+
+
+def test_normal_user_stats_api_rejects_other_user_ids(user_session):
+    import db
+
+    alice = db.get_user_by_username("alice")
+    bob = db.create_user("bob", "secret123", display_name="Bob")
+    _seed_minimal_user_usage(alice["id"])
+
+    own_response = user_session.get(f"/api/users/{alice['id']}/stats?window=month")
+    other_response = user_session.get(f"/api/users/{bob['id']}/stats?window=month")
+
+    assert own_response.status_code == 200
+    assert other_response.status_code == 403
+    assert other_response.get_json() == {"success": False, "error": "Forbidden"}
+
+
+def test_normal_user_shell_hides_admin_and_system_links(user_session):
+    response = user_session.get("/leaderboard")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Leaderboard" in html
+    assert "Docs" in html
+    assert "Settings" not in html
+    assert "API" not in html
+    assert "Admin Users" not in html
 
 
 def test_default_leaderboard_snapshot_round_trip_in_memory():
