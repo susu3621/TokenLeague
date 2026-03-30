@@ -75,31 +75,31 @@
 <section class="stack">
     <div class="card">
         <h1 class="hero-title">{{ stats.user.display_name }}</h1>
-        <p class="muted" style="margin-top: 10px;">{{ t('user_detail.description', username=stats.user.username, window_label=window_label) }}</p>
+        <p class="muted" style="margin-top: 10px;">{{ t('user_detail.description', username=stats.user.username, window_label=t('user_detail.window.' ~ window)) }}</p>
 
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-value" data-user-detail-summary-value="total-token-count">{{ format_token_count(stats.summary.total_token_count) }}</div>
-                <div class="stat-label">Total Tokens</div>
+                <div class="stat-label">{{ t('user_detail.total_tokens') }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" data-user-detail-summary-value="prompt-count">{{ "{:,}".format(stats.summary.prompt_count) }}</div>
-                <div class="stat-label">Prompts</div>
+                <div class="stat-label">{{ t('user_detail.prompt_count') }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" data-user-detail-summary-value="task-count">{{ "{:,}".format(stats.summary.task_count) }}</div>
-                <div class="stat-label">Tasks</div>
+                <div class="stat-label">{{ t('user_detail.task_count') }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" data-user-detail-summary-value="avg-token-per-prompt">{{ format_token_count(stats.summary.avg_token_per_prompt) }}</div>
-                <div class="stat-label">Avg Tokens / Prompt</div>
+                <div class="stat-label">{{ t('user_detail.avg_tokens_per_prompt') }}</div>
             </div>
         </div>
     </div>
 
     <div class="card">
         <div class="section-header">
-            <h2>Usage Timeline</h2>
+            <h2>{{ t('user_detail.timeline_heading') }}</h2>
             <div class="timeline-range" aria-label="Timeline range selector" data-user-detail-window-selector="{{ window }}">
                 <button type="button" class="timeline-range-button{% if window == 'today' %} is-active{% endif %}" data-user-detail-window-option="today">{{ t('user_detail.window.today') }}</button>
                 <button type="button" class="timeline-range-button{% if window == 'week' %} is-active{% endif %}" data-user-detail-window-option="week">{{ t('user_detail.window.week') }}</button>
@@ -113,16 +113,16 @@
     </div>
 
     <div class="card">
-        <h2 style="margin-top: 0;">Project Breakdown</h2>
+        <h2 style="margin-top: 0;">{{ t('user_detail.project_breakdown') }}</h2>
         <table id="project-table">
             <thead>
                 <tr>
-                    <th>Project</th>
-                    <th>Total Token</th>
-                    <th>Input</th>
-                    <th>Output</th>
-                    <th>Prompts</th>
-                    <th>Tasks</th>
+                    <th>{{ t('user_detail.project') }}</th>
+                    <th>{{ t('user_detail.total_token') }}</th>
+                    <th>{{ t('user_detail.input') }}</th>
+                    <th>{{ t('user_detail.output') }}</th>
+                    <th>{{ t('user_detail.prompts') }}</th>
+                    <th>{{ t('user_detail.tasks') }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -132,18 +132,18 @@
     </div>
 
     <div class="card">
-        <h2 style="margin-top: 0;">Model Breakdown</h2>
+        <h2 style="margin-top: 0;">{{ t('user_detail.model_breakdown') }}</h2>
         <div class="chart-container">
             <canvas id="model-chart"></canvas>
         </div>
         <table id="model-table" style="margin-top: 20px;">
             <thead>
                 <tr>
-                    <th>Model</th>
-                    <th>Total Token</th>
-                    <th>Input</th>
-                    <th>Output</th>
-                    <th>Prompts</th>
+                    <th>{{ t('user_detail.model') }}</th>
+                    <th>{{ t('user_detail.total_token') }}</th>
+                    <th>{{ t('user_detail.input') }}</th>
+                    <th>{{ t('user_detail.output') }}</th>
+                    <th>{{ t('user_detail.prompts') }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -153,16 +153,16 @@
     </div>
 
     <div class="card">
-        <h2 style="margin-top: 0;">Agent Breakdown</h2>
+        <h2 style="margin-top: 0;">{{ t('user_detail.agent_breakdown') }}</h2>
         <table>
             <thead>
                 <tr>
-                    <th>Agent Type</th>
-                    <th>Version</th>
-                    <th>Model</th>
-                    <th>Total Token</th>
-                    <th>Prompts</th>
-                    <th>Tasks</th>
+                    <th>{{ t('user_detail.agent_type') }}</th>
+                    <th>{{ t('user_detail.version') }}</th>
+                    <th>{{ t('user_detail.model') }}</th>
+                    <th>{{ t('user_detail.total_token') }}</th>
+                    <th>{{ t('user_detail.prompts') }}</th>
+                    <th>{{ t('user_detail.tasks') }}</th>
                 </tr>
             </thead>
             <tbody data-user-detail-agent-breakdown-body>
@@ -185,16 +185,16 @@
     </div>
 
     <div class="card">
-        <h2 style="margin-top: 0;">Recent Prompt Events</h2>
+        <h2 style="margin-top: 0;">{{ t('user_detail.recent_prompt_events') }}</h2>
         <table>
             <thead>
                 <tr>
-                    <th>Event</th>
-                    <th>Project</th>
-                    <th>Task</th>
-                    <th>Total Token</th>
-                    <th>Model</th>
-                    <th>Completed At</th>
+                    <th>{{ t('user_detail.event') }}</th>
+                    <th>{{ t('user_detail.project') }}</th>
+                    <th>{{ t('user_detail.task') }}</th>
+                    <th>{{ t('user_detail.total_token') }}</th>
+                    <th>{{ t('user_detail.model') }}</th>
+                    <th>{{ t('user_detail.completed_at') }}</th>
                 </tr>
             </thead>
             <tbody data-user-detail-recent-prompt-events-body>
@@ -227,6 +227,8 @@
         "model_empty": t("user_detail.model_empty"),
         "recent_prompt_events_empty": t("user_detail.recent_prompt_events_empty"),
         "timeline_empty": t("user_detail.timeline_empty"),
+        "input_tokens": t("user_detail.input_tokens"),
+        "output_tokens": t("user_detail.output_tokens"),
     } | tojson }};
     const userId = {{ stats.user.id }};
     let currentWindow = '{{ window }}';
@@ -451,12 +453,12 @@
                 labels: models.map(model => model.model_name),
                 datasets: [
                     {
-                        label: 'Input Tokens',
+                        label: userDetailMessages.input_tokens,
                         data: models.map(model => model.input_token_count),
                         backgroundColor: '#374151',
                     },
                     {
-                        label: 'Output Tokens',
+                        label: userDetailMessages.output_tokens,
                         data: models.map(model => model.output_token_count),
                         backgroundColor: '#9ca3af',
                     }

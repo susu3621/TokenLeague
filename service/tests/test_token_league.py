@@ -1082,7 +1082,7 @@ def test_user_detail_day_window_aliases_to_today(auth_session, monkeypatch):
     day_html = day_response.get_data(as_text=True)
     today_html = today_response.get_data(as_text=True)
     assert day_html == today_html
-    assert "within the selected today window" in day_html
+    assert "details in the selected Today window." in day_html
     assert "let currentWindow = 'today';" in day_html
     assert "today-event" in day_html
     assert "yesterday-event" not in day_html
@@ -1244,7 +1244,7 @@ def test_user_detail_refresh_apis_honor_filters_with_quarter_window(auth_session
 
 
 def test_user_detail_page_renders_timeline_range_selector(auth_session):
-    response = auth_session.get("/users/1")
+    response = auth_session.get("/users/1", headers={"Accept-Language": "zh-CN,zh;q=0.9"})
 
     assert response.status_code == 200
     html = response.get_data(as_text=True)
@@ -1255,6 +1255,17 @@ def test_user_detail_page_renders_timeline_range_selector(auth_session):
     assert "granularity" in html
     assert "project_breakdown" in html
     assert "stacked: true" in html
+
+
+def test_user_detail_page_renders_english_timeline_range_selector_by_default(auth_session):
+    response = auth_session.get("/users/1")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Today" in html
+    assert "Past 7 Days" in html
+    assert "Past 30 Days" in html
+    assert "Past 90 Days" in html
 
 
 def test_compact_token_count_formats_human_readable_suffixes():

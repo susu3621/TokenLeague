@@ -5,7 +5,7 @@
 {% block content %}
 <section class="card" style="max-width: 440px; margin: 40px auto;">
     <h1 style="margin-top: 0;">TokenLeague</h1>
-    <p class="muted">Track token usage across agent runs and compare ranked users over day, week, and all time.</p>
+    <p class="muted">{{ t('login.description') }}</p>
     {% if error %}
     <p style="color: #b42318;">{{ error }}</p>
     {% endif %}
@@ -21,7 +21,7 @@
         <button class="btn-primary" type="submit">{{ t('login.submit') }}</button>
     </form>
     <p class="muted" style="margin-bottom: 0;">
-        Need recovery access? <a href="{{ url_for('local_admin_login') }}">Local admin sign in</a>
+        {{ t('login.recovery_prompt') }} <a href="{{ url_for('local_admin_login') }}">{{ t('login.local_admin_link') }}</a>
     </p>
 </section>
 {% endblock %}
