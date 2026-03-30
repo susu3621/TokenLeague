@@ -60,3 +60,22 @@ def test_docs_page_handles_localized_only_docs_without_english_counterpart(
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "仅中文指南" in html
+
+
+def test_docs_page_resolves_logical_path_to_localized_only_doc_for_english_requests(
+    auth_session, monkeypatch, tmp_path
+):
+    import app as app_module
+
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "GUIDE.zh-CN.md").write_text("# 仅中文指南\n\n仅本地化内容", encoding="utf-8")
+    monkeypatch.setattr(app_module, "DOCS_DIR", docs_dir)
+
+    response = auth_session.get("/docs/GUIDE.md")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "仅中文指南" in html
+    assert "仅本地化内容" in html
+    assert "Missing document: GUIDE.md" not in html

@@ -343,11 +343,25 @@ def _localized_doc_name(filepath: str, locale: str) -> str:
     return str(path.with_name(f"{path.stem}.zh-CN{path.suffix}"))
 
 
+def _find_localized_doc_variant(filepath: str) -> Path | None:
+    path = Path(filepath)
+    for candidate in sorted(DOCS_DIR.glob(f"{path.stem}.*{path.suffix}")):
+        if candidate.name != path.name:
+            return candidate
+    return None
+
+
 def _resolve_doc_target(filepath: str, locale: str) -> Path:
     localized_target = DOCS_DIR / _localized_doc_name(filepath, locale)
     if localized_target.exists():
         return localized_target
-    return DOCS_DIR / filepath
+    default_target = DOCS_DIR / filepath
+    if default_target.exists():
+        return default_target
+    fallback_target = _find_localized_doc_variant(filepath)
+    if fallback_target is not None:
+        return fallback_target
+    return default_target
 
 
 def _logical_doc_path(filename: str) -> str:
