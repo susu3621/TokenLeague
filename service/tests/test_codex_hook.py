@@ -1,6 +1,9 @@
+import fcntl
 import json
 import importlib.util
+import os
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -324,3 +327,31 @@ def test_handle_stop_uploads_latest_completed_turn_and_accumulates_task_run(tmp_
             },
         ),
     ]
+
+
+def test_codex_hook_exits_quickly_when_session_lock_is_held(tmp_path):
+    lock_path = tmp_path / ".tokenleague_codex_session_lock-test-session.lock"
+    payload = json.dumps(
+        {
+            "session_id": "lock-test-session",
+            "transcript_path": "/tmp/lock-test-session.jsonl",
+            "hook_event_name": "UserPromptSubmit",
+        }
+    )
+    env = {**os.environ, "TMPDIR": str(tmp_path)}
+
+    with lock_path.open("w", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        result = subprocess.run(
+            [sys.executable, str(HOOK_PATH)],
+            input=payload,
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=1,
+        )
+
+    assert result.returncode == 0, result.stderr
+
+    log_text = (tmp_path / ".tokenleague_codex_hook.log").read_text(encoding="utf-8")
+    assert '"event": "session_lock_timeout"' in log_text

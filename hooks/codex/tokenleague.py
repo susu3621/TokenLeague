@@ -15,6 +15,7 @@ import json
 import os
 import socket
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
@@ -26,6 +27,12 @@ from urllib.parse import urlsplit, urlunsplit
 DEFAULT_API_URL = "http://localhost:5006"
 HOOK_LOG_FILE_NAME = ".tokenleague_codex_hook.log"
 AGENT_TYPE = "codex"
+SESSION_LOCK_TIMEOUT_SECONDS = 0.5
+SESSION_LOCK_RETRY_INTERVAL_SECONDS = 0.05
+
+
+class _SessionLockTimeoutError(TimeoutError):
+    pass
 
 
 def _get_env(key: str, default: str | None = None) -> str | None:
@@ -118,7 +125,15 @@ def _get_session_lock_file(session_id: str) -> Path:
 def _session_lock(session_id: str) -> Iterator[None]:
     lock_path = _get_session_lock_file(session_id)
     with lock_path.open("w", encoding="utf-8") as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        deadline = time.monotonic() + SESSION_LOCK_TIMEOUT_SECONDS
+        while True:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError as exc:
+                if time.monotonic() >= deadline:
+                    raise _SessionLockTimeoutError(session_id) from exc
+                time.sleep(SESSION_LOCK_RETRY_INTERVAL_SECONDS)
         try:
             yield
         finally:
@@ -528,22 +543,31 @@ def _handle_user_prompt_submit(event_data: dict[str, Any]) -> None:
         )
         return
 
-    with _session_lock(session_id):
-        session_state = _load_session_state(session_id)
-        baseline_completed_turn_count = session_state["baseline_completed_turn_count"]
-        if baseline_completed_turn_count is None:
-            baseline_completed_turn_count = _completed_turn_count(transcript_path)
+    try:
+        with _session_lock(session_id):
+            session_state = _load_session_state(session_id)
+            baseline_completed_turn_count = session_state["baseline_completed_turn_count"]
+            if baseline_completed_turn_count is None:
+                baseline_completed_turn_count = _completed_turn_count(transcript_path)
 
-        updated_state = {
-            **session_state,
-            "session_id": session_id,
-            "transcript_path": transcript_path,
-            "model_name": str(event_data.get("model") or session_state.get("model_name") or "unknown"),
-            "cwd": str(event_data.get("cwd") or session_state.get("cwd") or ""),
-            "project_name": _detect_project_name(event_data.get("cwd") or session_state.get("cwd")),
-            "baseline_completed_turn_count": baseline_completed_turn_count,
-        }
-        _save_session_state(session_id, updated_state)
+            updated_state = {
+                **session_state,
+                "session_id": session_id,
+                "transcript_path": transcript_path,
+                "model_name": str(event_data.get("model") or session_state.get("model_name") or "unknown"),
+                "cwd": str(event_data.get("cwd") or session_state.get("cwd") or ""),
+                "project_name": _detect_project_name(event_data.get("cwd") or session_state.get("cwd")),
+                "baseline_completed_turn_count": baseline_completed_turn_count,
+            }
+            _save_session_state(session_id, updated_state)
+    except _SessionLockTimeoutError:
+        _write_hook_log(
+            "session_lock_timeout",
+            session_id=session_id,
+            hook_event_name="UserPromptSubmit",
+            timeout_seconds=SESSION_LOCK_TIMEOUT_SECONDS,
+        )
+        return
 
     _write_hook_log(
         "user_prompt_submit_recorded",
@@ -560,128 +584,137 @@ def _handle_stop(event_data: dict[str, Any]) -> None:
         _write_hook_log("stop_skipped", reason="missing_session_id")
         return
 
-    with _session_lock(session_id):
-        session_state = _load_session_state(session_id)
-        transcript_path = str(event_data.get("transcript_path") or session_state.get("transcript_path") or "")
-        if not transcript_path:
-            _write_hook_log(
-                "stop_skipped",
-                reason="missing_transcript_path",
-                session_id=session_id,
+    try:
+        with _session_lock(session_id):
+            session_state = _load_session_state(session_id)
+            transcript_path = str(event_data.get("transcript_path") or session_state.get("transcript_path") or "")
+            if not transcript_path:
+                _write_hook_log(
+                    "stop_skipped",
+                    reason="missing_transcript_path",
+                    session_id=session_id,
+                )
+                return
+
+            entries = _load_transcript_entries(transcript_path)
+            if not entries:
+                _write_hook_log(
+                    "stop_skipped",
+                    reason="empty_transcript",
+                    session_id=session_id,
+                    transcript_path=transcript_path,
+                )
+                return
+
+            session_metadata = _extract_session_metadata(entries)
+            completed_turns = _extract_completed_turns(entries)
+            if not completed_turns:
+                _write_hook_log(
+                    "stop_skipped",
+                    reason="no_completed_turns",
+                    session_id=session_id,
+                    transcript_path=transcript_path,
+                )
+                return
+
+            baseline_completed_turn_count = session_state["baseline_completed_turn_count"]
+            if baseline_completed_turn_count is None:
+                baseline_completed_turn_count = max(len(completed_turns) - 1, 0)
+                session_state["baseline_completed_turn_count"] = baseline_completed_turn_count
+
+            tracked_turns = completed_turns[baseline_completed_turn_count:]
+            processed_turn_ids = set(session_state["processed_turn_ids"])
+            unprocessed_turns = [
+                turn for turn in tracked_turns if str(turn.get("turn_id") or "") not in processed_turn_ids
+            ]
+            if not unprocessed_turns:
+                _write_hook_log(
+                    "stop_skipped",
+                    reason="no_unprocessed_turns",
+                    session_id=session_id,
+                    transcript_path=transcript_path,
+                    baseline_completed_turn_count=baseline_completed_turn_count,
+                )
+                return
+
+            model_name = str(event_data.get("model") or session_state.get("model_name") or "unknown")
+            agent_version = session_metadata["agent_version"] or "unknown"
+            project_name = (
+                str(session_state.get("project_name") or "")
+                or _detect_project_name(session_metadata.get("cwd"))
+                or _detect_project_name(event_data.get("cwd"))
             )
-            return
+            prompt_events = [
+                _build_prompt_event(
+                    session_id=session_id,
+                    turn=turn,
+                    project_name=project_name,
+                    model_name=model_name,
+                    agent_version=agent_version,
+                )
+                for turn in unprocessed_turns
+            ]
 
-        entries = _load_transcript_entries(transcript_path)
-        if not entries:
-            _write_hook_log(
-                "stop_skipped",
-                reason="empty_transcript",
+            next_task_run_state = _normalize_task_run_state(session_state.get("task_run"))
+            for prompt_event in prompt_events:
+                next_task_run_state = _accumulate_task_run_state(next_task_run_state, prompt_event)
+
+            task_run = _build_task_run_payload(
                 session_id=session_id,
-                transcript_path=transcript_path,
-            )
-            return
-
-        session_metadata = _extract_session_metadata(entries)
-        completed_turns = _extract_completed_turns(entries)
-        if not completed_turns:
-            _write_hook_log(
-                "stop_skipped",
-                reason="no_completed_turns",
-                session_id=session_id,
-                transcript_path=transcript_path,
-            )
-            return
-
-        baseline_completed_turn_count = session_state["baseline_completed_turn_count"]
-        if baseline_completed_turn_count is None:
-            baseline_completed_turn_count = max(len(completed_turns) - 1, 0)
-            session_state["baseline_completed_turn_count"] = baseline_completed_turn_count
-
-        tracked_turns = completed_turns[baseline_completed_turn_count:]
-        processed_turn_ids = set(session_state["processed_turn_ids"])
-        unprocessed_turns = [
-            turn for turn in tracked_turns if str(turn.get("turn_id") or "") not in processed_turn_ids
-        ]
-        if not unprocessed_turns:
-            _write_hook_log(
-                "stop_skipped",
-                reason="no_unprocessed_turns",
-                session_id=session_id,
-                transcript_path=transcript_path,
-                baseline_completed_turn_count=baseline_completed_turn_count,
-            )
-            return
-
-        model_name = str(event_data.get("model") or session_state.get("model_name") or "unknown")
-        agent_version = session_metadata["agent_version"] or "unknown"
-        project_name = (
-            str(session_state.get("project_name") or "")
-            or _detect_project_name(session_metadata.get("cwd"))
-            or _detect_project_name(event_data.get("cwd"))
-        )
-        prompt_events = [
-            _build_prompt_event(
-                session_id=session_id,
-                turn=turn,
+                task_run_state=next_task_run_state,
                 project_name=project_name,
                 model_name=model_name,
                 agent_version=agent_version,
             )
-            for turn in unprocessed_turns
-        ]
+            if task_run is None:
+                _write_hook_log(
+                    "stop_skipped",
+                    reason="missing_task_run",
+                    session_id=session_id,
+                    transcript_path=transcript_path,
+                )
+                return
 
-        next_task_run_state = _normalize_task_run_state(session_state.get("task_run"))
-        for prompt_event in prompt_events:
-            next_task_run_state = _accumulate_task_run_state(next_task_run_state, prompt_event)
-
-        task_run = _build_task_run_payload(
-            session_id=session_id,
-            task_run_state=next_task_run_state,
-            project_name=project_name,
-            model_name=model_name,
-            agent_version=agent_version,
-        )
-        if task_run is None:
             _write_hook_log(
-                "stop_skipped",
-                reason="missing_task_run",
+                "transcript_parsed",
                 session_id=session_id,
                 transcript_path=transcript_path,
+                tracked_turn_count=len(tracked_turns),
+                unprocessed_turn_count=len(unprocessed_turns),
+                latest_turn_id=str(unprocessed_turns[-1]["turn_id"]),
+                input_token_count=task_run["input_token_count"],
+                output_token_count=task_run["output_token_count"],
             )
-            return
 
+            prompt_upload_succeeded = True
+            for prompt_event in prompt_events:
+                if not _send_api_request("/api/ingest/prompt-event", prompt_event):
+                    prompt_upload_succeeded = False
+                    break
+
+            if not prompt_upload_succeeded:
+                return
+
+            if not _send_api_request("/api/ingest/task-run", task_run):
+                return
+
+            session_state["processed_turn_ids"] = [
+                *session_state["processed_turn_ids"],
+                *[str(turn["turn_id"]) for turn in unprocessed_turns],
+            ]
+            session_state["task_run"] = next_task_run_state
+            session_state["transcript_path"] = transcript_path
+            session_state["model_name"] = model_name
+            session_state["project_name"] = project_name
+            _save_session_state(session_id, session_state)
+    except _SessionLockTimeoutError:
         _write_hook_log(
-            "transcript_parsed",
+            "session_lock_timeout",
             session_id=session_id,
-            transcript_path=transcript_path,
-            tracked_turn_count=len(tracked_turns),
-            unprocessed_turn_count=len(unprocessed_turns),
-            latest_turn_id=str(unprocessed_turns[-1]["turn_id"]),
-            input_token_count=task_run["input_token_count"],
-            output_token_count=task_run["output_token_count"],
+            hook_event_name="Stop",
+            timeout_seconds=SESSION_LOCK_TIMEOUT_SECONDS,
         )
-
-        prompt_upload_succeeded = True
-        for prompt_event in prompt_events:
-            if not _send_api_request("/api/ingest/prompt-event", prompt_event):
-                prompt_upload_succeeded = False
-                break
-
-        if not prompt_upload_succeeded:
-            return
-
-        if not _send_api_request("/api/ingest/task-run", task_run):
-            return
-
-        session_state["processed_turn_ids"] = [
-            *session_state["processed_turn_ids"],
-            *[str(turn["turn_id"]) for turn in unprocessed_turns],
-        ]
-        session_state["task_run"] = next_task_run_state
-        session_state["transcript_path"] = transcript_path
-        session_state["model_name"] = model_name
-        session_state["project_name"] = project_name
-        _save_session_state(session_id, session_state)
+        return
 
 
 def main() -> None:
