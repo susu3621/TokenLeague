@@ -65,6 +65,13 @@ def test_unknown_browser_language_falls_back_to_english(auth_session):
 
 
 def test_account_page_renders_chinese_copy(auth_session):
+    from datetime import datetime
+
+    import db
+
+    account_user = db.get_user_by_id(1)
+    expected_created_at = datetime.fromisoformat(account_user["hook_key_created_at"]).strftime("%Y-%m-%d %H:%M:%S UTC")
+
     response = auth_session.get("/account", headers={"Accept-Language": "zh-CN,zh;q=0.9"})
 
     assert response.status_code == 200
@@ -85,6 +92,8 @@ def test_account_page_renders_chinese_copy(auth_session):
     assert "Failed to save password" not in html
     assert "slice(0, 19)} UTC" not in html
     assert "accountMessages.utc_suffix" in html
+    assert expected_created_at in html
+    assert account_user["hook_key_created_at"] not in html
 
 
 def test_user_detail_page_renders_chinese_copy(auth_session):
@@ -208,3 +217,40 @@ def test_admin_ldap_renders_localized_failure_feedback(auth_session, monkeypatch
 
     assert response.status_code == 200
     assert "LDAP 绑定失败" in response.get_data(as_text=True)
+
+
+def test_admin_ldap_preserves_unexpected_failure_detail_in_chinese(auth_session, monkeypatch):
+    import ldap_auth
+
+    monkeypatch.setattr(ldap_auth, "test_connection", lambda settings: (False, "socket timeout"))
+
+    response = auth_session.post(
+        "/admin/ldap",
+        data={"action": "test_connection"},
+        headers={"Accept-Language": "zh-CN,zh;q=0.9"},
+    )
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "LDAP 连接失败：" in html
+    assert "socket timeout" in html
+
+
+def test_admin_users_wraps_unexpected_value_error_in_chinese(auth_session, monkeypatch):
+    import db
+
+    def boom(*args, **kwargs):
+        raise ValueError("password policy violation")
+
+    monkeypatch.setattr(db, "create_user", boom)
+
+    response = auth_session.post(
+        "/admin/users",
+        data={"action": "create_user", "username": "eve", "password": "secret123"},
+        headers={"Accept-Language": "zh-CN,zh;q=0.9"},
+    )
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "用户操作失败：" in html
+    assert "password policy violation" in html

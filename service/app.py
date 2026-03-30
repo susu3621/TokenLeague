@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP
+from datetime import datetime, timezone
 import inspect
 import os
 from pathlib import Path
@@ -206,6 +207,7 @@ def inject_shell_context():
         "project_title": db.get_setting("project_title") or db.DEFAULT_PROJECT_TITLE,
         "project_subtitle": db.get_setting("project_subtitle") or db.DEFAULT_PROJECT_SUBTITLE,
         "format_token_count": format_token_count,
+        "format_utc_timestamp": lambda value: format_utc_timestamp(value, locale),
         "locale": locale,
         "t": lambda key, **values: i18n.translate(locale, key, **values),
     }
@@ -258,6 +260,26 @@ def format_token_count(value: int | float | None) -> str:
     if abs_value.is_integer():
         return f"{sign}{int(abs_value)}"
     return f"{sign}{_trim_trailing_decimal(abs_value)}"
+
+
+def format_utc_timestamp(value, locale: str = "en") -> str:
+    if not value:
+        return i18n.translate(locale, "account.unknown")
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text = str(value).strip()
+        if text.endswith("Z"):
+            text = f"{text[:-1]}+00:00"
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            return str(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    else:
+        parsed = parsed.astimezone(timezone.utc)
+    return f"{parsed.strftime('%Y-%m-%d %H:%M:%S')} {i18n.translate(locale, 'time.utc_suffix')}"
 
 
 def _infer_api_description(rule, methods, view_func, locale: str = "en"):
@@ -461,13 +483,18 @@ def admin_ldap():
             if ok:
                 message = i18n.translate(g.locale, "admin_ldap.connection_successful")
             else:
-                normalized = (ldap_error or "").strip().lower()
+                detail = (ldap_error or "").strip()
+                normalized = detail.lower()
                 if normalized.startswith("missing ldap settings:"):
                     error = i18n.translate(g.locale, "admin_ldap.connection_failed_missing_settings")
                 elif normalized == "ldap bind failed":
                     error = i18n.translate(g.locale, "admin_ldap.connection_failed_bind")
                 else:
-                    error = i18n.translate(g.locale, "admin_ldap.connection_failed_generic")
+                    error = i18n.translate(
+                        g.locale,
+                        "admin_ldap.connection_failed_with_detail",
+                        detail=detail or i18n.translate(g.locale, "admin_ldap.connection_failed_generic"),
+                    )
         elif action == "sync_users":
             created_count = 0
             updated_count = 0
@@ -551,7 +578,7 @@ def admin_users():
             if str(exc) == "Username already exists":
                 error = i18n.translate(g.locale, "admin_users.username_exists")
             else:
-                error = str(exc)
+                error = i18n.translate(g.locale, "admin_users.error_with_detail", detail=str(exc))
 
     return render_template(
         "admin_users.html",

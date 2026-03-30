@@ -30,7 +30,7 @@
             </div>
 
             <p class="muted" data-account-hook-key-created-at>
-                {{ t('account.generated', value=account_user.hook_key_created_at or t('account.unknown')) }}
+                {{ t('account.generated', value=format_utc_timestamp(account_user.hook_key_created_at)) }}
             </p>
 
             <div class="account-actions">
