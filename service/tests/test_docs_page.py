@@ -39,3 +39,24 @@ def test_docs_sidebar_does_not_duplicate_localized_variants(auth_session):
     html = response.get_data(as_text=True)
     assert "README.zh-CN.md" not in html
     assert html.count('href="/docs/README.md"') == 1
+
+
+def test_docs_page_handles_localized_only_docs_without_english_counterpart(
+    auth_session, monkeypatch, tmp_path
+):
+    import app as app_module
+
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "GUIDE.zh-CN.md").write_text("# 仅中文指南\n\n内容", encoding="utf-8")
+    monkeypatch.setattr(app_module, "DOCS_DIR", docs_dir)
+
+    doc_list = app_module._get_doc_list("en")
+
+    assert doc_list == [{"path": "GUIDE.md", "title": "仅中文指南"}]
+
+    response = auth_session.get("/docs")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "仅中文指南" in html

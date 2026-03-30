@@ -373,7 +373,7 @@ def _get_doc_list(locale: str):
             continue
         title_source = _resolve_doc_target(logical_path, locale)
         if not title_source.exists():
-            title_source = DOCS_DIR / logical_path
+            title_source = path
         docs[logical_path] = {
             "path": logical_path,
             "title": _read_doc_title(title_source),
