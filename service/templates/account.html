@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}Account | {{ project_title }}{% endblock %}
+
+{% block content %}
+<section class="stack account-page">
+    <div class="card">
+        <h1 class="hero-title">Account</h1>
+        <p class="muted" style="margin-top: 10px;">Manage your API key and password from one place.</p>
+    </div>
+
+    <div class="card stack">
+        <div>
+            <h2 style="margin-top: 0;">API Key</h2>
+            <p class="muted">Use this hook key to send usage events for your own account.</p>
+        </div>
+
+        <div class="stack">
+            <div>
+                <label for="hook_key">Current API key</label>
+                <input
+                    id="hook_key"
+                    data-account-hook-key
+                    type="text"
+                    value="{{ account_user.hook_key }}"
+                    readonly
+                    spellcheck="false"
+                    autocomplete="off"
+                >
+            </div>
+
+            <p class="muted" data-account-hook-key-created-at>
+                Generated: {{ account_user.hook_key_created_at or "Unknown" }}
+            </p>
+
+            <div class="account-actions">
+                <button type="button" class="btn-primary" data-account-copy-key>Copy API Key</button>
+                <button type="button" data-account-rotate-key>Rotate API Key</button>
+            </div>
+
+            <p class="muted" data-account-key-status aria-live="polite"></p>
+        </div>
+    </div>
+
+    <div class="card stack">
+        <div>
+            <h2 style="margin-top: 0;">Password</h2>
+            <p class="muted">Set a new password for the account currently signed in.</p>
+        </div>
+
+        <form class="stack" data-account-password-form>
+            <div>
+                <label for="new_password">New Password</label>
+                <input id="new_password" name="new_password" type="password" autocomplete="new-password" required>
+            </div>
+
+            <div class="account-actions">
+                <button class="btn-primary" type="submit">Save Password</button>
+            </div>
+        </form>
+
+        <p class="muted" data-account-password-status aria-live="polite"></p>
+    </div>
+</section>
+{% endblock %}
+
+{% block styles %}
+<style>
+    .account-page {
+        max-width: 760px;
+    }
+
+    .account-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .account-actions button {
+        width: auto;
+    }
+
+    [data-account-hook-key] {
+        font-family: monospace;
+    }
+
+    .account-status-error {
+        color: #b42318;
+    }
+
+    .account-status-success {
+        color: #027a48;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const hookKeyInput = document.querySelector('[data-account-hook-key]');
+    const hookKeyCreatedAt = document.querySelector('[data-account-hook-key-created-at]');
+    const copyButton = document.querySelector('[data-account-copy-key]');
+    const rotateButton = document.querySelector('[data-account-rotate-key]');
+    const keyStatus = document.querySelector('[data-account-key-status]');
+    const passwordForm = document.querySelector('[data-account-password-form]');
+    const passwordInput = document.getElementById('new_password');
+    const passwordStatus = document.querySelector('[data-account-password-status]');
+
+    function setStatus(element, message, isError = false) {
+        if (!element) {
+            return;
+        }
+        element.textContent = message;
+        element.classList.toggle('account-status-error', isError);
+        element.classList.toggle('account-status-success', !isError && Boolean(message));
+    }
+
+    function formatTimestamp(value) {
+        if (!value) {
+            return 'Unknown';
+        }
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return value;
+        }
+        return `${date.toISOString().replace('T', ' ').slice(0, 19)} UTC`;
+    }
+
+    function updateHookKey(payload) {
+        if (hookKeyInput && payload.hook_key) {
+            hookKeyInput.value = payload.hook_key;
+        }
+        if (hookKeyCreatedAt) {
+            hookKeyCreatedAt.textContent = `Generated: ${formatTimestamp(payload.hook_key_created_at)}`;
+        }
+    }
+
+    copyButton?.addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText(hookKeyInput?.value || '');
+            setStatus(keyStatus, 'API key copied to clipboard');
+        } catch (error) {
+            setStatus(keyStatus, 'Could not copy API key', true);
+        }
+    });
+
+    rotateButton?.addEventListener('click', async () => {
+        setStatus(keyStatus, 'Rotating API key...');
+        rotateButton.disabled = true;
+        try {
+            const response = await fetch('/api/account/rotate-hook-key', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.success) {
+                throw new Error(payload.error || `HTTP ${response.status}`);
+            }
+            updateHookKey(payload);
+            setStatus(keyStatus, 'API key rotated');
+        } catch (error) {
+            setStatus(keyStatus, error.message || 'Failed to rotate API key', true);
+        } finally {
+            rotateButton.disabled = false;
+        }
+    });
+
+    passwordForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const newPassword = (passwordInput?.value || '').trim();
+        if (!newPassword) {
+            setStatus(passwordStatus, 'New password is required', true);
+            return;
+        }
+
+        setStatus(passwordStatus, 'Saving password...');
+        const response = await fetch('/api/change-password', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({new_password: newPassword}),
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.success) {
+            setStatus(passwordStatus, payload.error || `HTTP ${response.status}`, true);
+            return;
+        }
+
+        if (passwordInput) {
+            passwordInput.value = '';
+        }
+        setStatus(passwordStatus, 'Password updated');
+    });
+</script>
+{% endblock %}

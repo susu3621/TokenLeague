@@ -375,6 +375,15 @@ def leaderboard():
     return render_template("leaderboard.html")
 
 
+@app.route("/account")
+@auth_module.login_required
+def account():
+    account_user = db.get_user_by_id(session["user_id"])
+    if not account_user:
+        abort(404)
+    return render_template("account.html", account_user=account_user)
+
+
 @app.route("/users/<int:user_id>")
 @auth_module.login_required
 @auth_module.self_or_admin_required("user_id")
@@ -531,6 +540,21 @@ def api_change_password():
         return jsonify({"success": False, "error": "new_password is required"}), 400
     auth_module.change_password(session["user_id"], new_password)
     return jsonify({"success": True})
+
+
+@app.route("/api/account/rotate-hook-key", methods=["POST"])
+@auth_module.login_required
+def api_account_rotate_hook_key():
+    """Rotate current user hook key"""
+    db.rotate_user_hook_key(session["user_id"])
+    account_user = db.get_user_by_id(session["user_id"])
+    return jsonify(
+        {
+            "success": True,
+            "hook_key": account_user["hook_key"],
+            "hook_key_created_at": account_user["hook_key_created_at"],
+        }
+    )
 
 
 @app.route("/api/ingest/prompt-event", methods=["POST"])

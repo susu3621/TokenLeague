@@ -202,6 +202,15 @@ def test_normal_user_shell_hides_admin_and_system_links(user_session):
     assert "Admin Users" not in html
 
 
+def test_normal_user_shell_shows_account_menu_entry(user_session):
+    response = user_session.get("/leaderboard")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "/account" in html
+    assert "Alice" in html
+
+
 def test_disabled_user_session_is_revoked_from_leaderboard_and_detail(user_session):
     import db
 

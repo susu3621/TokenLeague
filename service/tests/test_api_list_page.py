@@ -16,6 +16,17 @@ def test_build_api_list_contains_template_routes():
     assert change_password["description"] == "Change current user password"
 
 
+def test_build_api_list_contains_account_rotation_endpoint():
+    from app import _build_api_list
+
+    apis = _build_api_list()
+
+    assert any(
+        api["endpoint"] == "/api/account/rotate-hook-key" and api["methods"] == ["POST"]
+        for api in apis
+    )
+
+
 def test_api_page_renders_generated_api_items(auth_session):
     response = auth_session.get("/api")
 
