@@ -4,6 +4,7 @@ from flask import g, jsonify, redirect, request, session, url_for
 from werkzeug.security import check_password_hash
 
 import db
+import i18n
 
 
 def load_user():
@@ -27,13 +28,15 @@ def _is_api_request():
 
 def _login_required_response():
     if _is_api_request():
-        return jsonify({"success": False, "error": "Authentication required"}), 401
+        locale = i18n.resolve_locale(request.headers.get("Accept-Language"))
+        return jsonify({"success": False, "error": i18n.translate(locale, "error.authentication_required")}), 401
     return redirect(url_for("login"))
 
 
 def _forbidden_response():
     if _is_api_request():
-        return jsonify({"success": False, "error": "Forbidden"}), 403
+        locale = i18n.resolve_locale(request.headers.get("Accept-Language"))
+        return jsonify({"success": False, "error": i18n.translate(locale, "error.forbidden")}), 403
     return "Forbidden", 403
 
 

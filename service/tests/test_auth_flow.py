@@ -220,6 +220,19 @@ def test_rotate_hook_key_api_requires_login(client):
     assert response.status_code == 401
 
 
+def test_rotate_hook_key_api_requires_login_in_chinese(client):
+    response = client.post(
+        "/api/account/rotate-hook-key",
+        headers={"Accept-Language": "zh-CN,zh;q=0.9"},
+    )
+
+    assert response.status_code == 401
+    assert response.get_json() == {
+        "success": False,
+        "error": "需要先登录",
+    }
+
+
 def test_change_password_api_rejects_invalid_origin_in_chinese(auth_session):
     response = auth_session.post(
         "/api/change-password",

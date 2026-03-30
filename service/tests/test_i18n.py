@@ -167,3 +167,18 @@ def test_admin_pages_render_chinese_post_feedback(auth_session):
     )
     assert ldap_response.status_code == 200
     assert "LDAP 设置已更新" in ldap_response.get_data(as_text=True)
+
+
+def test_admin_ldap_renders_localized_failure_feedback(auth_session, monkeypatch):
+    import ldap_auth
+
+    monkeypatch.setattr(ldap_auth, "test_connection", lambda settings: (False, "LDAP bind failed"))
+
+    response = auth_session.post(
+        "/admin/ldap",
+        data={"action": "test_connection"},
+        headers={"Accept-Language": "zh-CN,zh;q=0.9"},
+    )
+
+    assert response.status_code == 200
+    assert "LDAP 绑定失败" in response.get_data(as_text=True)

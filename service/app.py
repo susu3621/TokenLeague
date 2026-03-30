@@ -261,6 +261,9 @@ def format_token_count(value: int | float | None) -> str:
 
 
 def _infer_api_description(rule, methods, view_func, locale: str = "en"):
+    description_key = f"api.description.{rule.rule}"
+    if description_key in i18n.MESSAGES.get(locale, {}):
+        return i18n.translate(locale, description_key)
     if locale == "en" and view_func:
         doc = inspect.getdoc(view_func)
         if doc:
@@ -458,7 +461,13 @@ def admin_ldap():
             if ok:
                 message = i18n.translate(g.locale, "admin_ldap.connection_successful")
             else:
-                error = ldap_error or i18n.translate(g.locale, "admin_ldap.connection_failed")
+                normalized = (ldap_error or "").strip().lower()
+                if normalized.startswith("missing ldap settings:"):
+                    error = i18n.translate(g.locale, "admin_ldap.connection_failed_missing_settings")
+                elif normalized == "ldap bind failed":
+                    error = i18n.translate(g.locale, "admin_ldap.connection_failed_bind")
+                else:
+                    error = i18n.translate(g.locale, "admin_ldap.connection_failed_generic")
         elif action == "sync_users":
             created_count = 0
             updated_count = 0

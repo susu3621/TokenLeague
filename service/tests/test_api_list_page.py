@@ -28,6 +28,13 @@ def test_build_api_list_localizes_descriptions_for_chinese_locale():
     )
     assert change_password["description"] == "修改当前用户密码"
 
+    user_stats = next(
+        api
+        for api in apis
+        if api["endpoint"] == "/api/users/<int:user_id>/stats" and api["methods"] == ["GET"]
+    )
+    assert user_stats["description"] == "获取单个用户 Token 统计"
+
 
 def test_build_api_list_contains_account_rotation_endpoint():
     from app import _build_api_list
@@ -56,3 +63,4 @@ def test_api_page_renders_localized_descriptions_for_chinese_locale(auth_session
     html = response.get_data(as_text=True)
     assert "/api/change-password" in html
     assert "修改当前用户密码" in html
+    assert "获取单个用户 Token 统计" in html
