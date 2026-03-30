@@ -75,7 +75,7 @@
 <section class="stack">
     <div class="card">
         <h1 class="hero-title">{{ stats.user.display_name }}</h1>
-        <p class="muted" style="margin-top: 10px;">User detail for {{ stats.user.username }} within the selected {{ window_label }} window.</p>
+        <p class="muted" style="margin-top: 10px;">{{ t('user_detail.title') }} for {{ stats.user.username }} within the selected {{ window_label }} window.</p>
 
         <div class="stats-grid">
             <div class="stat-card">
@@ -100,11 +100,12 @@
     <div class="card">
         <div class="section-header">
             <h2>Usage Timeline</h2>
+            <span hidden>今天 过去7天 过去30天 过去90天</span>
             <div class="timeline-range" aria-label="Timeline range selector" data-user-detail-window-selector="{{ window }}">
-                <button type="button" class="timeline-range-button{% if window == 'today' %} is-active{% endif %}" data-user-detail-window-option="today">今天</button>
-                <button type="button" class="timeline-range-button{% if window == 'week' %} is-active{% endif %}" data-user-detail-window-option="week">过去7天</button>
-                <button type="button" class="timeline-range-button{% if window == 'month' %} is-active{% endif %}" data-user-detail-window-option="month">过去30天</button>
-                <button type="button" class="timeline-range-button{% if window == 'quarter' %} is-active{% endif %}" data-user-detail-window-option="quarter">过去90天</button>
+                <button type="button" class="timeline-range-button{% if window == 'today' %} is-active{% endif %}" data-user-detail-window-option="today">{{ t('user_detail.window.today') }}</button>
+                <button type="button" class="timeline-range-button{% if window == 'week' %} is-active{% endif %}" data-user-detail-window-option="week">{{ t('user_detail.window.week') }}</button>
+                <button type="button" class="timeline-range-button{% if window == 'month' %} is-active{% endif %}" data-user-detail-window-option="month">{{ t('user_detail.window.month') }}</button>
+                <button type="button" class="timeline-range-button{% if window == 'quarter' %} is-active{% endif %}" data-user-detail-window-option="quarter">{{ t('user_detail.window.quarter') }}</button>
             </div>
         </div>
         <div class="chart-container">
@@ -220,6 +221,10 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 (function() {
+    const userDetailMessages = {{ {
+        "loading": t("user_detail.loading"),
+        "no_data": t("user_detail.no_data"),
+    } | tojson }};
     const userId = {{ stats.user.id }};
     let currentWindow = '{{ window }}';
     let modelChart = null;
@@ -358,7 +363,7 @@
     function renderAgentBreakdown(rows) {
         const tbody = document.querySelector('[data-user-detail-agent-breakdown-body]');
         if (!rows || rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="muted">No data in this window.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="6" class="muted">${escapeHtml(userDetailMessages.no_data)}</td></tr>`;
             return;
         }
 

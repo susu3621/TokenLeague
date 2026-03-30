@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}LDAP | {{ project_title }}{% endblock %}
+{% block title %}{{ t('admin_ldap.title') }} | {{ project_title }}{% endblock %}
 
 {% block content %}
 <section class="stack">
     <div class="card">
-        <h1 class="hero-title">LDAP</h1>
+        <h1 class="hero-title">{{ t('admin_ldap.title') }}</h1>
         <p class="muted" style="margin-top: 10px;">Configure LDAP authentication, test the connection, and sync directory users into the local user table.</p>
         {% if message %}
         <p style="color: #027a48;">{{ message }}</p>

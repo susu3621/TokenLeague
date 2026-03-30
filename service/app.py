@@ -12,6 +12,7 @@ from flask import Flask, abort, g, jsonify, redirect, render_template, request, 
 import auth as auth_module
 import db
 import exception_logger
+import i18n
 import ldap_auth
 
 
@@ -172,6 +173,7 @@ def _log_ingest(
 @app.before_request
 def before_request():
     auth_module.load_user()
+    g.locale = i18n.resolve_locale(request.headers.get("Accept-Language"))
 
     if request.method in {"POST", "PUT", "PATCH", "DELETE"} and session.get("user_id"):
         if not _is_origin_valid_for_state_change():
@@ -194,10 +196,13 @@ def add_security_headers(response):
 
 @app.context_processor
 def inject_shell_context():
+    locale = getattr(g, "locale", "en")
     return {
         "project_title": db.get_setting("project_title") or db.DEFAULT_PROJECT_TITLE,
         "project_subtitle": db.get_setting("project_subtitle") or db.DEFAULT_PROJECT_SUBTITLE,
         "format_token_count": format_token_count,
+        "locale": locale,
+        "t": lambda key, **values: i18n.translate(locale, key, **values),
     }
 
 
@@ -340,7 +345,7 @@ def login():
         if user and user.get("status", db.USER_ACTIVE) == db.USER_ACTIVE:
             _login_user(user)
             return redirect(url_for("leaderboard"))
-        error = "Invalid username or password"
+        error = i18n.translate(g.locale, "login.invalid_credentials")
 
     return render_template("login.html", error=error)
 
@@ -358,7 +363,7 @@ def local_admin_login():
         if user:
             _login_user(user)
             return redirect(url_for("leaderboard"))
-        error = "Invalid username or password"
+        error = i18n.translate(g.locale, "login.invalid_credentials")
 
     return render_template("local_admin_login.html", error=error)
 

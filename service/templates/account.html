@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Account | {{ project_title }}{% endblock %}
+{% block title %}{{ t('account.title') }} | {{ project_title }}{% endblock %}
 
 {% block content %}
 <section class="stack account-page">
     <div class="card">
-        <h1 class="hero-title">Account</h1>
+        <h1 class="hero-title">{{ t('account.title') }}</h1>
         <p class="muted" style="margin-top: 10px;">Manage your API key and password from one place.</p>
     </div>
 
@@ -34,8 +34,8 @@
             </p>
 
             <div class="account-actions">
-                <button type="button" class="btn-primary" data-account-copy-key>Copy API Key</button>
-                <button type="button" data-account-rotate-key>Rotate API Key</button>
+                <button type="button" class="btn-primary" data-account-copy-key>{{ t('account.copy') }}</button>
+                <button type="button" data-account-rotate-key>{{ t('account.rotate') }}</button>
             </div>
 
             <p class="muted" data-account-key-status aria-live="polite"></p>
@@ -56,7 +56,7 @@
             </div>
 
             <div class="account-actions">
-                <button class="btn-primary" type="submit">Save Password</button>
+                <button class="btn-primary" type="submit">{{ t('account.password_submit') }}</button>
             </div>
         </form>
 
@@ -105,6 +105,11 @@
 
 {% block scripts %}
 <script>
+    const accountMessages = {{ {
+        "copied": t("account.copied"),
+        "rotated": t("account.rotated"),
+        "password_updated": t("account.password_updated"),
+    } | tojson }};
     const hookKeyInput = document.querySelector('[data-account-hook-key]');
     const hookKeyCreatedAt = document.querySelector('[data-account-hook-key-created-at]');
     const copyButton = document.querySelector('[data-account-copy-key]');
@@ -142,7 +147,7 @@
     copyButton?.addEventListener('click', async () => {
         try {
             await navigator.clipboard.writeText(hookKeyInput?.value || '');
-            setStatus(keyStatus, 'API key copied to clipboard');
+            setStatus(keyStatus, accountMessages.copied);
         } catch (error) {
             setStatus(keyStatus, 'Could not copy API key', true);
         }
@@ -163,7 +168,7 @@
                 throw new Error(payload.error || `HTTP ${response.status}`);
             }
             updateHookKey(payload);
-            setStatus(keyStatus, 'API key rotated');
+            setStatus(keyStatus, accountMessages.rotated);
         } catch (error) {
             setStatus(keyStatus, error.message || 'Failed to rotate API key', true);
         } finally {
@@ -205,7 +210,7 @@
             if (passwordInput) {
                 passwordInput.value = '';
             }
-            setStatus(passwordStatus, 'Password updated');
+            setStatus(passwordStatus, accountMessages.password_updated);
         } catch (error) {
             setStatus(passwordStatus, error.message || 'Failed to save password', true);
         } finally {

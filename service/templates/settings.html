@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Settings | {{ project_title }}{% endblock %}
+{% block title %}{{ t('settings.title') }} | {{ project_title }}{% endblock %}
 
 {% block content %}
 <section class="stack">
     <div class="card">
-        <h1 style="margin-top: 0;">League Settings</h1>
+        <h1 style="margin-top: 0;">{{ t('settings.title') }}</h1>
         <p class="muted">Configure the TokenLeague shell title and subtitle shown across the authenticated pages.</p>
         {% if message %}
         <p style="color: #027a48;">{{ message }}</p>

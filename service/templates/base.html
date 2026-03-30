@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ locale }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -199,26 +199,26 @@
             <a class="brand" href="{{ url_for('leaderboard') if g.user else url_for('login') }}">{{ project_title }}</a>
             {% if g.user %}
             <div class="nav">
-                <a href="{{ url_for('leaderboard') }}">Leaderboard</a>
-                <a href="{{ url_for('docs_page') }}">Docs</a>
+                <a href="{{ url_for('leaderboard') }}">{{ t('nav.leaderboard') }}</a>
+                <a href="{{ url_for('docs_page') }}">{{ t('nav.docs') }}</a>
                 <details class="nav-menu">
                     <summary>
                         <span class="nav-menu-label">{{ g.user.display_name if g.user.display_name else g.user.username }}</span>
                         <span class="nav-menu-handle">{{ g.user.username }}</span>
                     </summary>
                     <div class="nav-menu-panel">
-                        <a href="{{ url_for('account') }}">Account</a>
+                        <a href="{{ url_for('account') }}">{{ t('nav.account') }}</a>
                         <form method="POST" action="{{ url_for('logout') }}" style="margin: 0;">
-                            <button type="submit">Log out</button>
+                            <button type="submit">{{ t('nav.logout') }}</button>
                         </form>
                     </div>
                 </details>
                 {% if g.user.role == 'admin' %}
-                <a href="{{ url_for('settings') }}">Settings</a>
-                <a href="{{ url_for('api_list') }}">API</a>
-                <a href="{{ url_for('admin_users') }}">Admin Users</a>
-                <a href="{{ url_for('admin_ldap') }}">LDAP</a>
-                <a href="{{ url_for('admin_agents') }}">Agent Catalog</a>
+                <a href="{{ url_for('settings') }}">{{ t('nav.settings') }}</a>
+                <a href="{{ url_for('api_list') }}">{{ t('nav.api') }}</a>
+                <a href="{{ url_for('admin_users') }}">{{ t('nav.admin_users') }}</a>
+                <a href="{{ url_for('admin_ldap') }}">{{ t('nav.ldap') }}</a>
+                <a href="{{ url_for('admin_agents') }}">{{ t('nav.agent_catalog') }}</a>
                 {% endif %}
             </div>
             {% endif %}

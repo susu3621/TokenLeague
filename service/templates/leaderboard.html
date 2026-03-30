@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}Leaderboard | {{ project_title }}{% endblock %}
+{% block title %}{{ t('leaderboard.title') }} | {{ project_title }}{% endblock %}
 
 {% block content %}
 <section class="stack">
     <div class="card">
-        <h1 class="hero-title">Token Leaderboard</h1>
+        <h1 class="hero-title">{{ t('leaderboard.title') }}</h1>
         <p class="muted" style="margin-top: 10px;">This page loads the latest precomputed default leaderboard snapshot. Rankings may be up to one hour behind the newest usage events.</p>
         <p class="muted" data-leaderboard-last-updated>Last updated: pending</p>
-        <p class="muted" data-leaderboard-status>Loading leaderboard...</p>
+        <p class="muted" data-leaderboard-status data-leaderboard-preparing-message="{{ t('leaderboard.preparing') }}">{{ t('leaderboard.loading') }}</p>
     </div>
 
     <div class="card">
@@ -26,7 +26,7 @@
             </thead>
             <tbody data-leaderboard-body>
                 <tr>
-                    <td colspan="7" class="muted">Loading leaderboard...</td>
+                    <td colspan="7" class="muted">{{ t('leaderboard.loading') }}</td>
                 </tr>
             </tbody>
         </table>
@@ -46,6 +46,11 @@
 <script>
     const viewerUserId = {{ g.user["id"] if g.user else "null" }};
     const viewerIsAdmin = {{ "true" if g.user and g.user.role == "admin" else "false" }};
+    const leaderboardMessages = {{ {
+        "loading": t("leaderboard.loading"),
+        "preparing": t("leaderboard.preparing"),
+        "failed": t("leaderboard.failed"),
+    } | tojson }};
 
     function escapeHtml(value) {
         return String(value ?? '')
@@ -84,7 +89,7 @@
             return;
         }
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="7" class="muted">Leaderboard is being prepared</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="7" class="muted">${escapeHtml(leaderboardMessages.preparing)}</td></tr>`;
             return;
         }
         tbody.innerHTML = rows.map((row) => `
@@ -126,17 +131,17 @@
             const payload = await response.json();
             renderLeaderboardLastUpdated(payload.generated_at);
             if (!payload.generated_at && !(payload.rows || []).length) {
-                renderLeaderboardStatus('Leaderboard is being prepared');
+                renderLeaderboardStatus(leaderboardMessages.preparing);
                 renderLeaderboardRows([]);
                 return;
             }
             renderLeaderboardStatus('');
             renderLeaderboardRows(payload.rows || []);
         } catch (error) {
-            renderLeaderboardStatus('Failed to load leaderboard', true);
+            renderLeaderboardStatus(leaderboardMessages.failed, true);
             const tbody = document.querySelector('[data-leaderboard-body]');
             if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="7" class="muted">Failed to load leaderboard</td></tr>';
+                tbody.innerHTML = `<tr><td colspan="7" class="muted">${escapeHtml(leaderboardMessages.failed)}</td></tr>`;
             }
         }
     }

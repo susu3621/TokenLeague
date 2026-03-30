@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Agent Catalog | {{ project_title }}{% endblock %}
+{% block title %}{{ t('admin_agents.title') }} | {{ project_title }}{% endblock %}
 
 {% block content %}
 <section class="stack">
     <div class="card">
-        <h1 class="hero-title">Agent Catalog</h1>
+        <h1 class="hero-title">{{ t('admin_agents.title') }}</h1>
         <p class="muted" style="margin-top: 10px;">Observed combinations of agent type, version, and model from usage ingestion.</p>
     </div>
 

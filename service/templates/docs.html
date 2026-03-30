@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Docs | Template Project{% endblock %}
+{% block title %}{{ t('docs.title') }} | {{ project_title }}{% endblock %}
 
 {% block styles %}
 <style>
@@ -43,7 +43,7 @@
 {% block content %}
 <section class="docs-layout">
     <aside class="card docs-sidebar">
-        <h2 style="margin-top: 0;">Documents</h2>
+        <h2 style="margin-top: 0;">{{ t('docs.sidebar_title') }}</h2>
         <ul>
             {% for doc in doc_list %}
             <li><a href="{{ url_for('docs_page', filepath=doc.path) }}">{{ doc.title }}</a></li>
