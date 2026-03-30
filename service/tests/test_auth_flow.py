@@ -145,6 +145,28 @@ def test_login_post_redirects_to_settings(client):
     assert response.headers["Location"].endswith("/leaderboard")
 
 
+def test_login_rejects_local_password_after_user_becomes_ldap(client):
+    import db
+
+    db.create_user("alice", "alice123", display_name="Alice")
+    db.upsert_ldap_user(
+        username="alice",
+        display_name="Alice LDAP",
+        ldap_dn="cn=alice,dc=example,dc=com",
+    )
+
+    response = client.post(
+        "/login",
+        data={"username": "alice", "password": "alice123"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Invalid username or password" in html
+    assert "/leaderboard" not in response.headers.get("Location", "")
+
+
 def test_change_password_api_requires_login(client):
     response = client.post("/api/change-password", json={"new_password": "changed123"})
 

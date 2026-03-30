@@ -83,6 +83,8 @@ def verify_local_password(username: str, password: str):
     user = db.get_user_by_username(username)
     if not user:
         return None
+    if user.get("auth_source", db.AUTH_SOURCE_LOCAL) != db.AUTH_SOURCE_LOCAL:
+        return None
     if check_password_hash(user["password_hash"], password):
         return user
     return None
