@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .codebuddy/hooks/tokenleague.py SessionStart",
+            "command": "python3 .workbuddy/hooks/tokenleague.py SessionStart",
             "timeout": 5000
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .codebuddy/hooks/tokenleague.py Stop",
+            "command": "python3 .workbuddy/hooks/tokenleague.py Stop",
             "timeout": 5000
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .codebuddy/hooks/tokenleague.py SessionEnd",
+            "command": "python3 .workbuddy/hooks/tokenleague.py SessionEnd",
             "timeout": 5000
           }
         ]

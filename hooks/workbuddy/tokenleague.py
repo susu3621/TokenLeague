@@ -4,6 +4,16 @@ TokenLeague Statistics Hook for Workbuddy (CodeBuddy CLI).
 
 This hook parses transcript usage on Stop or SessionEnd and returns a startup
 message on SessionStart using the Claude-compatible hook payload format.
+
+WorkBuddy stores transcripts as index.json with the following structure:
+{
+  "messages": [{"id": "...", "type": "text", "role": "user|assistant", "isComplete": true}],
+  "requests": [{
+    "id": "...", "type": "craft", "messages": ["msg-id-1", "msg-id-2"],
+    "state": "complete", "startedAt": 1774936850964,
+    "usage": {"inputTokens": 23247, "outputTokens": 27, "totalTokens": 23274, "lastTokens": 23274}
+  }]
+}
 """
 
 from __future__ import annotations
@@ -13,6 +23,8 @@ import os
 from pathlib import Path
 import sys
 from typing import Any
+import uuid
+from datetime import datetime, timezone
 
 
 def _load_common_module() -> None:
@@ -31,8 +43,8 @@ _load_common_module()
 
 from tokenleague_transcript_hook import TranscriptHookConfig  # type: ignore  # noqa: E402
 from tokenleague_transcript_hook import build_session_start_json_payload  # type: ignore  # noqa: E402
-from tokenleague_transcript_hook import build_usage_payloads_from_transcript  # type: ignore  # noqa: E402
-from tokenleague_transcript_hook import detect_project_name  # type: ignore  # noqa: E402
+from tokenleague_transcript_hook import first_string  # type: ignore  # noqa: E402
+from tokenleague_transcript_hook import get_env  # type: ignore  # noqa: E402
 from tokenleague_transcript_hook import load_event_data_from_stdin  # type: ignore  # noqa: E402
 from tokenleague_transcript_hook import resolve_session_id  # type: ignore  # noqa: E402
 from tokenleague_transcript_hook import resolve_transcript_path  # type: ignore  # noqa: E402
@@ -49,7 +61,123 @@ END_HOOK_EVENTS = {"Stop", "SessionEnd"}
 
 
 def _detect_project_name(cwd: str | None = None) -> str:
+    from tokenleague_transcript_hook import detect_project_name  # type: ignore  # noqa: E402
     return detect_project_name(cwd)
+
+
+def _detect_workbuddy_version() -> str:
+    env_version = first_string(*(get_env(name) for name in CONFIG.version_env_vars))
+    if env_version:
+        return env_version
+
+    for plist_path in [
+        Path("/Applications/WorkBuddy.app/Contents/Info.plist"),
+        Path(os.path.expanduser("~/Applications/WorkBuddy.app/Contents/Info.plist")),
+    ]:
+        if plist_path.exists():
+            try:
+                import plistlib
+                with plist_path.open("rb") as f:
+                    plist = plistlib.load(f)
+                version = plist.get("CFBundleShortVersionString")
+                if version:
+                    return str(version)
+            except (OSError, ValueError):
+                pass
+
+    return "unknown"
+
+
+def _ms_to_iso(ms_value: Any) -> str:
+    if not ms_value:
+        return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    try:
+        dt = datetime.fromtimestamp(int(ms_value) / 1000, tz=timezone.utc)
+        return dt.isoformat()
+    except (ValueError, OSError):
+        return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _parse_workbuddy_transcript(
+    transcript_path: str,
+    session_id: str,
+    project_name: str,
+    agent_version: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    if not transcript_path:
+        return [], None
+
+    path = Path(transcript_path)
+    if not path.exists():
+        write_hook_log(CONFIG, "transcript_missing", transcript_path=str(path))
+        return [], None
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        write_hook_log(CONFIG, "transcript_read_failed", transcript_path=str(path), error=str(exc))
+        return [], None
+
+    if not isinstance(data, dict):
+        write_hook_log(CONFIG, "transcript_unexpected_format", transcript_path=str(path))
+        return [], None
+
+    requests = data.get("requests", [])
+    if not requests:
+        write_hook_log(CONFIG, "transcript_no_requests", transcript_path=str(path))
+        return [], None
+
+    prompt_events: list[dict[str, Any]] = []
+    for req in requests:
+        if not isinstance(req, dict):
+            continue
+        if req.get("state") != "complete":
+            continue
+
+        usage = req.get("usage", {})
+        if not usage:
+            continue
+
+        input_tokens = int(usage.get("inputTokens", 0) or 0)
+        output_tokens = int(usage.get("outputTokens", 0) or 0)
+        if input_tokens == 0 and output_tokens == 0:
+            continue
+
+        req_id = req.get("id", str(uuid.uuid4()))
+        timestamp_str = _ms_to_iso(req.get("startedAt"))
+
+        prompt_events.append({
+            "external_event_id": req_id,
+            "task_id": session_id,
+            "project_name": project_name,
+            "prompt_started_at": timestamp_str,
+            "prompt_finished_at": timestamp_str,
+            "input_token_count": input_tokens,
+            "output_token_count": output_tokens,
+            "cached_input_token_count": 0,
+            "agent_type": CONFIG.agent_type,
+            "agent_version": agent_version,
+            "model_name": "unknown",
+        })
+
+    if not prompt_events:
+        return [], None
+
+    task_run = {
+        "external_task_id": session_id,
+        "project_name": project_name,
+        "started_at": prompt_events[0]["prompt_started_at"],
+        "finished_at": prompt_events[-1]["prompt_finished_at"],
+        "prompt_count": len(prompt_events),
+        "input_token_count": sum(e["input_token_count"] for e in prompt_events),
+        "output_token_count": sum(e["output_token_count"] for e in prompt_events),
+        "cached_input_token_count": 0,
+        "agent_type": CONFIG.agent_type,
+        "agent_version": agent_version,
+        "model_name": "unknown",
+    }
+
+    return prompt_events, task_run
 
 
 def _handle_session_start(event_data: dict[str, Any]) -> dict[str, Any]:
@@ -64,22 +192,30 @@ def _send_api_request(endpoint: str, payload: dict[str, Any]) -> bool:
 
 
 def _handle_stop(event_data: dict[str, Any]) -> None:
-    prompt_events, task_run = build_usage_payloads_from_transcript(CONFIG, event_data)
+    session_id = resolve_session_id(event_data)
+    transcript_path = resolve_transcript_path(CONFIG, event_data)
+    project_name = _detect_project_name(event_data.get("cwd"))
+    agent_version = _detect_workbuddy_version()
+
+    prompt_events, task_run = _parse_workbuddy_transcript(
+        transcript_path, session_id, project_name, agent_version,
+    )
+
     if not prompt_events or not task_run:
         write_hook_log(
             CONFIG,
             "stop_skipped",
             reason="no_prompt_events",
-            session_id=resolve_session_id(event_data),
-            transcript_path=resolve_transcript_path(CONFIG, event_data),
+            session_id=session_id,
+            transcript_path=transcript_path,
         )
         return
 
     write_hook_log(
         CONFIG,
         "transcript_parsed",
-        session_id=resolve_session_id(event_data),
-        transcript_path=resolve_transcript_path(CONFIG, event_data),
+        session_id=session_id,
+        transcript_path=transcript_path,
         prompt_count=len(prompt_events),
         input_token_count=task_run["input_token_count"],
         output_token_count=task_run["output_token_count"],

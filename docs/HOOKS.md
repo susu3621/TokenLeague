@@ -10,7 +10,7 @@ Run the installation script:
 
 ```bash
 cd /path/to/TokenLeague
-./scripts/install_hooks.sh --both --cursor --workbuddy --gemini --kiro --openclaw --global
+./scripts/install_hooks.sh --all --cursor --workbuddy --gemini --kiro --openclaw --global
 ```
 
 Built-in templates live under `hooks/` inside this repository. The repository checkout itself does not auto-enable agent hooks; installation is explicit.
@@ -25,14 +25,14 @@ Built-in templates live under `hooks/` inside this repository. The repository ch
 | `--gemini` | Install only Gemini CLI hooks |
 | `--kiro` | Stage only Kiro hook scripts for manual Agent Hooks setup |
 | `--openclaw` | Install only OpenClaw collector assets |
-| `--both` | Install Claude Code and Codex CLI hooks |
-| `--global` | Install to `~/.claude`, `~/.codex`, `~/.cursor`, `~/.codebuddy`, `~/.gemini`, `~/.kiro`, and/or `~/.openclaw` depending on flags |
+| `--all` | Install all supported agent hooks (default) |
+| `--global` | Install to `~/.claude`, `~/.codex`, `~/.cursor`, `~/.workbuddy`, `~/.gemini`, `~/.kiro`, and/or `~/.openclaw` depending on flags |
 | `--local` | Install to project directory (default) |
 
 **Examples:**
 ```bash
 # Install all supported hooks globally
-./scripts/install_hooks.sh --both --cursor --workbuddy --gemini --kiro --openclaw --global
+./scripts/install_hooks.sh --all --cursor --workbuddy --gemini --kiro --openclaw --global
 
 # Install only Claude Code hooks globally
 ./scripts/install_hooks.sh --claude --global
@@ -53,14 +53,14 @@ Built-in templates live under `hooks/` inside this repository. The repository ch
 ./scripts/install_hooks.sh --openclaw --global
 
 # Install to current project directory only
-./scripts/install_hooks.sh --both --cursor --workbuddy --gemini --kiro --openclaw --local
+./scripts/install_hooks.sh --all --cursor --workbuddy --gemini --kiro --openclaw --local
 ```
 
 ### Uninstall Hooks
 
 ```bash
 # Uninstall all supported hooks globally
-./scripts/install_hooks.sh --both --cursor --workbuddy --gemini --kiro --openclaw --global --uninstall
+./scripts/install_hooks.sh --all --cursor --workbuddy --gemini --kiro --openclaw --global --uninstall
 
 # Uninstall only Claude Code hooks
 ./scripts/install_hooks.sh --claude --global --uninstall
@@ -124,7 +124,7 @@ codex
 Cursor installs config into `.cursor/hooks.json` or `~/.cursor/hooks.json`, and the hook command lives at `.cursor/hooks/tokenleague.py` or `~/.cursor/hooks/tokenleague.py`.
 
 **Workbuddy / CodeBuddy CLI:**
-Workbuddy installs config into `.codebuddy/settings.json` or `~/.codebuddy/settings.json`.
+Workbuddy installs config into `.workbuddy/settings.json` or `~/.workbuddy/settings.json`.
 
 **Gemini CLI:**
 ```bash
@@ -293,7 +293,7 @@ Cursor hooks are installed into `.cursor/hooks.json` or `~/.cursor/hooks.json`:
 
 The command script lives at `.cursor/hooks/tokenleague.py` or `~/.cursor/hooks/tokenleague.py`.
 
-Workbuddy hooks are installed into `.codebuddy/settings.json` or `~/.codebuddy/settings.json`:
+Workbuddy hooks are installed into `.workbuddy/settings.json` or `~/.workbuddy/settings.json`:
 
 ```json
 {
@@ -512,7 +512,7 @@ For 1-minute automatic uploads with systemd, use the installer so the templates 
 Run the uninstall command:
 
 ```bash
-./scripts/install_hooks.sh --both --gemini --openclaw --global --uninstall
+./scripts/install_hooks.sh --all --gemini --openclaw --global --uninstall
 ```
 
 The uninstaller will:

@@ -5,7 +5,7 @@
 # This script installs or uninstalls TokenLeague statistics hooks for supported agents.
 #
 # Usage:
-#   ./install_hooks.sh [--claude] [--codex] [--cursor] [--workbuddy] [--gemini] [--kiro] [--openclaw] [--both] [--global] [--uninstall]
+#   ./install_hooks.sh [--claude] [--codex] [--cursor] [--workbuddy] [--gemini] [--kiro] [--openclaw] [--all] [--global] [--uninstall]
 #
 # Options:
 #   --claude    Install/uninstall hooks for Claude Code only
@@ -15,14 +15,14 @@
 #   --gemini    Install/uninstall hooks for Gemini CLI only
 #   --kiro      Install/uninstall staged Kiro hook scripts only
 #   --openclaw  Install/uninstall collector assets for OpenClaw
-#   --both      Install/uninstall hooks for both (default)
-#   --global    Install/uninstall to user's global config directory (~/.claude, ~/.codex, ~/.cursor, ~/.codebuddy, ~/.gemini, ~/.kiro, ~/.openclaw)
+#   --all       Install/uninstall hooks for all supported agents (default)
+#   --global    Install/uninstall to user's global config directory (~/.claude, ~/.codex, ~/.cursor, ~/.workbuddy, ~/.gemini, ~/.kiro, ~/.openclaw)
 #   --local     Install/uninstall to current project directory (default)
 #   --uninstall Remove TokenLeague hooks
 #
 # Config targets:
 #   Cursor: .cursor/hooks.json or ~/.cursor/hooks.json
-#   Workbuddy: .codebuddy/settings.json or ~/.codebuddy/settings.json
+#   Workbuddy: .workbuddy/settings.json or ~/.workbuddy/settings.json
 #   Kiro staged script: .kiro/hooks/tokenleague.py or ~/.kiro/hooks/tokenleague.py
 #   Kiro staged env example: .kiro/hooks/tokenleague.env.example or ~/.kiro/hooks/tokenleague.env.example
 #
@@ -865,7 +865,7 @@ while [[ $# -gt 0 ]]; do
             INSTALL_OPENCLAW=true
             shift
             ;;
-        --both)
+        --all)
             INSTALL_CLAUDE=true
             INSTALL_CODEX=true
             shift
@@ -895,8 +895,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --gemini    Install/uninstall hooks for Gemini CLI only"
             echo "  --kiro      Install/uninstall staged Kiro hook scripts only"
             echo "  --openclaw  Install/uninstall collector assets for OpenClaw"
-            echo "  --both      Install/uninstall hooks for both (default)"
-            echo "  --global    Install/uninstall to user's global config (~/.claude, ~/.codex, ~/.cursor, ~/.codebuddy, ~/.gemini, ~/.kiro, ~/.openclaw)"
+            echo "  --all       Install/uninstall hooks for all supported agents (default)"
+            echo "  --global    Install/uninstall to user's global config (~/.claude, ~/.codex, ~/.cursor, ~/.workbuddy, ~/.gemini, ~/.kiro, ~/.openclaw)"
             echo "  --local     Install/uninstall to current project directory (default)"
             echo "  --uninstall Remove TokenLeague hooks"
             echo "  --help, -h  Show this help message"
@@ -979,11 +979,11 @@ install_workbuddy_hooks() {
     local target_dir
     local command_base
     if [[ "$INSTALL_GLOBAL" == "true" ]]; then
-        target_dir="$HOME/.codebuddy"
+        target_dir="$HOME/.workbuddy"
         command_base="python3 $target_dir/hooks/tokenleague.py"
     else
-        target_dir="$PROJECT_ROOT/.codebuddy"
-        command_base="python3 .codebuddy/hooks/tokenleague.py"
+        target_dir="$PROJECT_ROOT/.workbuddy"
+        command_base="python3 .workbuddy/hooks/tokenleague.py"
     fi
 
     echo -e "${YELLOW}Installing Workbuddy hooks to: $target_dir${NC}"
@@ -1188,9 +1188,9 @@ uninstall_cursor_hooks() {
 uninstall_workbuddy_hooks() {
     local target_dir
     if [[ "$INSTALL_GLOBAL" == "true" ]]; then
-        target_dir="$HOME/.codebuddy"
+        target_dir="$HOME/.workbuddy"
     else
-        target_dir="$PROJECT_ROOT/.codebuddy"
+        target_dir="$PROJECT_ROOT/.workbuddy"
     fi
 
     echo -e "${YELLOW}Uninstalling Workbuddy hooks from: $target_dir${NC}"
