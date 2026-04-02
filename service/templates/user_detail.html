@@ -235,6 +235,8 @@
     let modelChart = null;
     let timelineChart = null;
     let refreshRequestId = 0;
+    let latestTimeline = [];
+    let selectedTimelineProject = null;
     const timelineColorCache = new Map();
 
     function trimTrailingDecimal(value) {
@@ -538,13 +540,21 @@
         return Array.from(projectNames).sort((left, right) => left.localeCompare(right));
     }
 
+    function getVisibleProjectNames(timeline) {
+        const projectNames = getProjectNames(timeline);
+        if (selectedTimelineProject && !projectNames.includes(selectedTimelineProject)) {
+            return projectNames;
+        }
+        return selectedTimelineProject ? [selectedTimelineProject] : getProjectNames(timeline);
+    }
+
     function tokenCountForProject(bucket, projectName) {
         const row = (bucket.project_breakdown || []).find(project => project.project_name === projectName);
         return row ? row.total_token_count : 0;
     }
 
     function buildTimelineDatasets(timeline) {
-        return getProjectNames(timeline).map(projectName => {
+        return getVisibleProjectNames(timeline).map(projectName => {
             const color = colorForProject(projectName);
             return {
                 label: projectName,
@@ -567,10 +577,21 @@
         return `${url.pathname}${url.search}`;
     }
 
-    function renderTimeline(timeline, windowValue) {
+    function updateTimelineProjectFocus(projectName) {
+        const clickedProject = projectName;
+        selectedTimelineProject = selectedTimelineProject === clickedProject ? null : clickedProject;
+        renderTimeline(latestTimeline, currentWindow, { preserveSelection: true });
+    }
+
+    function renderTimeline(timeline, windowValue, { preserveSelection = false } = {}) {
         const ctx = document.getElementById('timeline-chart').getContext('2d');
-        const datasets = buildTimelineDatasets(timeline || []);
-        if (!timeline || timeline.length === 0 || datasets.length === 0) {
+        latestTimeline = timeline || [];
+        if (!preserveSelection) {
+            selectedTimelineProject = null;
+        }
+
+        const datasets = buildTimelineDatasets(latestTimeline);
+        if (latestTimeline.length === 0 || datasets.length === 0) {
             renderEmptyTimeline(ctx);
             return;
         }
@@ -579,7 +600,7 @@
             timelineChart.destroy();
         }
         const isToday = windowValue === 'today';
-        const labels = timeline.map(bucket => formatTimelineLabel(bucket.time_bucket, isToday));
+        const labels = latestTimeline.map(bucket => formatTimelineLabel(bucket.time_bucket, isToday));
         const xTickConfig = isToday
             ? { autoSkip: true, maxRotation: 0, minRotation: 0, maxTicksLimit: 12 }
             : { autoSkip: true, maxRotation: 0, minRotation: 0, maxTicksLimit: 8 };
@@ -593,7 +614,13 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { position: 'bottom' },
+                    legend: {
+                        position: 'bottom',
+                        onClick: (_event, legendItem) => {
+                            const clickedProject = legendItem.text;
+                            updateTimelineProjectFocus(clickedProject);
+                        }
+                    },
                     tooltip: {
                         callbacks: {
                             label: context => `${context.dataset.label}: ${formatTokenCount(context.parsed.y)}`

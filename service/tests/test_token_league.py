@@ -1270,6 +1270,21 @@ def test_user_detail_page_renders_english_timeline_range_selector_by_default(aut
     assert "Past 90 Days" in html
 
 
+def test_user_detail_page_script_supports_single_project_timeline_focus(auth_session):
+    response = auth_session.get("/users/1")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "let selectedTimelineProject = null;" in html
+    assert "let latestTimeline = [];" in html
+    assert "function getVisibleProjectNames(timeline)" in html
+    assert "return selectedTimelineProject ? [selectedTimelineProject] : getProjectNames(timeline);" in html
+    assert "function updateTimelineProjectFocus(projectName)" in html
+    assert "const clickedProject = legendItem.text;" in html
+    assert "selectedTimelineProject = selectedTimelineProject === clickedProject ? null : clickedProject;" in html
+    assert "renderTimeline(latestTimeline, currentWindow, { preserveSelection: true });" in html
+
+
 def test_compact_token_count_formats_human_readable_suffixes():
     from app import format_token_count
 
