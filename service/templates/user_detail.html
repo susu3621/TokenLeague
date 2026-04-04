@@ -700,6 +700,28 @@
                     },
                 ],
             },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: context => `${context.dataset.label}: ${formatTokenCount(context.parsed.y)}`,
+                        },
+                    },
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: value => formatTokenCount(value),
+                        },
+                    },
+                },
+            },
         });
     }
 
