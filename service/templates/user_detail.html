@@ -114,6 +114,10 @@
         <div class="chart-container" aria-label="{{ t('user_detail.avg_tokens_per_project') }}">
             <canvas id="average-timeline-chart"></canvas>
         </div>
+        <h3 style="margin: 24px 0 12px;">{{ t('user_detail.daily_prompt_count') }}</h3>
+        <div class="chart-container" aria-label="{{ t('user_detail.daily_prompt_count') }}">
+            <canvas id="prompt-count-timeline-chart"></canvas>
+        </div>
     </div>
 
     <div class="card">
@@ -235,12 +239,14 @@
         "input_tokens": t("user_detail.input_tokens"),
         "output_tokens": t("user_detail.output_tokens"),
         "avg_tokens_per_prompt": t("user_detail.avg_tokens_per_prompt"),
+        "daily_prompt_count": t("user_detail.daily_prompt_count"),
     } | tojson }};
     const userId = {{ stats.user.id }};
     let currentWindow = '{{ window }}';
     let modelChart = null;
     let timelineChart = null;
     let averageTimelineChart = null;
+    let promptCountTimelineChart = null;
     let refreshRequestId = 0;
     let latestTimeline = [];
     let selectedTimelineProject = null;
@@ -541,6 +547,25 @@
         return promptCount ? totalTokenCount / promptCount : 0;
     }
 
+    function buildDailyPromptTimeline(timeline, windowValue) {
+        if (windowValue !== 'today') {
+            return timeline || [];
+        }
+
+        if (!timeline || timeline.length === 0) {
+            return [];
+        }
+
+        const firstBucket = timeline[0];
+        const promptTotal = (timeline || []).reduce((sum, bucket) => sum + Number(bucket.prompt_count || 0), 0);
+        return [
+            {
+                time_bucket: String(firstBucket.time_bucket || '').split(' ')[0],
+                prompt_count: promptTotal,
+            },
+        ];
+    }
+
     function hashString(value) {
         let hash = 0;
         for (let i = 0; i < value.length; i += 1) {
@@ -725,6 +750,65 @@
         });
     }
 
+    function renderPromptCountTimeline(timeline, windowValue) {
+        const promptCtx = document.getElementById('prompt-count-timeline-chart').getContext('2d');
+        promptCountTimelineChart = clearChart(promptCountTimelineChart);
+
+        const promptTimeline = buildDailyPromptTimeline(timeline, windowValue);
+        if (!promptTimeline || promptTimeline.length === 0) {
+            promptCountTimelineChart = renderEmptyChart(promptCtx, promptCountTimelineChart);
+            return;
+        }
+
+        const labels = promptTimeline.map(bucket => formatTimelineLabel(bucket.time_bucket, false));
+        promptCountTimelineChart = new Chart(promptCtx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: userDetailMessages.daily_prompt_count,
+                        data: promptTimeline.map(bucket => Number(bucket.prompt_count || 0)),
+                        backgroundColor: '#2563eb',
+                        borderRadius: 6,
+                        maxBarThickness: 28,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false,
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: context => `${context.dataset.label}: ${formatCount(context.parsed.y)}`,
+                        },
+                    },
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0,
+                            callback: value => formatCount(value),
+                        },
+                    },
+                    x: {
+                        ticks: {
+                            autoSkip: true,
+                            maxRotation: 0,
+                            minRotation: 0,
+                            maxTicksLimit: 8,
+                        },
+                    },
+                },
+            },
+        });
+    }
+
     function refreshUserDetail(windowValue) {
         const requestId = ++refreshRequestId;
         const nextUrl = new URL(window.location.href);
@@ -769,6 +853,7 @@
                 }
                 renderTimeline(data.timeline || [], windowValue);
                 renderAverageTimeline(data.timeline || [], windowValue);
+                renderPromptCountTimeline(data.timeline || [], windowValue);
             });
     }
 

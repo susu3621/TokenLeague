@@ -1294,6 +1294,17 @@ def test_user_detail_page_renders_average_timeline_chart_section(auth_session):
     assert messages["avg_tokens_per_prompt"] == "Avg Tokens / Prompt"
 
 
+def test_user_detail_page_renders_prompt_count_timeline_chart_section(auth_session):
+    response = auth_session.get("/users/1")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    messages = _user_detail_messages(html)
+    assert "Daily Prompt Count" in html
+    assert 'canvas id="prompt-count-timeline-chart"' in html
+    assert messages["daily_prompt_count"] == "Daily Prompt Count"
+
+
 def test_user_detail_page_renders_average_timeline_chart_section_in_chinese(auth_session):
     response = auth_session.get("/users/1", headers={"Accept-Language": "zh-CN,zh;q=0.9"})
 
@@ -1304,6 +1315,16 @@ def test_user_detail_page_renders_average_timeline_chart_section_in_chinese(auth
     assert "每项目平均 Token" in html
     assert messages["avg_tokens_per_project"] == "每项目平均 Token"
     assert messages["avg_tokens_per_prompt"] == "每次 Prompt 平均 Token"
+
+
+def test_user_detail_page_renders_prompt_count_timeline_chart_section_in_chinese(auth_session):
+    response = auth_session.get("/users/1", headers={"Accept-Language": "zh-CN,zh;q=0.9"})
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    messages = _user_detail_messages(html)
+    assert "每日 Prompt 数" in html
+    assert messages["daily_prompt_count"] == "每日 Prompt 数"
 
 
 def test_user_detail_page_script_renders_average_timeline_from_timeline_buckets(auth_session):
@@ -1330,6 +1351,26 @@ def test_user_detail_page_script_renders_average_timeline_from_timeline_buckets(
     assert "formatTokenCount(context.parsed.y)" in html
     assert "callback: value => formatTokenCount(value)" in html
     assert "renderAverageTimeline(data.timeline || [], windowValue);" in html
+
+
+def test_user_detail_page_script_renders_prompt_count_timeline_from_daily_buckets(auth_session):
+    response = auth_session.get("/users/1")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "let promptCountTimelineChart = null;" in html
+    assert "function buildDailyPromptTimeline(timeline, windowValue)" in html
+    assert "if (windowValue !== 'today') {" in html
+    assert "return timeline || [];" in html
+    assert "const promptTotal = (timeline || []).reduce((sum, bucket) => sum + Number(bucket.prompt_count || 0), 0);" in html
+    assert "function renderPromptCountTimeline(timeline, windowValue)" in html
+    assert "const promptTimeline = buildDailyPromptTimeline(timeline, windowValue);" in html
+    assert "const promptCtx = document.getElementById('prompt-count-timeline-chart').getContext('2d');" in html
+    assert "label: userDetailMessages.daily_prompt_count" in html
+    assert "data: promptTimeline.map(bucket => Number(bucket.prompt_count || 0))" in html
+    assert "formatCount(context.parsed.y)" in html
+    assert "callback: value => formatCount(value)" in html
+    assert "renderPromptCountTimeline(data.timeline || [], windowValue);" in html
 
 
 def test_user_detail_page_script_supports_single_project_timeline_focus(auth_session):
