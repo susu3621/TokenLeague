@@ -114,8 +114,8 @@
         <div class="chart-container" aria-label="{{ t('user_detail.avg_tokens_per_project') }}">
             <canvas id="average-timeline-chart"></canvas>
         </div>
-        <h3 style="margin: 24px 0 12px;">{{ t('user_detail.daily_prompt_count') }}</h3>
-        <div class="chart-container" aria-label="{{ t('user_detail.daily_prompt_count') }}">
+        <h3 style="margin: 24px 0 12px;">{{ t('user_detail.prompt_count_timeline') }}</h3>
+        <div class="chart-container" aria-label="{{ t('user_detail.prompt_count_timeline') }}">
             <canvas id="prompt-count-timeline-chart"></canvas>
         </div>
     </div>
@@ -239,7 +239,7 @@
         "input_tokens": t("user_detail.input_tokens"),
         "output_tokens": t("user_detail.output_tokens"),
         "avg_tokens_per_prompt": t("user_detail.avg_tokens_per_prompt"),
-        "daily_prompt_count": t("user_detail.daily_prompt_count"),
+        "prompt_count_timeline": t("user_detail.prompt_count_timeline"),
     } | tojson }};
     const userId = {{ stats.user.id }};
     let currentWindow = '{{ window }}';
@@ -547,23 +547,8 @@
         return promptCount ? totalTokenCount / promptCount : 0;
     }
 
-    function buildDailyPromptTimeline(timeline, windowValue) {
-        if (windowValue !== 'today') {
-            return timeline || [];
-        }
-
-        if (!timeline || timeline.length === 0) {
-            return [];
-        }
-
-        const firstBucket = timeline[0];
-        const promptTotal = (timeline || []).reduce((sum, bucket) => sum + Number(bucket.prompt_count || 0), 0);
-        return [
-            {
-                time_bucket: String(firstBucket.time_bucket || '').split(' ')[0],
-                prompt_count: promptTotal,
-            },
-        ];
+    function buildPromptCountTimeline(timeline) {
+        return timeline || [];
     }
 
     function hashString(value) {
@@ -754,20 +739,24 @@
         const promptCtx = document.getElementById('prompt-count-timeline-chart').getContext('2d');
         promptCountTimelineChart = clearChart(promptCountTimelineChart);
 
-        const promptTimeline = buildDailyPromptTimeline(timeline, windowValue);
+        const promptTimeline = buildPromptCountTimeline(timeline);
         if (!promptTimeline || promptTimeline.length === 0) {
             promptCountTimelineChart = renderEmptyChart(promptCtx, promptCountTimelineChart);
             return;
         }
 
-        const labels = promptTimeline.map(bucket => formatTimelineLabel(bucket.time_bucket, false));
+        const isToday = windowValue === 'today';
+        const labels = promptTimeline.map(bucket => formatTimelineLabel(bucket.time_bucket, isToday));
+        const xTickConfig = isToday
+            ? { autoSkip: true, maxRotation: 0, minRotation: 0, maxTicksLimit: 12 }
+            : { autoSkip: true, maxRotation: 0, minRotation: 0, maxTicksLimit: 8 };
         promptCountTimelineChart = new Chart(promptCtx, {
             type: 'bar',
             data: {
                 labels,
                 datasets: [
                     {
-                        label: userDetailMessages.daily_prompt_count,
+                        label: userDetailMessages.prompt_count_timeline,
                         data: promptTimeline.map(bucket => Number(bucket.prompt_count || 0)),
                         backgroundColor: '#2563eb',
                         borderRadius: 6,
@@ -797,12 +786,7 @@
                         },
                     },
                     x: {
-                        ticks: {
-                            autoSkip: true,
-                            maxRotation: 0,
-                            minRotation: 0,
-                            maxTicksLimit: 8,
-                        },
+                        ticks: xTickConfig,
                     },
                 },
             },

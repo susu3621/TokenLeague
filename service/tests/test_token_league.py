@@ -1300,9 +1300,9 @@ def test_user_detail_page_renders_prompt_count_timeline_chart_section(auth_sessi
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     messages = _user_detail_messages(html)
-    assert "Daily Prompt Count" in html
+    assert "Prompt Count Timeline" in html
     assert 'canvas id="prompt-count-timeline-chart"' in html
-    assert messages["daily_prompt_count"] == "Daily Prompt Count"
+    assert messages["prompt_count_timeline"] == "Prompt Count Timeline"
 
 
 def test_user_detail_page_renders_average_timeline_chart_section_in_chinese(auth_session):
@@ -1323,8 +1323,8 @@ def test_user_detail_page_renders_prompt_count_timeline_chart_section_in_chinese
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     messages = _user_detail_messages(html)
-    assert "每日 Prompt 数" in html
-    assert messages["daily_prompt_count"] == "每日 Prompt 数"
+    assert "Prompt 数量时间线" in html
+    assert messages["prompt_count_timeline"] == "Prompt 数量时间线"
 
 
 def test_user_detail_page_script_renders_average_timeline_from_timeline_buckets(auth_session):
@@ -1353,20 +1353,21 @@ def test_user_detail_page_script_renders_average_timeline_from_timeline_buckets(
     assert "renderAverageTimeline(data.timeline || [], windowValue);" in html
 
 
-def test_user_detail_page_script_renders_prompt_count_timeline_from_daily_buckets(auth_session):
+def test_user_detail_page_script_renders_prompt_count_timeline_with_hourly_today_view(auth_session):
     response = auth_session.get("/users/1")
 
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "let promptCountTimelineChart = null;" in html
-    assert "function buildDailyPromptTimeline(timeline, windowValue)" in html
-    assert "if (windowValue !== 'today') {" in html
+    assert "function buildPromptCountTimeline(timeline)" in html
     assert "return timeline || [];" in html
-    assert "const promptTotal = (timeline || []).reduce((sum, bucket) => sum + Number(bucket.prompt_count || 0), 0);" in html
     assert "function renderPromptCountTimeline(timeline, windowValue)" in html
-    assert "const promptTimeline = buildDailyPromptTimeline(timeline, windowValue);" in html
+    assert "const promptTimeline = buildPromptCountTimeline(timeline);" in html
     assert "const promptCtx = document.getElementById('prompt-count-timeline-chart').getContext('2d');" in html
-    assert "label: userDetailMessages.daily_prompt_count" in html
+    assert "const isToday = windowValue === 'today';" in html
+    assert "const labels = promptTimeline.map(bucket => formatTimelineLabel(bucket.time_bucket, isToday));" in html
+    assert "const xTickConfig = isToday" in html
+    assert "label: userDetailMessages.prompt_count_timeline" in html
     assert "data: promptTimeline.map(bucket => Number(bucket.prompt_count || 0))" in html
     assert "formatCount(context.parsed.y)" in html
     assert "callback: value => formatCount(value)" in html
