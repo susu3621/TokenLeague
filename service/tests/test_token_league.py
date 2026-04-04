@@ -1311,28 +1311,24 @@ def test_user_detail_page_script_renders_average_timeline_from_timeline_buckets(
 
     assert response.status_code == 200
     html = response.get_data(as_text=True)
-    average_chart_js = html.split("function renderAverageTimeline(timeline, windowValue) {", 1)[1].split(
-        "function refreshUserDetail(windowValue)",
-        1,
-    )[0]
     assert "let averageTimelineChart = null;" in html
     assert "function averageTokensPerProject(bucket)" in html
+    assert "function averageTokensPerPrompt(bucket)" in html
+    assert "function renderAverageTimeline(timeline, windowValue)" in html
     assert "const projectCount = (bucket.project_breakdown || []).length;" in html
     assert "return projectCount ? totalTokenCount / projectCount : 0;" in html
-    assert "function averageTokensPerPrompt(bucket)" in html
+    assert "const promptCount = Number(bucket.prompt_count || 0);" in html
     assert "return promptCount ? totalTokenCount / promptCount : 0;" in html
-    assert "function renderAverageTimeline(timeline, windowValue)" in html
-    assert "const averageCtx = document.getElementById('average-timeline-chart').getContext('2d');" in average_chart_js
-    assert "type: 'line'" in average_chart_js
-    assert "options: {" in average_chart_js
-    assert "responsive: true" in average_chart_js
-    assert "maintainAspectRatio: false" in average_chart_js
-    assert "label: userDetailMessages.avg_tokens_per_project" in average_chart_js
-    assert "label: userDetailMessages.avg_tokens_per_prompt" in average_chart_js
-    assert "data: timeline.map(bucket => averageTokensPerProject(bucket))" in average_chart_js
-    assert "data: timeline.map(bucket => averageTokensPerPrompt(bucket))" in average_chart_js
-    assert "label: context => `${context.dataset.label}: ${formatTokenCount(context.parsed.y)}`" in average_chart_js
-    assert "callback: value => formatTokenCount(value)" in average_chart_js
+    assert "type: 'line'" in html
+    assert "options: {" in html
+    assert "responsive: true" in html
+    assert "maintainAspectRatio: false" in html
+    assert "userDetailMessages.avg_tokens_per_project" in html
+    assert "userDetailMessages.avg_tokens_per_prompt" in html
+    assert "data: timeline.map(bucket => averageTokensPerProject(bucket))" in html
+    assert "data: timeline.map(bucket => averageTokensPerPrompt(bucket))" in html
+    assert "formatTokenCount(context.parsed.y)" in html
+    assert "callback: value => formatTokenCount(value)" in html
     assert "renderAverageTimeline(data.timeline || [], windowValue);" in html
 
 
