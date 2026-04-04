@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta, timezone
+import json
+import re
 from pathlib import Path
 import sys
 
@@ -151,6 +153,16 @@ def _seed_minimal_user_usage(user_id):
         user_id,
         _task_payload("visibility-check-task", started_at, prompt_count=1, input_tokens=20, output_tokens=10),
     )
+
+
+def _user_detail_messages(html):
+    match = re.search(
+        r"const userDetailMessages = (.*?);\n\s*const userId",
+        html,
+        re.S,
+    )
+    assert match is not None
+    return json.loads(match.group(1))
 
 
 def test_leaderboard_requires_login(client):
@@ -1275,10 +1287,11 @@ def test_user_detail_page_renders_average_timeline_chart_section(auth_session):
 
     assert response.status_code == 200
     html = response.get_data(as_text=True)
+    messages = _user_detail_messages(html)
     assert "Average Trends" in html
     assert 'canvas id="average-timeline-chart"' in html
-    assert '"avg_tokens_per_project": t("user_detail.avg_tokens_per_project")' in html
-    assert '"avg_tokens_per_prompt": t("user_detail.avg_tokens_per_prompt")' in html
+    assert messages["avg_tokens_per_project"] == "Avg Tokens / Project"
+    assert messages["avg_tokens_per_prompt"] == "Avg Tokens / Prompt"
 
 
 def test_user_detail_page_renders_average_timeline_chart_section_in_chinese(auth_session):
@@ -1286,8 +1299,11 @@ def test_user_detail_page_renders_average_timeline_chart_section_in_chinese(auth
 
     assert response.status_code == 200
     html = response.get_data(as_text=True)
+    messages = _user_detail_messages(html)
     assert "平均值曲线" in html
     assert "每项目平均 Token" in html
+    assert messages["avg_tokens_per_project"] == "每项目平均 Token"
+    assert messages["avg_tokens_per_prompt"] == "每次 Prompt 平均 Token"
 
 
 def test_user_detail_page_script_supports_single_project_timeline_focus(auth_session):

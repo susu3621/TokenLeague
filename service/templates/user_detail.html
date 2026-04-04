@@ -236,8 +236,6 @@
         "output_tokens": t("user_detail.output_tokens"),
         "avg_tokens_per_prompt": t("user_detail.avg_tokens_per_prompt"),
     } | tojson }};
-    // "avg_tokens_per_project": t("user_detail.avg_tokens_per_project")
-    // "avg_tokens_per_prompt": t("user_detail.avg_tokens_per_prompt")
     const userId = {{ stats.user.id }};
     let currentWindow = '{{ window }}';
     let modelChart = null;
