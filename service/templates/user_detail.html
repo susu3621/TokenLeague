@@ -240,6 +240,7 @@
     let currentWindow = '{{ window }}';
     let modelChart = null;
     let timelineChart = null;
+    let averageTimelineChart = null;
     let refreshRequestId = 0;
     let latestTimeline = [];
     let selectedTimelineProject = null;
@@ -507,16 +508,37 @@
         });
     }
 
-    function renderEmptyTimeline(ctx) {
-        if (timelineChart) {
-            timelineChart.destroy();
-            timelineChart = null;
+    function clearChart(chart) {
+        if (chart) {
+            chart.destroy();
         }
+        return null;
+    }
+
+    function renderEmptyChart(ctx, chart) {
+        const nextChart = clearChart(chart);
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
         ctx.font = '14px DM Sans';
         ctx.fillStyle = '#6b7280';
         ctx.textAlign = 'center';
         ctx.fillText(userDetailMessages.timeline_empty, ctx.canvas.width / 2, ctx.canvas.height / 2);
+        return nextChart;
+    }
+
+    function renderEmptyTimeline(ctx) {
+        timelineChart = renderEmptyChart(ctx, timelineChart);
+    }
+
+    function averageTokensPerProject(bucket) {
+        const totalTokenCount = Number(bucket.total_token_count || 0);
+        const projectCount = (bucket.project_breakdown || []).length;
+        return projectCount ? totalTokenCount / projectCount : 0;
+    }
+
+    function averageTokensPerPrompt(bucket) {
+        const totalTokenCount = Number(bucket.total_token_count || 0);
+        const promptCount = Number(bucket.prompt_count || 0);
+        return promptCount ? totalTokenCount / promptCount : 0;
     }
 
     function hashString(value) {
@@ -602,9 +624,7 @@
             return;
         }
 
-        if (timelineChart) {
-            timelineChart.destroy();
-        }
+        timelineChart = clearChart(timelineChart);
         const isToday = windowValue === 'today';
         const labels = latestTimeline.map(bucket => formatTimelineLabel(bucket.time_bucket, isToday));
         const xTickConfig = isToday
@@ -647,6 +667,39 @@
                     }
                 }
             }
+        });
+    }
+
+    function renderAverageTimeline(timeline, windowValue) {
+        const averageCtx = document.getElementById('average-timeline-chart').getContext('2d');
+        averageTimelineChart = clearChart(averageTimelineChart);
+
+        if (!timeline || timeline.length === 0) {
+            averageTimelineChart = renderEmptyChart(averageCtx, averageTimelineChart);
+            return;
+        }
+
+        const isToday = windowValue === 'today';
+        const labels = timeline.map(bucket => formatTimelineLabel(bucket.time_bucket, isToday));
+        averageTimelineChart = new Chart(averageCtx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: userDetailMessages.avg_tokens_per_project,
+                        data: timeline.map(bucket => averageTokensPerProject(bucket)),
+                        borderColor: '#0f766e',
+                        backgroundColor: 'rgba(15, 118, 110, 0.18)',
+                    },
+                    {
+                        label: userDetailMessages.avg_tokens_per_prompt,
+                        data: timeline.map(bucket => averageTokensPerPrompt(bucket)),
+                        borderColor: '#b45309',
+                        backgroundColor: 'rgba(180, 83, 9, 0.18)',
+                    },
+                ],
+            },
         });
     }
 
@@ -693,6 +746,7 @@
                     return;
                 }
                 renderTimeline(data.timeline || [], windowValue);
+                renderAverageTimeline(data.timeline || [], windowValue);
             });
     }
 

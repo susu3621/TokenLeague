@@ -1306,6 +1306,27 @@ def test_user_detail_page_renders_average_timeline_chart_section_in_chinese(auth
     assert messages["avg_tokens_per_prompt"] == "每次 Prompt 平均 Token"
 
 
+def test_user_detail_page_script_renders_average_timeline_from_timeline_buckets(auth_session):
+    response = auth_session.get("/users/1")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "let averageTimelineChart = null;" in html
+    assert "function averageTokensPerProject(bucket)" in html
+    assert "const projectCount = (bucket.project_breakdown || []).length;" in html
+    assert "return projectCount ? totalTokenCount / projectCount : 0;" in html
+    assert "function averageTokensPerPrompt(bucket)" in html
+    assert "return promptCount ? totalTokenCount / promptCount : 0;" in html
+    assert "function renderAverageTimeline(timeline, windowValue)" in html
+    assert "const averageCtx = document.getElementById('average-timeline-chart').getContext('2d');" in html
+    assert "type: 'line'" in html
+    assert "label: userDetailMessages.avg_tokens_per_project" in html
+    assert "label: userDetailMessages.avg_tokens_per_prompt" in html
+    assert "data: timeline.map(bucket => averageTokensPerProject(bucket))" in html
+    assert "data: timeline.map(bucket => averageTokensPerPrompt(bucket))" in html
+    assert "renderAverageTimeline(data.timeline || [], windowValue);" in html
+
+
 def test_user_detail_page_script_supports_single_project_timeline_focus(auth_session):
     response = auth_session.get("/users/1")
 
