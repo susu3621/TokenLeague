@@ -1270,6 +1270,26 @@ def test_user_detail_page_renders_english_timeline_range_selector_by_default(aut
     assert "Past 90 Days" in html
 
 
+def test_user_detail_page_renders_average_timeline_chart_section(auth_session):
+    response = auth_session.get("/users/1")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Average Trends" in html
+    assert 'canvas id="average-timeline-chart"' in html
+    assert '"avg_tokens_per_project": t("user_detail.avg_tokens_per_project")' in html
+    assert '"avg_tokens_per_prompt": t("user_detail.avg_tokens_per_prompt")' in html
+
+
+def test_user_detail_page_renders_average_timeline_chart_section_in_chinese(auth_session):
+    response = auth_session.get("/users/1", headers={"Accept-Language": "zh-CN,zh;q=0.9"})
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "平均值曲线" in html
+    assert "每项目平均 Token" in html
+
+
 def test_user_detail_page_script_supports_single_project_timeline_focus(auth_session):
     response = auth_session.get("/users/1")
 

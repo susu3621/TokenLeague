@@ -110,6 +110,10 @@
         <div class="chart-container">
             <canvas id="timeline-chart"></canvas>
         </div>
+        <h3 style="margin: 24px 0 12px;">{{ t('user_detail.average_timeline_heading') }}</h3>
+        <div class="chart-container" aria-label="{{ t('user_detail.avg_tokens_per_project') }}">
+            <canvas id="average-timeline-chart"></canvas>
+        </div>
     </div>
 
     <div class="card">
@@ -227,9 +231,13 @@
         "model_empty": t("user_detail.model_empty"),
         "recent_prompt_events_empty": t("user_detail.recent_prompt_events_empty"),
         "timeline_empty": t("user_detail.timeline_empty"),
+        "avg_tokens_per_project": t("user_detail.avg_tokens_per_project"),
         "input_tokens": t("user_detail.input_tokens"),
         "output_tokens": t("user_detail.output_tokens"),
+        "avg_tokens_per_prompt": t("user_detail.avg_tokens_per_prompt"),
     } | tojson }};
+    // "avg_tokens_per_project": t("user_detail.avg_tokens_per_project")
+    // "avg_tokens_per_prompt": t("user_detail.avg_tokens_per_prompt")
     const userId = {{ stats.user.id }};
     let currentWindow = '{{ window }}';
     let modelChart = null;
