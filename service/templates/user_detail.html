@@ -62,6 +62,12 @@
         background: var(--primary);
         color: #fff;
     }
+    #project-table tbody tr[data-project-name] {
+        cursor: pointer;
+    }
+    #project-table tbody tr.is-active {
+        background: rgba(37, 99, 235, 0.08);
+    }
     @media (max-width: 640px) {
         .section-header {
             align-items: flex-start;
@@ -249,6 +255,7 @@
     let promptCountTimelineChart = null;
     let refreshRequestId = 0;
     let latestTimeline = [];
+    let latestProjects = [];
     let selectedTimelineProject = null;
     const timelineColorCache = new Map();
 
@@ -421,13 +428,21 @@
 
     function renderProjects(projects) {
         const tbody = document.querySelector('#project-table tbody');
+        latestProjects = projects || [];
         if (!projects || projects.length === 0) {
+            selectedTimelineProject = null;
             tbody.innerHTML = `<tr><td colspan="6" class="muted">${escapeHtml(userDetailMessages.project_empty)}</td></tr>`;
             return;
         }
 
-        tbody.innerHTML = projects.map(project => `
-            <tr>
+        if (selectedTimelineProject && !projects.some(project => project.project_name === selectedTimelineProject)) {
+            selectedTimelineProject = null;
+        }
+
+        tbody.innerHTML = projects.map(project => {
+            const isActive = project.project_name === selectedTimelineProject;
+            return `
+            <tr data-project-name="${escapeHtml(project.project_name)}" class="${isActive ? 'is-active' : ''}">
                 <td>${escapeHtml(project.project_name)}</td>
                 <td>${formatTokenCount(project.total_token_count)}</td>
                 <td>${formatTokenCount(project.input_token_count)}</td>
@@ -435,7 +450,14 @@
                 <td>${formatCount(project.prompt_count)}</td>
                 <td>${formatCount(project.task_count)}</td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
+
+        tbody.querySelectorAll('tr[data-project-name]').forEach(row => {
+            row.addEventListener('click', () => {
+                updateTimelineProjectFocus(row.dataset.projectName);
+            });
+        });
     }
 
     function renderModels(models) {
@@ -535,20 +557,40 @@
         timelineChart = renderEmptyChart(ctx, timelineChart);
     }
 
-    function averageTokensPerProject(bucket) {
+    function averageTokensPerProject(bucket, projectName = null) {
+        if (projectName) {
+            return tokenCountForProject(bucket, projectName);
+        }
         const totalTokenCount = Number(bucket.total_token_count || 0);
         const projectCount = (bucket.project_breakdown || []).length;
         return projectCount ? totalTokenCount / projectCount : 0;
     }
 
-    function averageTokensPerPrompt(bucket) {
+    function promptCountForProject(bucket, projectName) {
+        const row = (bucket.project_breakdown || []).find(project => project.project_name === projectName);
+        return row ? Number(row.prompt_count || 0) : 0;
+    }
+
+    function averageTokensPerPrompt(bucket, projectName = null) {
+        if (projectName) {
+            const totalTokenCount = tokenCountForProject(bucket, projectName);
+            const promptCount = promptCountForProject(bucket, projectName);
+            return promptCount ? totalTokenCount / promptCount : 0;
+        }
         const totalTokenCount = Number(bucket.total_token_count || 0);
         const promptCount = Number(bucket.prompt_count || 0);
         return promptCount ? totalTokenCount / promptCount : 0;
     }
 
-    function buildPromptCountTimeline(timeline) {
-        return timeline || [];
+    function buildPromptCountTimeline(timeline, projectName = null) {
+        if (!projectName) {
+            return timeline || [];
+        }
+        timeline = timeline || [];
+        return timeline.map(bucket => ({
+            ...bucket,
+            prompt_count: promptCountForProject(bucket, projectName),
+        }));
     }
 
     function hashString(value) {
@@ -618,7 +660,10 @@
     function updateTimelineProjectFocus(projectName) {
         const clickedProject = projectName;
         selectedTimelineProject = selectedTimelineProject === clickedProject ? null : clickedProject;
+        renderProjects(latestProjects);
         renderTimeline(latestTimeline, currentWindow, { preserveSelection: true });
+        renderAverageTimeline(latestTimeline, currentWindow, selectedTimelineProject);
+        renderPromptCountTimeline(latestTimeline, currentWindow, selectedTimelineProject);
     }
 
     function renderTimeline(timeline, windowValue, { preserveSelection = false } = {}) {
@@ -680,7 +725,7 @@
         });
     }
 
-    function renderAverageTimeline(timeline, windowValue) {
+    function renderAverageTimeline(timeline, windowValue, projectName = null) {
         const averageCtx = document.getElementById('average-timeline-chart').getContext('2d');
         averageTimelineChart = clearChart(averageTimelineChart);
 
@@ -698,13 +743,13 @@
                 datasets: [
                     {
                         label: userDetailMessages.avg_tokens_per_project,
-                        data: timeline.map(bucket => averageTokensPerProject(bucket)),
+                        data: timeline.map(bucket => averageTokensPerProject(bucket, projectName)),
                         borderColor: '#0f766e',
                         backgroundColor: 'rgba(15, 118, 110, 0.18)',
                     },
                     {
                         label: userDetailMessages.avg_tokens_per_prompt,
-                        data: timeline.map(bucket => averageTokensPerPrompt(bucket)),
+                        data: timeline.map(bucket => averageTokensPerPrompt(bucket, projectName)),
                         borderColor: '#b45309',
                         backgroundColor: 'rgba(180, 83, 9, 0.18)',
                     },
@@ -735,11 +780,11 @@
         });
     }
 
-    function renderPromptCountTimeline(timeline, windowValue) {
+    function renderPromptCountTimeline(timeline, windowValue, projectName = null) {
         const promptCtx = document.getElementById('prompt-count-timeline-chart').getContext('2d');
         promptCountTimelineChart = clearChart(promptCountTimelineChart);
 
-        const promptTimeline = buildPromptCountTimeline(timeline);
+        const promptTimeline = buildPromptCountTimeline(timeline, projectName);
         if (!promptTimeline || promptTimeline.length === 0) {
             promptCountTimelineChart = renderEmptyChart(promptCtx, promptCountTimelineChart);
             return;
@@ -795,6 +840,7 @@
 
     function refreshUserDetail(windowValue) {
         const requestId = ++refreshRequestId;
+        selectedTimelineProject = null;
         const nextUrl = new URL(window.location.href);
         nextUrl.searchParams.set('window', windowValue);
         history.replaceState({}, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
@@ -836,8 +882,8 @@
                     return;
                 }
                 renderTimeline(data.timeline || [], windowValue);
-                renderAverageTimeline(data.timeline || [], windowValue);
-                renderPromptCountTimeline(data.timeline || [], windowValue);
+                renderAverageTimeline(data.timeline || [], windowValue, selectedTimelineProject);
+                renderPromptCountTimeline(data.timeline || [], windowValue, selectedTimelineProject);
             });
     }
 
