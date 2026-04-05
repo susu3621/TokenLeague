@@ -36,9 +36,9 @@ def test_init_schema_covers_base_tables():
     assert "FOREIGN KEY" not in content
 
 
-def test_template_readme_documents_reusable_foundation():
+def test_template_readme_documents_tokenleague_product_setup():
     content = (TEMPLATE_DIR / "README.md").read_text(encoding="utf-8")
 
-    assert "reusable foundation" in content.lower()
-    assert "what is intentionally excluded" in content.lower()
-    assert "how to start" in content.lower()
+    assert "token usage dashboard" in content.lower()
+    assert "docker compose (recommended)" in content.lower()
+    assert "local python setup" in content.lower()
