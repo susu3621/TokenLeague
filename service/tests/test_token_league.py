@@ -829,11 +829,11 @@ def test_user_timeline_api_supports_month_daily_range(auth_session, monkeypatch)
     assert timeline["2026-03-19"]["total_token_count"] == 0
     assert timeline["2026-03-19"]["project_breakdown"] == []
     assert timeline["2026-03-20"]["project_breakdown"] == [
-        {"project_name": "TokenLeague", "total_token_count": 40},
-        {"project_name": "SideQuest", "total_token_count": 15},
+        {"project_name": "TokenLeague", "total_token_count": 40, "prompt_count": 1},
+        {"project_name": "SideQuest", "total_token_count": 15, "prompt_count": 1},
     ]
     assert timeline["2026-03-24"]["project_breakdown"] == [
-        {"project_name": "TokenLeague", "total_token_count": 25},
+        {"project_name": "TokenLeague", "total_token_count": 25, "prompt_count": 1},
     ]
 
 
@@ -910,14 +910,14 @@ def test_user_timeline_api_supports_quarter_daily_range(auth_session, monkeypatc
     assert timeline["2026-03-19"]["total_token_count"] == 0
     assert timeline["2026-03-19"]["project_breakdown"] == []
     assert timeline["2026-02-07"]["project_breakdown"] == [
-        {"project_name": "Archive", "total_token_count": 20},
+        {"project_name": "Archive", "total_token_count": 20, "prompt_count": 1},
     ]
     assert timeline["2026-03-20"]["project_breakdown"] == [
-        {"project_name": "TokenLeague", "total_token_count": 40},
-        {"project_name": "SideQuest", "total_token_count": 15},
+        {"project_name": "TokenLeague", "total_token_count": 40, "prompt_count": 1},
+        {"project_name": "SideQuest", "total_token_count": 15, "prompt_count": 1},
     ]
     assert timeline["2026-03-24"]["project_breakdown"] == [
-        {"project_name": "TokenLeague", "total_token_count": 25},
+        {"project_name": "TokenLeague", "total_token_count": 25, "prompt_count": 1},
     ]
 
 
@@ -970,6 +970,64 @@ def test_user_timeline_api_supports_today_hourly_range(auth_session, monkeypatch
     assert timeline["2026-03-24 09:00"]["total_token_count"] == 150
     assert timeline["2026-03-24 11:00"]["total_token_count"] == 300
     assert timeline["2026-03-24 10:00"]["total_token_count"] == 0
+
+
+def test_user_timeline_api_includes_project_prompt_counts(auth_session, monkeypatch):
+    import db
+    from db import upsert_prompt_event
+
+    fixed_now = datetime(2026, 3, 24, 12, 0, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(db, "_utcnow", lambda: fixed_now)
+
+    db.reset_in_memory_state()
+    upsert_prompt_event(
+        1,
+        {
+            **_prompt_payload(
+                "project-count-1",
+                fixed_now.replace(hour=9, minute=0),
+                input_tokens=20,
+                output_tokens=10,
+            ),
+            "project_name": "TokenLeague",
+        },
+    )
+    upsert_prompt_event(
+        1,
+        {
+            **_prompt_payload(
+                "project-count-2",
+                fixed_now.replace(hour=9, minute=15),
+                task_id="task-2",
+                input_tokens=30,
+                output_tokens=20,
+            ),
+            "project_name": "TokenLeague",
+        },
+    )
+    upsert_prompt_event(
+        1,
+        {
+            **_prompt_payload(
+                "project-count-3",
+                fixed_now.replace(hour=9, minute=30),
+                task_id="task-3",
+                input_tokens=15,
+                output_tokens=5,
+            ),
+            "project_name": "SideQuest",
+        },
+    )
+
+    response = auth_session.get("/api/users/1/timeline?window=today")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    timeline = {row["time_bucket"]: row for row in payload["timeline"]}
+    assert timeline["2026-03-24 09:00"]["project_breakdown"] == [
+        {"project_name": "TokenLeague", "total_token_count": 80, "prompt_count": 2},
+        {"project_name": "SideQuest", "total_token_count": 20, "prompt_count": 1},
+    ]
 
 
 def test_user_detail_defaults_to_week_window(auth_session, monkeypatch):
@@ -1265,10 +1323,10 @@ def test_user_detail_refresh_apis_honor_filters(auth_session, monkeypatch):
     assert timeline["granularity"] == "day"
     assert set(nonzero_buckets) == {"2026-03-22", "2026-03-24"}
     assert nonzero_buckets["2026-03-24"]["project_breakdown"] == [
-        {"project_name": "TokenLeague", "total_token_count": 30}
+        {"project_name": "TokenLeague", "total_token_count": 30, "prompt_count": 1}
     ]
     assert nonzero_buckets["2026-03-22"]["project_breakdown"] == [
-        {"project_name": "Archive", "total_token_count": 100}
+        {"project_name": "Archive", "total_token_count": 100, "prompt_count": 1}
     ]
 
 
@@ -1305,10 +1363,10 @@ def test_user_detail_refresh_apis_honor_filters_with_quarter_window(auth_session
     assert timeline["granularity"] == "day"
     assert set(nonzero_buckets) == {"2026-02-07", "2026-03-24"}
     assert nonzero_buckets["2026-03-24"]["project_breakdown"] == [
-        {"project_name": "TokenLeague", "total_token_count": 30}
+        {"project_name": "TokenLeague", "total_token_count": 30, "prompt_count": 1}
     ]
     assert nonzero_buckets["2026-02-07"]["project_breakdown"] == [
-        {"project_name": "Archive", "total_token_count": 100}
+        {"project_name": "Archive", "total_token_count": 100, "prompt_count": 1}
     ]
 
 
