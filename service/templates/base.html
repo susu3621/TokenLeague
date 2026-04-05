@@ -56,6 +56,12 @@
             align-items: center;
         }
 
+        .topbar-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
         .nav a,
         .nav button {
             font: inherit;
@@ -66,6 +72,31 @@
             border-radius: 8px;
             padding: 8px 12px;
             cursor: pointer;
+        }
+
+        .locale-switcher {
+            display: inline-flex;
+            gap: 6px;
+            align-items: center;
+            padding: 4px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: var(--bg);
+        }
+
+        .locale-switcher-button {
+            font: inherit;
+            border: 0;
+            background: transparent;
+            color: var(--muted);
+            border-radius: 999px;
+            padding: 6px 10px;
+            cursor: pointer;
+        }
+
+        .locale-switcher-button.is-active {
+            background: var(--primary);
+            color: #fff;
         }
 
         .nav-menu {
@@ -197,31 +228,54 @@
     <div class="shell">
         <header class="topbar">
             <a class="brand" href="{{ url_for('leaderboard') if g.user else url_for('login') }}">{{ project_title }}</a>
-            {% if g.user %}
-            <div class="nav">
-                <a href="{{ url_for('leaderboard') }}">{{ t('nav.leaderboard') }}</a>
-                <a href="{{ url_for('docs_page') }}">{{ t('nav.docs') }}</a>
-                <details class="nav-menu">
-                    <summary>
-                        <span class="nav-menu-label">{{ g.user.display_name if g.user.display_name else g.user.username }}</span>
-                        <span class="nav-menu-handle">{{ g.user.username }}</span>
-                    </summary>
-                    <div class="nav-menu-panel">
-                        <a href="{{ url_for('account') }}">{{ t('nav.account') }}</a>
-                        <form method="POST" action="{{ url_for('logout') }}" style="margin: 0;">
-                            <button type="submit">{{ t('nav.logout') }}</button>
-                        </form>
-                    </div>
-                </details>
-                {% if g.user.role == 'admin' %}
-                <a href="{{ url_for('settings') }}">{{ t('nav.settings') }}</a>
-                <a href="{{ url_for('api_list') }}">{{ t('nav.api') }}</a>
-                <a href="{{ url_for('admin_users') }}">{{ t('nav.admin_users') }}</a>
-                <a href="{{ url_for('admin_ldap') }}">{{ t('nav.ldap') }}</a>
-                <a href="{{ url_for('admin_agents') }}">{{ t('nav.agent_catalog') }}</a>
+            <div class="topbar-actions">
+                <form
+                    method="POST"
+                    action="{{ url_for('set_locale') }}"
+                    class="locale-switcher"
+                    data-locale-switcher
+                    aria-label="{{ t('locale.switcher_label') }}"
+                >
+                    <input type="hidden" name="next" value="{{ locale_switch_next }}">
+                    <button
+                        type="submit"
+                        name="locale"
+                        value="en"
+                        class="locale-switcher-button{% if locale == 'en' %} is-active{% endif %}"
+                    >{{ t('locale.option.en') }}</button>
+                    <button
+                        type="submit"
+                        name="locale"
+                        value="zh-CN"
+                        class="locale-switcher-button{% if locale == 'zh-CN' %} is-active{% endif %}"
+                    >{{ t('locale.option.zh-CN') }}</button>
+                </form>
+                {% if g.user %}
+                <div class="nav">
+                    <a href="{{ url_for('leaderboard') }}">{{ t('nav.leaderboard') }}</a>
+                    <a href="{{ url_for('docs_page') }}">{{ t('nav.docs') }}</a>
+                    <details class="nav-menu">
+                        <summary>
+                            <span class="nav-menu-label">{{ g.user.display_name if g.user.display_name else g.user.username }}</span>
+                            <span class="nav-menu-handle">{{ g.user.username }}</span>
+                        </summary>
+                        <div class="nav-menu-panel">
+                            <a href="{{ url_for('account') }}">{{ t('nav.account') }}</a>
+                            <form method="POST" action="{{ url_for('logout') }}" style="margin: 0;">
+                                <button type="submit">{{ t('nav.logout') }}</button>
+                            </form>
+                        </div>
+                    </details>
+                    {% if g.user.role == 'admin' %}
+                    <a href="{{ url_for('settings') }}">{{ t('nav.settings') }}</a>
+                    <a href="{{ url_for('api_list') }}">{{ t('nav.api') }}</a>
+                    <a href="{{ url_for('admin_users') }}">{{ t('nav.admin_users') }}</a>
+                    <a href="{{ url_for('admin_ldap') }}">{{ t('nav.ldap') }}</a>
+                    <a href="{{ url_for('admin_agents') }}">{{ t('nav.agent_catalog') }}</a>
+                    {% endif %}
+                </div>
                 {% endif %}
             </div>
-            {% endif %}
         </header>
         <main class="container">
             {% block content %}{% endblock %}

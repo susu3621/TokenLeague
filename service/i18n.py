@@ -11,6 +11,9 @@ MESSAGES = {
         "nav.ldap": "LDAP",
         "nav.agent_catalog": "Agent Catalog",
         "nav.logout": "Log out",
+        "locale.switcher_label": "Language",
+        "locale.option.en": "EN",
+        "locale.option.zh-CN": "中文",
         "login.title": "Login",
         "login.description": "Track token usage across agent runs and compare ranked users over day, week, and all time.",
         "login.username": "Username",
@@ -224,6 +227,9 @@ MESSAGES = {
         "nav.ldap": "LDAP",
         "nav.agent_catalog": "Agent 目录",
         "nav.logout": "退出登录",
+        "locale.switcher_label": "语言",
+        "locale.option.en": "EN",
+        "locale.option.zh-CN": "中文",
         "login.title": "登录",
         "login.description": "跟踪各类 Agent 运行中的 Token 用量，并按天、周和全时段比较用户排名。",
         "login.username": "用户名",
@@ -430,6 +436,11 @@ MESSAGES = {
 }
 
 
+def normalize_locale_preference(value: str | None) -> str | None:
+    text = (value or "").strip()
+    return text if text in SUPPORTED_LOCALES else None
+
+
 def resolve_locale(header_value: str | None) -> str:
     candidates = []
     for index, raw_part in enumerate((header_value or "").split(",")):
@@ -457,6 +468,13 @@ def resolve_locale(header_value: str | None) -> str:
         if code.startswith("en"):
             return "en"
     return "en"
+
+
+def resolve_request_locale(cookie_value: str | None, header_value: str | None) -> str:
+    preferred = normalize_locale_preference(cookie_value)
+    if preferred is not None:
+        return preferred
+    return resolve_locale(header_value)
 
 
 def translate(locale: str, key: str, **values) -> str:

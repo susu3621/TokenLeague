@@ -31,6 +31,7 @@ USER_DETAIL_WINDOW_LABELS = {
     "quarter": "90-day",
     "all": "all-time",
 }
+LOCALE_COOKIE_NAME = "tokenleague_locale"
 
 
 app = Flask(__name__)
@@ -124,6 +125,15 @@ def _json_error(message: str, status_code: int):
     return jsonify({"success": False, "error": message}), status_code
 
 
+def _safe_locale_redirect_target(raw_target: str | None) -> str:
+    target = (raw_target or "").strip()
+    if target.startswith("/") and not target.startswith("//"):
+        parsed = urlparse(target)
+        if not parsed.scheme and not parsed.netloc:
+            return target
+    return url_for("leaderboard") if session.get("user_id") else url_for("login")
+
+
 def _login_user(user: dict):
     session.clear()
     session["user_id"] = user["id"]
@@ -174,7 +184,10 @@ def _log_ingest(
 @app.before_request
 def before_request():
     auth_module.load_user()
-    g.locale = i18n.resolve_locale(request.headers.get("Accept-Language"))
+    g.locale = i18n.resolve_request_locale(
+        request.cookies.get(LOCALE_COOKIE_NAME),
+        request.headers.get("Accept-Language"),
+    )
 
     if request.method in {"POST", "PUT", "PATCH", "DELETE"} and session.get("user_id"):
         if not _is_origin_valid_for_state_change():
@@ -208,6 +221,7 @@ def inject_shell_context():
         "project_subtitle": db.get_setting("project_subtitle") or db.DEFAULT_PROJECT_SUBTITLE,
         "format_token_count": format_token_count,
         "format_utc_timestamp": lambda value: format_utc_timestamp(value, locale),
+        "locale_switch_next": request.full_path if request.query_string else request.path,
         "locale": locale,
         "t": lambda key, **values: i18n.translate(locale, key, **values),
     }
@@ -461,6 +475,23 @@ def logout():
     return redirect(url_for("login"))
 
 
+@app.route("/locale", methods=["POST"])
+def set_locale():
+    locale = i18n.normalize_locale_preference(request.form.get("locale"))
+    target = _safe_locale_redirect_target(request.form.get("next"))
+    response = redirect(target)
+    if locale is not None:
+        response.set_cookie(
+            LOCALE_COOKIE_NAME,
+            locale,
+            max_age=60 * 60 * 24 * 365,
+            samesite="Lax",
+            httponly=True,
+            path="/",
+        )
+    return response
+
+
 @app.route("/leaderboard")
 @auth_module.login_required
 def leaderboard():
@@ -485,12 +516,14 @@ def user_detail(user_id: int):
     stats = db.get_user_stats(user_id, window=window, filters=filters)
     if not stats:
         abort(404)
+    locale_switch_next = url_for("user_detail", user_id=user_id, window=window, **filters)
     return render_template(
         "user_detail.html",
         stats=stats,
         window=window,
         window_label=_user_detail_window_label(window),
         filters=filters,
+        locale_switch_next=locale_switch_next,
     )
 
 
