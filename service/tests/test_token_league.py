@@ -172,6 +172,61 @@ def test_leaderboard_requires_login(client):
     assert "/login" in response.headers["Location"]
 
 
+def test_login_page_renders_language_switcher(client):
+    response = client.get("/login")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert 'action="/locale"' in html
+    assert "data-locale-switcher" in html
+    assert 'name="locale"' in html
+    assert 'value="en"' in html
+    assert 'value="zh-CN"' in html
+
+
+def test_login_page_marks_active_language_switcher_button(client):
+    response = client.get(
+        "/login",
+        headers={"Accept-Language": "zh-CN,zh;q=0.9"},
+    )
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert 'value="zh-CN"' in html
+    assert "locale-switcher-button is-active" in html
+
+
+def test_locale_switch_sets_cookie_and_redirects_back_to_current_page(client):
+    response = client.post(
+        "/locale",
+        data={"locale": "zh-CN", "next": "/login?from=test"},
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/login?from=test"
+    assert "tokenleague_locale=zh-CN" in response.headers.get("Set-Cookie", "")
+
+
+def test_locale_switch_rejects_external_redirect_for_anonymous_user(client):
+    response = client.post(
+        "/locale",
+        data={"locale": "zh-CN", "next": "https://evil.example/pwn"},
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/login"
+
+
+def test_locale_switch_rejects_external_redirect_for_authenticated_user(auth_session):
+    response = auth_session.post(
+        "/locale",
+        data={"locale": "en", "next": "//evil.example/pwn"},
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/leaderboard"
+
+
 def test_normal_user_can_only_open_their_own_user_detail(user_session):
     import db
 

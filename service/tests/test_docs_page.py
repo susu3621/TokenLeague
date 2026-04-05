@@ -23,6 +23,28 @@ def test_docs_page_prefers_chinese_variant_when_available(auth_session):
     assert "Token 使用排行榜应用" in html
 
 
+def test_docs_page_prefers_cookie_locale_over_accept_language(auth_session):
+    auth_session.set_cookie("tokenleague_locale", "zh-CN")
+
+    response = auth_session.get("/docs", headers={"Accept-Language": "en-US,en;q=0.9"})
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "TokenLeague 文档" in html
+    assert "Token 使用排行榜应用" in html
+
+
+def test_docs_page_can_force_english_with_cookie(auth_session):
+    auth_session.set_cookie("tokenleague_locale", "en")
+
+    response = auth_session.get("/docs", headers={"Accept-Language": "zh-CN,zh;q=0.9"})
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "TokenLeague Documentation" in html
+    assert "token usage leaderboard application" in html
+
+
 def test_docs_page_falls_back_to_english_when_localized_file_is_missing(auth_session):
     response = auth_session.get("/docs/HOOKS.md", headers={"Accept-Language": "zh-CN,zh;q=0.9"})
 

@@ -10,6 +10,29 @@ def test_resolve_locale_prefers_chinese_variants():
     assert resolve_locale("zh-CN;q=0,en;q=0") == "en"
 
 
+def test_normalize_locale_preference_accepts_only_supported_values():
+    from i18n import normalize_locale_preference
+
+    assert normalize_locale_preference("en") == "en"
+    assert normalize_locale_preference("zh-CN") == "zh-CN"
+    assert normalize_locale_preference("zh") is None
+    assert normalize_locale_preference("fr-FR") is None
+
+
+def test_resolve_request_locale_prefers_cookie_over_browser_header():
+    from i18n import resolve_request_locale
+
+    assert resolve_request_locale("zh-CN", "en-US,en;q=0.9") == "zh-CN"
+    assert resolve_request_locale("en", "zh-CN,zh;q=0.9") == "en"
+
+
+def test_resolve_request_locale_ignores_invalid_cookie_value():
+    from i18n import resolve_request_locale
+
+    assert resolve_request_locale("fr-FR", "zh-CN,zh;q=0.9") == "zh-CN"
+    assert resolve_request_locale("", "en-US,en;q=0.9") == "en"
+
+
 def test_login_page_renders_chinese_copy(client):
     response = client.get("/login", headers={"Accept-Language": "zh-CN,zh;q=0.9"})
 
