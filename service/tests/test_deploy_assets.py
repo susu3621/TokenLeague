@@ -58,3 +58,15 @@ def test_project_name_schema_assets_exist():
     assert "project_name" in init_schema
     assert add_project_name.exists()
     assert "project_name" in add_project_name.read_text(encoding="utf-8")
+
+
+def test_top_level_readmes_cover_local_and_docker_installation():
+    readme_en = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    readme_cn = (PROJECT_ROOT / "README_CN.md").read_text(encoding="utf-8")
+
+    assert "Docker Compose (Recommended)" in readme_en
+    assert "Local Python Setup" in readme_en
+    assert "Hook Installation" in readme_en
+    assert "Docker Compose 部署（推荐）" in readme_cn
+    assert "本地 Python 运行" in readme_cn
+    assert "Hook 安装" in readme_cn
