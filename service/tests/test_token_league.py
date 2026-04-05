@@ -1446,12 +1446,15 @@ def test_user_detail_page_script_renders_average_timeline_from_timeline_buckets(
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "let averageTimelineChart = null;" in html
-    assert "function averageTokensPerProject(bucket)" in html
-    assert "function averageTokensPerPrompt(bucket)" in html
-    assert "function renderAverageTimeline(timeline, windowValue)" in html
+    assert "function averageTokensPerProject(bucket, projectName = null)" in html
+    assert "function averageTokensPerPrompt(bucket, projectName = null)" in html
+    assert "function renderAverageTimeline(timeline, windowValue, projectName = null)" in html
     assert "const projectCount = (bucket.project_breakdown || []).length;" in html
+    assert "if (projectName) {" in html
+    assert "return tokenCountForProject(bucket, projectName);" in html
     assert "return projectCount ? totalTokenCount / projectCount : 0;" in html
     assert "const promptCount = Number(bucket.prompt_count || 0);" in html
+    assert "const promptCount = promptCountForProject(bucket, projectName);" in html
     assert "return promptCount ? totalTokenCount / promptCount : 0;" in html
     assert "type: 'line'" in html
     assert "options: {" in html
@@ -1459,11 +1462,11 @@ def test_user_detail_page_script_renders_average_timeline_from_timeline_buckets(
     assert "maintainAspectRatio: false" in html
     assert "userDetailMessages.avg_tokens_per_project" in html
     assert "userDetailMessages.avg_tokens_per_prompt" in html
-    assert "data: timeline.map(bucket => averageTokensPerProject(bucket))" in html
-    assert "data: timeline.map(bucket => averageTokensPerPrompt(bucket))" in html
+    assert "data: timeline.map(bucket => averageTokensPerProject(bucket, projectName))" in html
+    assert "data: timeline.map(bucket => averageTokensPerPrompt(bucket, projectName))" in html
     assert "formatTokenCount(context.parsed.y)" in html
     assert "callback: value => formatTokenCount(value)" in html
-    assert "renderAverageTimeline(data.timeline || [], windowValue);" in html
+    assert "renderAverageTimeline(data.timeline || [], windowValue, selectedTimelineProject);" in html
 
 
 def test_user_detail_page_script_renders_prompt_count_timeline_with_hourly_today_view(auth_session):
@@ -1472,10 +1475,11 @@ def test_user_detail_page_script_renders_prompt_count_timeline_with_hourly_today
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "let promptCountTimelineChart = null;" in html
-    assert "function buildPromptCountTimeline(timeline)" in html
+    assert "function buildPromptCountTimeline(timeline, projectName = null)" in html
     assert "return timeline || [];" in html
-    assert "function renderPromptCountTimeline(timeline, windowValue)" in html
-    assert "const promptTimeline = buildPromptCountTimeline(timeline);" in html
+    assert "return timeline.map(bucket => ({" in html
+    assert "function renderPromptCountTimeline(timeline, windowValue, projectName = null)" in html
+    assert "const promptTimeline = buildPromptCountTimeline(timeline, projectName);" in html
     assert "const promptCtx = document.getElementById('prompt-count-timeline-chart').getContext('2d');" in html
     assert "const isToday = windowValue === 'today';" in html
     assert "const labels = promptTimeline.map(bucket => formatTimelineLabel(bucket.time_bucket, isToday));" in html
@@ -1484,7 +1488,7 @@ def test_user_detail_page_script_renders_prompt_count_timeline_with_hourly_today
     assert "data: promptTimeline.map(bucket => Number(bucket.prompt_count || 0))" in html
     assert "formatCount(context.parsed.y)" in html
     assert "callback: value => formatCount(value)" in html
-    assert "renderPromptCountTimeline(data.timeline || [], windowValue);" in html
+    assert "renderPromptCountTimeline(data.timeline || [], windowValue, selectedTimelineProject);" in html
 
 
 def test_user_detail_page_script_supports_single_project_timeline_focus(auth_session):
@@ -1500,6 +1504,39 @@ def test_user_detail_page_script_supports_single_project_timeline_focus(auth_ses
     assert "const clickedProject = legendItem.text;" in html
     assert "selectedTimelineProject = selectedTimelineProject === clickedProject ? null : clickedProject;" in html
     assert "renderTimeline(latestTimeline, currentWindow, { preserveSelection: true });" in html
+
+
+def test_user_detail_page_script_updates_average_and_prompt_count_timelines_from_project_selection(
+    auth_session,
+):
+    response = auth_session.get("/users/1")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "function averageTokensPerProject(bucket, projectName = null)" in html
+    assert "function averageTokensPerPrompt(bucket, projectName = null)" in html
+    assert "function promptCountForProject(bucket, projectName)" in html
+    assert "function buildPromptCountTimeline(timeline, projectName = null)" in html
+    assert "const promptCount = promptCountForProject(bucket, projectName);" in html
+    assert "return timeline.map(bucket => ({" in html
+    assert "renderAverageTimeline(latestTimeline, currentWindow, selectedTimelineProject);" in html
+    assert "renderPromptCountTimeline(latestTimeline, currentWindow, selectedTimelineProject);" in html
+    assert "renderAverageTimeline(data.timeline || [], windowValue, selectedTimelineProject);" in html
+    assert "renderPromptCountTimeline(data.timeline || [], windowValue, selectedTimelineProject);" in html
+
+
+def test_user_detail_page_script_binds_project_table_rows_to_timeline_focus(auth_session):
+    response = auth_session.get("/users/1")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "const isActive = project.project_name === selectedTimelineProject;" in html
+    assert 'data-project-name="${escapeHtml(project.project_name)}"' in html
+    assert 'class="${isActive ? \'is-active\' : \'\'}"' in html
+    assert "tbody.querySelectorAll('tr[data-project-name]').forEach(row => {" in html
+    assert "updateTimelineProjectFocus(row.dataset.projectName);" in html
+    assert "selectedTimelineProject && !projects.some(project => project.project_name === selectedTimelineProject)" in html
+    assert "selectedTimelineProject = null;" in html
 
 
 def test_compact_token_count_formats_human_readable_suffixes():
