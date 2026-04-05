@@ -1404,7 +1404,15 @@ def get_user_time_series(
         group["prompt_count"] += 1
         project_name = (event.get("project_name") or "").strip() or "(unknown)"
         project_totals = group["_project_totals"]
-        project_totals[project_name] = project_totals.get(project_name, 0) + event["total_token_count"]
+        project_state = project_totals.setdefault(
+            project_name,
+            {
+                "total_token_count": 0,
+                "prompt_count": 0,
+            },
+        )
+        project_state["total_token_count"] += event["total_token_count"]
+        project_state["prompt_count"] += 1
 
     result = list(time_buckets.values())
     if daily_bucket_range is not None:
@@ -1450,11 +1458,12 @@ def get_user_time_series(
         item["project_breakdown"] = [
             {
                 "project_name": project_name,
-                "total_token_count": total_token_count,
+                "total_token_count": project_state["total_token_count"],
+                "prompt_count": project_state["prompt_count"],
             }
-            for project_name, total_token_count in sorted(
+            for project_name, project_state in sorted(
                 project_totals.items(),
-                key=lambda project: (-project[1], project[0]),
+                key=lambda project: (-project[1]["total_token_count"], project[0]),
             )
         ]
     result.sort(key=lambda item: item["time_bucket"])
