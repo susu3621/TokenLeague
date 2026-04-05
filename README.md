@@ -1,239 +1,232 @@
 # TokenLeague
 
-Token League 是一个 AI 助手 Token 使用量排行榜应用，用于追踪 Claude Code、Codex CLI、Gemini CLI 和 OpenClaw 的使用统计。
+TokenLeague is a Flask-based token usage dashboard for AI coding assistants. It ingests prompt and task usage from local hook scripts, stores the data in MySQL, and exposes a web UI for rankings, user drill-downs, account management, and operational docs.
 
-TokenLeague is a token usage leaderboard application for tracking AI assistant usage.
+## Features
 
-## 功能特性
+- Precomputed leaderboard page for fast ranked views across tracked users
+- User detail page with project breakdowns, model breakdowns, recent prompt events, and project-selectable trend charts
+- Account page for rotating hook keys and changing local passwords
+- Admin pages for user management, LDAP configuration, and observed agent catalog data
+- Built-in hook installers for Claude Code, Codex CLI, Cursor, Workbuddy, Gemini CLI, Kiro, and OpenClaw
+- Historical backfill scripts for Claude Code and Codex sessions
+- English and Simplified Chinese UI copy
 
-- Token 使用量排行榜
-- 多用户支持
-- 支持 Claude Code、Codex CLI、Gemini CLI 和 OpenClaw 统计
-- Web 管理界面
+## Supported Ingestion Sources
 
-## 快速开始
+- Claude Code
+- Codex CLI
+- Cursor
+- Workbuddy / CodeBuddy CLI
+- Gemini CLI
+- Kiro
+- OpenClaw
 
-### 1. 安装依赖
+Detailed hook behavior and platform-specific setup notes live in [docs/HOOKS.md](docs/HOOKS.md).
 
-```bash
-pip install -r requirements.txt
-```
+## Core Pages
 
-### 2. 配置环境变量
+- `/leaderboard`: default precomputed rankings
+- `/users/<id>`: per-user detail view with project, model, and timeline analysis
+- `/account`: self-service hook key and password management
+- `/admin/users`: user creation, status changes, hook key rotation
+- `/admin/ldap`: LDAP configuration, connection testing, and sync
+- `/admin/agents`: observed agent/version/model catalog
+- `/docs`: in-app documentation browser
+- `/api`: route-derived API list
 
-复制 `.env.example` 到 `.env` 并配置：
+## Requirements
+
+- Python 3.12+
+- MySQL or MariaDB reachable from the app environment
+- A writable `.env` file based on `.env.example`
+
+`docker-compose.yml` does **not** provision a database container. Set `MY_APP_DB_HOST`, `MY_APP_DB_PORT`, `MY_APP_DB_NAME`, `MY_APP_DB_USER`, and `MY_APP_DB_PWD` to an existing database service before starting the app.
+
+## Docker Compose (Recommended)
+
+1. Copy the environment template and edit the database connection values:
 
 ```bash
 cp .env.example .env
 ```
 
-### 3. 初始化数据库
+2. Initialize the database schema and bootstrap the admin account through the app image:
 
 ```bash
-python3 scripts/init_db.py --admin-password <your-password>
+docker compose run --rm web python3 /app/scripts/init_db.py --admin-password '<strong-password>'
 ```
 
-### 4. 启动服务
+3. Start the web app and the leaderboard snapshot worker:
 
 ```bash
-python -m service.app
+docker compose up --build -d
 ```
 
-如果你使用 Docker Compose 部署，`web` 容器之外还会有一个独立 `worker` 容器。它会在启动时立即刷新一次默认排行榜快照，之后每 1 小时刷新一次。`/leaderboard` 页面只读取这份预计算快照，因此登录后的落地页不会再同步扫描全量历史事件。
+4. Open `http://localhost:5006/login` and sign in with:
 
-访问 `http://localhost:5006/login`
-
-默认测试账号：
 - username: `admin`
-- password: `admin123`
+- password: the password passed to `--admin-password`
 
-## Hooks 安装
-
-TokenLeague 提供统计 hooks / collector，自动追踪 Claude Code、Codex CLI、Gemini CLI 和 OpenClaw 的 token 使用量。
-
-仓库内置模板现在统一放在 `hooks/` 目录下，checkout 本仓库本身不会默认启用任何 agent hook。只有在你显式执行安装脚本时，才会把模板复制到 `~/.claude`、`~/.codex`、`~/.gemini`、`~/.openclaw` 或项目级本地目录。
-
-### 安装 Hooks
+5. Follow logs when needed:
 
 ```bash
-# 全局安装全部已支持 hooks
-./scripts/install_hooks.sh --both --gemini --global
+docker compose logs -f web worker
+```
 
-# 仅安装 Claude Code hooks
+The `worker` service refreshes the default leaderboard snapshot once on startup and then every hour. `/leaderboard` reads that snapshot instead of scanning all historical prompt events on every request.
+
+## Local Python Setup
+
+1. Create a virtual environment and install dependencies:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r service/requirements.txt
+```
+
+2. Copy the environment file and export it into your shell:
+
+```bash
+cp .env.example .env
+set -a
+source .env
+set +a
+```
+
+3. Initialize the database and create the admin account:
+
+```bash
+python3 scripts/init_db.py --admin-password '<strong-password>'
+```
+
+4. Start the web app:
+
+```bash
+cd service
+./run.sh
+```
+
+5. In another terminal, optionally start the snapshot worker so `/leaderboard` stays fresh:
+
+```bash
+python3 scripts/run_leaderboard_snapshot_worker.py
+```
+
+## Environment Variables
+
+### Application and Database
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `MY_FLASK_SECRET_KEY` | Yes | Flask session signing key |
+| `MY_APP_DB_HOST` | Yes | Database host |
+| `MY_APP_DB_PORT` | No | Database port, defaults to `3306` |
+| `MY_APP_DB_NAME` | Yes | Database name |
+| `MY_APP_DB_USER` | Yes | Database user |
+| `MY_APP_DB_PWD` | Yes | Database password |
+| `PORT` | No | HTTP port, defaults to `5006` |
+
+The repository also accepts the legacy `MY_KMM_DB_*` aliases used by the migration and init scripts.
+
+### Hook Runtime
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `TOKENLEAGUE_HOOK_KEY` | Yes | Authenticates usage uploads for one user |
+| `TOKENLEAGUE_API_URL` | No | Defaults to `http://localhost:5006` |
+| `TOKENLEAGUE_GEMINI_CLI_VERSION` | No | Overrides Gemini version detection |
+| `TOKENLEAGUE_OPENCLAW_VERSION` | No | Overrides OpenClaw version detection |
+
+## Hook Installation
+
+Repository hook templates live under `hooks/`. They are only activated when you run the installer.
+
+Install every supported integration:
+
+```bash
+./scripts/install_hooks.sh --all --cursor --workbuddy --gemini --kiro --openclaw --global
+```
+
+Install only selected integrations:
+
+```bash
 ./scripts/install_hooks.sh --claude --global
-
-# 仅安装 Codex CLI hooks
 ./scripts/install_hooks.sh --codex --global
-
-# 仅安装 Gemini CLI hooks
 ./scripts/install_hooks.sh --gemini --global
-
-# 仅安装 OpenClaw collector
 ./scripts/install_hooks.sh --openclaw --global
-
-# 项目级安装（仅当前项目）
-./scripts/install_hooks.sh --both --gemini --openclaw --local
 ```
 
-### 配置环境变量
-
-安装后，Claude / Codex / Gemini 推荐在 `~/.bashrc` 或 `~/.zshrc` 中添加：
+Install hooks into the current project instead of the user profile:
 
 ```bash
-# 必需：你的 TokenLeague hook key（从管理面板获取）
-export TOKENLEAGUE_HOOK_KEY="your-hook-key-here"
-
-# 可选：API URL（默认 http://localhost:5006）
-export TOKENLEAGUE_API_URL="http://localhost:5006"
-
-# 可选：手动指定 Gemini CLI 版本
-export TOKENLEAGUE_GEMINI_CLI_VERSION="0.34.0"
-
-# 可选：手动指定 OpenClaw 版本
-export TOKENLEAGUE_OPENCLAW_VERSION="0.1.0"
+./scripts/install_hooks.sh --all --cursor --workbuddy --gemini --kiro --openclaw --local
 ```
 
-如果你使用 OpenClaw service 启动，优先把这些变量写入 `~/.openclaw/.env`，不要只放在 shell profile 里。service 进程通常不会继承交互式 shell 环境。OpenClaw collector 会直接读取这个文件，兼容 `.env` 和 `export KEY=VALUE` 两种写法。未显式设置 `TOKENLEAGUE_OPENCLAW_VERSION` 时，collector 会优先执行 `openclaw --version` 读取版本，取不到时再回退到已安装 CLI 的元数据探测；OpenClaw 上报的 `project_name` 固定为 `OpenClaw`，不再从当前 workspace 推导仓库名。
-
-执行 `./scripts/install_hooks.sh --openclaw --global` 时，安装脚本还会安装系统级 `systemd` timer：`tokenleague-openclaw-collector.timer`，每 1 分钟自动运行一次 collector。安装器会把当前 shell 里解析到的 `openclaw` 可执行路径写入 systemd unit，避免 timer 环境里因为 `PATH` 不完整而拿不到版本。这个步骤会写入 `/etc/systemd/system/`，因此通常会触发 `sudo` 提权。
-
-### 卸载 Hooks
+Remove installed hooks:
 
 ```bash
-# 卸载全部已支持 hooks
-./scripts/install_hooks.sh --both --gemini --global --uninstall
-
-# 仅卸载 Claude Code hooks
-./scripts/install_hooks.sh --claude --global --uninstall
-
-# 仅卸载 Codex CLI hooks
-./scripts/install_hooks.sh --codex --global --uninstall
-
-# 仅卸载 Gemini CLI hooks
-./scripts/install_hooks.sh --gemini --global --uninstall
-
-# 仅卸载 OpenClaw collector
-./scripts/install_hooks.sh --openclaw --global --uninstall
+./scripts/install_hooks.sh --all --cursor --workbuddy --gemini --kiro --openclaw --global --uninstall
 ```
 
-更多详情请参考 [docs/HOOKS.md](docs/HOOKS.md)。
+OpenClaw note:
 
-## 历史补录脚本
+- global OpenClaw installation also installs a `systemd` timer
+- prefer `~/.openclaw/.env` for OpenClaw service environments
 
-对于已经存在于本地、但当时没有成功上报到 TokenLeague 的历史记录，可以手动执行补录脚本。
+See [docs/HOOKS.md](docs/HOOKS.md) for detailed per-agent commands, file locations, and troubleshooting.
 
-可用脚本：
+## Historical Backfill
+
+Replay usage that was not uploaded when hooks originally ran:
 
 ```bash
 python3 scripts/backfill_codex.py --dry-run
 python3 scripts/backfill_claude.py --dry-run
 ```
 
-默认扫描路径：
-
-- `scripts/backfill_codex.py`：`~/.codex/sessions`
-- `scripts/backfill_claude.py`：`~/.claude/projects`
-
-常用参数：
+Common options:
 
 ```bash
---dry-run   # 只扫描和解析，不发请求
---days N    # 只处理最近 N 天内修改过的日志文件
---limit N   # 只处理前 N 个 session
---verbose   # 打印每个文件或 session 的处理结果
---root PATH # 覆盖默认扫描根目录
+--dry-run
+--days N
+--limit N
+--verbose
+--root PATH
 ```
 
-`--days N` 按日志文件的修改时间筛选，可以在手动补录时显著减少需要解析和上传的 session 数量。
+Default scan roots:
 
-实际上传时仍然需要：
+- Codex: `~/.codex/sessions`
+- Claude Code: `~/.claude/projects`
+
+Real uploads still require `TOKENLEAGUE_HOOK_KEY`.
+
+## Development And Tests
+
+Run the service test suite:
 
 ```bash
-export TOKENLEAGUE_HOOK_KEY="your-hook-key-here"
-export TOKENLEAGUE_API_URL="http://localhost:5006"  # 可选
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q service/tests
 ```
 
----
+Useful targeted commands:
 
-## 模板说明 (Template Foundation)
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q service/tests/test_token_league.py
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q service/tests/test_deploy_assets.py
+```
 
-This repository is intended to remain a reusable foundation for future Flask-based projects.
-
-## What this template keeps
-
-- Flask + Jinja application wiring
-- Session authentication and role checks
-- Basic settings storage
-- Docs page and API list page
-- Numbered migration workflow
-- Docker and local startup assets
-- Minimal pytest baseline
-
-对应中文理解：
-
-- Web 服务基础骨架
-- 登录鉴权与管理员权限
-- 系统设置键值存储
-- 文档页与 API 清单页
-- 迁移脚本执行机制
-- 最小可运行与最小可测试能力
-
-## What is intentionally excluded
-
-- Knowledge graph, news, travel, books, contacts, infra, and other domain modules
-- Private deployment hosts and local filesystem paths
-- Project-specific third-party integrations
-- Current-project database schemas outside the generic base tables
-
-也就是下面这些内容不会直接进入模板：
-
-- 当前个人信息流系统的业务页面和业务表
-- 私有网络环境、私有服务地址、私有目录路径
-- 与具体项目强绑定的 AI / 邮件 / 推送 / CI 集成
-
-## Directory overview
+## Repository Layout
 
 ```text
-template/
-├── README.md
-├── .env.example
+.
+├── docs/                # in-app docs and operational guides
+├── hooks/               # hook and collector templates
+├── scripts/             # init, migrations, workers, backfill, installers
+├── service/             # Flask app, templates, tests
 ├── Dockerfile
 ├── docker-compose.yml
-├── docs/
-├── service/
-└── scripts/
+└── README_CN.md
 ```
-
-## How to start
-
-1. Copy `template/` into a new repository or duplicate it as the starting directory of a new project.
-2. Copy `.env.example` to `.env` or export the same variables in your shell.
-3. Run `python3 scripts/init_db.py --admin-password <your-password>`.
-4. Start the service with `cd service && ./run.sh`.
-5. Visit `http://localhost:5006/login`.
-
-Default in-memory test credentials:
-
-- username: `admin`
-- password: `admin123`
-
-中文使用流程：
-
-1. 复制 `template/` 到新仓库，或直接作为新项目初始目录。
-2. 按 `.env.example` 配置数据库和 Flask 密钥。
-3. 先初始化数据库，再启动服务。
-4. 确认 `/login`、`/docs`、`/api`、`/settings` 正常后，再开始加业务模块。
-
-## Extension rules
-
-- Add new business tables through `scripts/migrations/`.
-- Keep base auth and settings helpers in `service/auth.py` and `service/db.py`.
-- Split new domain modules into separate files or packages instead of growing `service/app.py` into a monolith.
-- Add at least one focused pytest file for every new capability.
-
-## Suggested next steps for a new project
-
-- Rename page titles and copy in `service/templates/`.
-- Replace the placeholder docs in `docs/README.md`.
-- Add your first domain migration and route module.
-- Extend `docker-compose.yml` with project-specific dependencies only when needed.
