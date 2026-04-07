@@ -116,9 +116,9 @@
         <div class="chart-container">
             <canvas id="timeline-chart"></canvas>
         </div>
-        <h3 style="margin: 24px 0 12px;">{{ t('user_detail.average_timeline_heading') }}</h3>
-        <div class="chart-container" aria-label="{{ t('user_detail.avg_tokens_per_project') }}">
-            <canvas id="average-timeline-chart"></canvas>
+        <h3 style="margin: 24px 0 12px;">{{ t('user_detail.prompt_average_timeline_heading') }}</h3>
+        <div class="chart-container" aria-label="{{ t('user_detail.avg_tokens_per_prompt') }}">
+            <canvas id="prompt-average-timeline-chart"></canvas>
         </div>
         <h3 style="margin: 24px 0 12px;">{{ t('user_detail.prompt_count_timeline') }}</h3>
         <div class="chart-container" aria-label="{{ t('user_detail.prompt_count_timeline') }}">
@@ -241,7 +241,6 @@
         "model_empty": t("user_detail.model_empty"),
         "recent_prompt_events_empty": t("user_detail.recent_prompt_events_empty"),
         "timeline_empty": t("user_detail.timeline_empty"),
-        "avg_tokens_per_project": t("user_detail.avg_tokens_per_project"),
         "input_tokens": t("user_detail.input_tokens"),
         "output_tokens": t("user_detail.output_tokens"),
         "avg_tokens_per_prompt": t("user_detail.avg_tokens_per_prompt"),
@@ -251,7 +250,7 @@
     let currentWindow = '{{ window }}';
     let modelChart = null;
     let timelineChart = null;
-    let averageTimelineChart = null;
+    let promptAverageTimelineChart = null;
     let promptCountTimelineChart = null;
     let refreshRequestId = 0;
     let latestTimeline = [];
@@ -557,15 +556,6 @@
         timelineChart = renderEmptyChart(ctx, timelineChart);
     }
 
-    function averageTokensPerProject(bucket, projectName = null) {
-        if (projectName) {
-            return tokenCountForProject(bucket, projectName);
-        }
-        const totalTokenCount = Number(bucket.total_token_count || 0);
-        const projectCount = (bucket.project_breakdown || []).length;
-        return projectCount ? totalTokenCount / projectCount : 0;
-    }
-
     function promptCountForProject(bucket, projectName) {
         const row = (bucket.project_breakdown || []).find(project => project.project_name === projectName);
         return row ? Number(row.prompt_count || 0) : 0;
@@ -662,7 +652,7 @@
         selectedTimelineProject = selectedTimelineProject === clickedProject ? null : clickedProject;
         renderProjects(latestProjects);
         renderTimeline(latestTimeline, currentWindow, { preserveSelection: true });
-        renderAverageTimeline(latestTimeline, currentWindow, selectedTimelineProject);
+        renderPromptAverageTimeline(latestTimeline, currentWindow, selectedTimelineProject);
         renderPromptCountTimeline(latestTimeline, currentWindow, selectedTimelineProject);
     }
 
@@ -725,28 +715,22 @@
         });
     }
 
-    function renderAverageTimeline(timeline, windowValue, projectName = null) {
-        const averageCtx = document.getElementById('average-timeline-chart').getContext('2d');
-        averageTimelineChart = clearChart(averageTimelineChart);
+    function renderPromptAverageTimeline(timeline, windowValue, projectName = null) {
+        const promptAverageCtx = document.getElementById('prompt-average-timeline-chart').getContext('2d');
+        promptAverageTimelineChart = clearChart(promptAverageTimelineChart);
 
         if (!timeline || timeline.length === 0) {
-            averageTimelineChart = renderEmptyChart(averageCtx, averageTimelineChart);
+            promptAverageTimelineChart = renderEmptyChart(promptAverageCtx, promptAverageTimelineChart);
             return;
         }
 
         const isToday = windowValue === 'today';
         const labels = timeline.map(bucket => formatTimelineLabel(bucket.time_bucket, isToday));
-        averageTimelineChart = new Chart(averageCtx, {
+        promptAverageTimelineChart = new Chart(promptAverageCtx, {
             type: 'line',
             data: {
                 labels,
                 datasets: [
-                    {
-                        label: userDetailMessages.avg_tokens_per_project,
-                        data: timeline.map(bucket => averageTokensPerProject(bucket, projectName)),
-                        borderColor: '#0f766e',
-                        backgroundColor: 'rgba(15, 118, 110, 0.18)',
-                    },
                     {
                         label: userDetailMessages.avg_tokens_per_prompt,
                         data: timeline.map(bucket => averageTokensPerPrompt(bucket, projectName)),
@@ -882,7 +866,7 @@
                     return;
                 }
                 renderTimeline(data.timeline || [], windowValue);
-                renderAverageTimeline(data.timeline || [], windowValue, selectedTimelineProject);
+                renderPromptAverageTimeline(data.timeline || [], windowValue, selectedTimelineProject);
                 renderPromptCountTimeline(data.timeline || [], windowValue, selectedTimelineProject);
             });
     }

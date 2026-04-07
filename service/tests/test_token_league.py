@@ -1395,16 +1395,16 @@ def test_user_detail_page_renders_english_timeline_range_selector_by_default(aut
     assert "Past 90 Days" in html
 
 
-def test_user_detail_page_renders_average_timeline_chart_section(auth_session):
+def test_user_detail_page_renders_prompt_average_trend_chart_section(auth_session):
     response = auth_session.get("/users/1")
 
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     messages = _user_detail_messages(html)
-    assert "Average Trends" in html
-    assert 'canvas id="average-timeline-chart"' in html
-    assert messages["avg_tokens_per_project"] == "Avg Tokens / Project"
+    assert "Avg Tokens / Prompt Trend" in html
+    assert 'canvas id="prompt-average-timeline-chart"' in html
     assert messages["avg_tokens_per_prompt"] == "Avg Tokens / Prompt"
+    assert "avg_tokens_per_project" not in messages
 
 
 def test_user_detail_page_renders_prompt_count_timeline_chart_section(auth_session):
@@ -1418,16 +1418,15 @@ def test_user_detail_page_renders_prompt_count_timeline_chart_section(auth_sessi
     assert messages["prompt_count_timeline"] == "Prompt Count Timeline"
 
 
-def test_user_detail_page_renders_average_timeline_chart_section_in_chinese(auth_session):
+def test_user_detail_page_renders_prompt_average_trend_chart_section_in_chinese(auth_session):
     response = auth_session.get("/users/1", headers={"Accept-Language": "zh-CN,zh;q=0.9"})
 
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     messages = _user_detail_messages(html)
-    assert "平均值曲线" in html
-    assert "每项目平均 Token" in html
-    assert messages["avg_tokens_per_project"] == "每项目平均 Token"
+    assert "每次 Prompt 平均 Token 趋势" in html
     assert messages["avg_tokens_per_prompt"] == "每次 Prompt 平均 Token"
+    assert "avg_tokens_per_project" not in messages
 
 
 def test_user_detail_page_renders_prompt_count_timeline_chart_section_in_chinese(auth_session):
@@ -1440,19 +1439,16 @@ def test_user_detail_page_renders_prompt_count_timeline_chart_section_in_chinese
     assert messages["prompt_count_timeline"] == "Prompt 数量时间线"
 
 
-def test_user_detail_page_script_renders_average_timeline_from_timeline_buckets(auth_session):
+def test_user_detail_page_script_renders_prompt_average_timeline_from_timeline_buckets(auth_session):
     response = auth_session.get("/users/1")
 
     assert response.status_code == 200
     html = response.get_data(as_text=True)
-    assert "let averageTimelineChart = null;" in html
-    assert "function averageTokensPerProject(bucket, projectName = null)" in html
+    assert "let promptAverageTimelineChart = null;" in html
+    assert "function averageTokensPerProject(bucket, projectName = null)" not in html
     assert "function averageTokensPerPrompt(bucket, projectName = null)" in html
-    assert "function renderAverageTimeline(timeline, windowValue, projectName = null)" in html
-    assert "const projectCount = (bucket.project_breakdown || []).length;" in html
-    assert "if (projectName) {" in html
-    assert "return tokenCountForProject(bucket, projectName);" in html
-    assert "return projectCount ? totalTokenCount / projectCount : 0;" in html
+    assert "function renderPromptAverageTimeline(timeline, windowValue, projectName = null)" in html
+    assert "const promptAverageCtx = document.getElementById('prompt-average-timeline-chart').getContext('2d');" in html
     assert "const promptCount = Number(bucket.prompt_count || 0);" in html
     assert "const promptCount = promptCountForProject(bucket, projectName);" in html
     assert "return promptCount ? totalTokenCount / promptCount : 0;" in html
@@ -1460,13 +1456,11 @@ def test_user_detail_page_script_renders_average_timeline_from_timeline_buckets(
     assert "options: {" in html
     assert "responsive: true" in html
     assert "maintainAspectRatio: false" in html
-    assert "userDetailMessages.avg_tokens_per_project" in html
     assert "userDetailMessages.avg_tokens_per_prompt" in html
-    assert "data: timeline.map(bucket => averageTokensPerProject(bucket, projectName))" in html
     assert "data: timeline.map(bucket => averageTokensPerPrompt(bucket, projectName))" in html
     assert "formatTokenCount(context.parsed.y)" in html
     assert "callback: value => formatTokenCount(value)" in html
-    assert "renderAverageTimeline(data.timeline || [], windowValue, selectedTimelineProject);" in html
+    assert "renderPromptAverageTimeline(data.timeline || [], windowValue, selectedTimelineProject);" in html
 
 
 def test_user_detail_page_script_renders_prompt_count_timeline_with_hourly_today_view(auth_session):
@@ -1506,22 +1500,22 @@ def test_user_detail_page_script_supports_single_project_timeline_focus(auth_ses
     assert "renderTimeline(latestTimeline, currentWindow, { preserveSelection: true });" in html
 
 
-def test_user_detail_page_script_updates_average_and_prompt_count_timelines_from_project_selection(
+def test_user_detail_page_script_updates_prompt_average_and_prompt_count_timelines_from_project_selection(
     auth_session,
 ):
     response = auth_session.get("/users/1")
 
     assert response.status_code == 200
     html = response.get_data(as_text=True)
-    assert "function averageTokensPerProject(bucket, projectName = null)" in html
+    assert "function averageTokensPerProject(bucket, projectName = null)" not in html
     assert "function averageTokensPerPrompt(bucket, projectName = null)" in html
     assert "function promptCountForProject(bucket, projectName)" in html
     assert "function buildPromptCountTimeline(timeline, projectName = null)" in html
     assert "const promptCount = promptCountForProject(bucket, projectName);" in html
     assert "return timeline.map(bucket => ({" in html
-    assert "renderAverageTimeline(latestTimeline, currentWindow, selectedTimelineProject);" in html
+    assert "renderPromptAverageTimeline(latestTimeline, currentWindow, selectedTimelineProject);" in html
     assert "renderPromptCountTimeline(latestTimeline, currentWindow, selectedTimelineProject);" in html
-    assert "renderAverageTimeline(data.timeline || [], windowValue, selectedTimelineProject);" in html
+    assert "renderPromptAverageTimeline(data.timeline || [], windowValue, selectedTimelineProject);" in html
     assert "renderPromptCountTimeline(data.timeline || [], windowValue, selectedTimelineProject);" in html
 
 
