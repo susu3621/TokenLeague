@@ -75,6 +75,15 @@ run_ssh() {
   fi
 }
 
+detect_remote_os() {
+  if [[ "$DRY_RUN" == "true" ]]; then
+    echo "unknown"
+    return
+  fi
+
+  ssh "$SSH_HOST" "${REMOTE_SETUP} && uname -s"
+}
+
 detect_compose_cmd() {
   if [[ "$DRY_RUN" == "true" ]]; then
     echo "docker compose"
@@ -88,6 +97,46 @@ detect_compose_cmd() {
     exit 1
   fi
   echo "$cmd"
+}
+
+check_remote_docker_autostart() {
+  local remote_os="$1"
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    info "[DRY-RUN] 跳过 Docker 开机自启检查"
+    return
+  fi
+
+  case "$remote_os" in
+    Linux)
+      if ssh "$SSH_HOST" "${REMOTE_SETUP} && command -v systemctl >/dev/null 2>&1"; then
+        local enabled_state
+        local active_state
+
+        enabled_state=$(ssh "$SSH_HOST" "${REMOTE_SETUP} && systemctl is-enabled docker 2>/dev/null || true")
+        active_state=$(ssh "$SSH_HOST" "${REMOTE_SETUP} && systemctl is-active docker 2>/dev/null || true")
+
+        if [[ "$enabled_state" == "enabled" ]]; then
+          success "docker.service 已启用，宿主机重启后 Docker 会自动启动"
+        else
+          warn "docker.service 未启用：容器的 restart: unless-stopped 只有在 Docker 启动后才会生效"
+          warn "请在远端执行：sudo systemctl enable --now docker"
+        fi
+
+        if [[ "$active_state" != "active" ]]; then
+          warn "docker.service 当前状态为 ${active_state:-unknown}，如需自动恢复请先启动 Docker"
+        fi
+      else
+        warn "远端 Linux 未检测到 systemctl，请确认 Docker 会在开机后自动启动"
+      fi
+      ;;
+    Darwin)
+      warn "远端为 macOS，请确认 Docker Desktop 已设置为登录后自动启动；Compose 服务已使用 restart: unless-stopped"
+      ;;
+    *)
+      warn "远端系统为 ${remote_os:-unknown}，请确认 Docker 会在宿主机启动后自动拉起；Compose 服务已使用 restart: unless-stopped"
+      ;;
+  esac
 }
 
 run_rsync() {
@@ -137,23 +186,27 @@ step 2 "检测远端 Docker Compose"
 COMPOSE_CMD="$(detect_compose_cmd)"
 success "Docker Compose 命令: $COMPOSE_CMD"
 
-step 3 "创建远端目录"
+step 3 "检查宿主机 Docker 开机自启"
+REMOTE_OS="$(detect_remote_os)"
+check_remote_docker_autostart "$REMOTE_OS"
+
+step 4 "创建远端目录"
 run_ssh "mkdir -p ${REMOTE_PATH}"
 success "远端目录已就绪"
 
-step 4 "rsync 同步代码"
+step 5 "rsync 同步代码"
 run_rsync
 success "代码同步完成"
 
-step 5 "校验 Compose 配置"
+step 6 "校验 Compose 配置"
 run_ssh "test -f .env && PORT=${APP_PORT} ${COMPOSE_CMD} config >/dev/null"
 success "Compose 配置有效"
 
-step 6 "构建并启动容器"
+step 7 "构建并启动容器"
 run_ssh "PORT=${APP_PORT} ${COMPOSE_CMD} up -d --build --remove-orphans"
 success "新容器已启动"
 
-step 7 "等待服务健康检查通过（超时 60s）"
+step 8 "等待服务健康检查通过（超时 60s）"
 if [[ "$DRY_RUN" == "true" ]]; then
   info "[DRY-RUN] 跳过健康检查"
 else
@@ -179,12 +232,13 @@ else
   fi
 fi
 
-step 8 "打印最近 ${LOG_LINES} 行容器日志"
+step 9 "打印最近 ${LOG_LINES} 行容器日志"
 echo ""
 echo -e "${BLUE}────── web 容器日志（最近 ${LOG_LINES} 行）──────${NC}"
 run_ssh "PORT=${APP_PORT} ${COMPOSE_CMD} logs --tail=${LOG_LINES} web"
 
 echo ""
+info "Compose 服务使用 restart: unless-stopped；只要 Docker 启动，web 和 worker 会自动恢复"
 echo -e "${GREEN}╔══════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║        TokenLeague 部署完成，端口 ${APP_PORT}        ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════════════╝${NC}"

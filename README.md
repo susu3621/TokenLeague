@@ -63,6 +63,12 @@ docker compose run --rm web python3 /app/scripts/init_db.py --admin-password '<s
 docker compose up --build -d
 ```
 
+`docker-compose.yml` sets both services to `restart: unless-stopped`, so they come back automatically after the Docker daemon starts again. On Linux hosts, also enable Docker at boot so a full machine reboot restores the stack without manual intervention:
+
+```bash
+sudo systemctl enable --now docker
+```
+
 4. Open `http://localhost:5006/login` and sign in with:
 
 - username: `admin`
