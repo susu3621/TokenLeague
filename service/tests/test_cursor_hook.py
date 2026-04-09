@@ -51,12 +51,12 @@ def test_install_script_supports_cursor_hooks_json():
     assert ".cursor/hooks.json" in content
 
 
-def test_docs_describe_cursor_hooks_installation():
+def test_docs_do_not_expose_cursor_hooks_installation():
     content = DOCS_PATH.read_text(encoding="utf-8")
 
-    assert "Cursor" in content
-    assert ".cursor/hooks.json" in content
-    assert ".cursor/hooks/tokenleague.py" in content
+    assert "Cursor" not in content
+    assert ".cursor/hooks.json" not in content
+    assert ".cursor/hooks/tokenleague.py" not in content
 
 
 def test_detect_project_name_uses_repo_root_for_git_worktree(tmp_path):

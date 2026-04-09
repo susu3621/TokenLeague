@@ -41,14 +41,14 @@ def test_kiro_assets_and_installer_stage_manual_hook_files():
     assert ".kiro/hooks/tokenleague.env.example" in content
 
 
-def test_docs_describe_manual_kiro_agent_hooks_setup():
+def test_docs_do_not_expose_kiro_hook_setup():
     content = DOCS_PATH.read_text(encoding="utf-8")
 
-    assert "Kiro" in content
-    assert "Agent Hooks" in content
-    assert "Prompt Submit" in content
-    assert "Agent Stop" in content
-    assert ".kiro/hooks/tokenleague.py" in content
+    assert "Kiro" not in content
+    assert "Agent Hooks" not in content
+    assert "Prompt Submit" not in content
+    assert "Agent Stop" not in content
+    assert ".kiro/hooks/tokenleague.py" not in content
 
 
 def test_detect_project_name_uses_repo_root_for_git_worktree(tmp_path):

@@ -1,14 +1,27 @@
 # TokenLeague
 
-TokenLeague is a Flask-based token usage dashboard for AI coding assistants. It ingests prompt and task usage from local hook scripts, stores the data in MySQL, and exposes a web UI for rankings, user drill-downs, account management, and operational docs.
+[English](README.md) | [简体中文](README_CN.md)
+
+TokenLeague helps teams record token usage and prompt efficiency across AI coding assistants. It turns daily usage data into a shared dashboard so teams can review where tokens go, compare working patterns, and improve over time.
+
+<p align="center">
+  <img src="docs/assets/usage-timeline-masked.png" alt="TokenLeague dashboard with usage timeline and average tokens per prompt trend" width="960" />
+</p>
+
+## Why TokenLeague
+
+- Give teams a simple, shared record of token usage by user, project, and model
+- Make efficiency visible with usage timelines and average tokens-per-prompt trends
+- Support retrospectives and self-improvement with concrete data instead of guesswork
 
 ## Features
 
 - Precomputed leaderboard page for fast ranked views across tracked users
 - User detail page with project breakdowns, model breakdowns, recent prompt events, and project-selectable trend charts
+- Efficiency-focused views such as token timelines and average tokens per prompt
 - Account page for rotating hook keys and changing local passwords
 - Admin pages for user management, LDAP configuration, and observed agent catalog data
-- Built-in hook installers for Claude Code, Codex CLI, Cursor, Workbuddy, Gemini CLI, Kiro, and OpenClaw
+- Built-in installers and collectors for Claude Code, Codex CLI, Workbuddy, Gemini CLI, and OpenClaw
 - Historical backfill scripts for Claude Code and Codex sessions
 - English and Simplified Chinese UI copy
 
@@ -16,13 +29,11 @@ TokenLeague is a Flask-based token usage dashboard for AI coding assistants. It 
 
 - Claude Code
 - Codex CLI
-- Cursor
 - Workbuddy / CodeBuddy CLI
 - Gemini CLI
-- Kiro
 - OpenClaw
 
-Detailed hook behavior and platform-specific setup notes live in [docs/HOOKS.md](docs/HOOKS.md).
+Detailed hook behavior and setup notes live in [docs/HOOKS.md](docs/HOOKS.md). Chinese overview: [README_CN.md](README_CN.md).
 
 ## Core Pages
 
@@ -149,10 +160,10 @@ The repository also accepts the legacy `MY_KMM_DB_*` aliases used by the migrati
 
 Repository hook templates live under `hooks/`. They are only activated when you run the installer.
 
-Install every supported integration:
+Install every documented integration:
 
 ```bash
-./scripts/install_hooks.sh --all --cursor --workbuddy --gemini --kiro --openclaw --global
+./scripts/install_hooks.sh --claude --codex --workbuddy --gemini --openclaw --global
 ```
 
 Install only selected integrations:
@@ -160,6 +171,7 @@ Install only selected integrations:
 ```bash
 ./scripts/install_hooks.sh --claude --global
 ./scripts/install_hooks.sh --codex --global
+./scripts/install_hooks.sh --workbuddy --global
 ./scripts/install_hooks.sh --gemini --global
 ./scripts/install_hooks.sh --openclaw --global
 ```
@@ -167,14 +179,19 @@ Install only selected integrations:
 Install hooks into the current project instead of the user profile:
 
 ```bash
-./scripts/install_hooks.sh --all --cursor --workbuddy --gemini --kiro --openclaw --local
+./scripts/install_hooks.sh --claude --codex --workbuddy --gemini --openclaw --local
 ```
 
 Remove installed hooks:
 
 ```bash
-./scripts/install_hooks.sh --all --cursor --workbuddy --gemini --kiro --openclaw --global --uninstall
+./scripts/install_hooks.sh --claude --codex --workbuddy --gemini --openclaw --global --uninstall
 ```
+
+Installer note:
+
+- `--all` currently enables Claude Code and Codex CLI only
+- use explicit flags when you also want Workbuddy, Gemini CLI, or OpenClaw
 
 OpenClaw note:
 
@@ -229,6 +246,7 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q service/tests/test_deploy_assets.py
 ```text
 .
 ├── docs/                # in-app docs and operational guides
+│   └── assets/          # README documentation images
 ├── hooks/               # hook and collector templates
 ├── scripts/             # init, migrations, workers, backfill, installers
 ├── service/             # Flask app, templates, tests
