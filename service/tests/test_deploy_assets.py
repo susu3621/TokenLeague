@@ -61,26 +61,26 @@ def test_project_name_schema_assets_exist():
 
 
 def test_top_level_readmes_cover_local_and_docker_installation():
-    readme_en = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
-    readme_cn = (PROJECT_ROOT / "README_CN.md").read_text(encoding="utf-8")
+    readme_zh = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    readme_en = (PROJECT_ROOT / "README_EN.md").read_text(encoding="utf-8")
 
     assert "Docker Compose (Recommended)" in readme_en
     assert "Local Python Setup" in readme_en
     assert "Hook Installation" in readme_en
-    assert "Docker Compose 部署（推荐）" in readme_cn
-    assert "本地 Python 运行" in readme_cn
-    assert "Hook 安装" in readme_cn
+    assert "Docker Compose 部署（推荐）" in readme_zh
+    assert "本地 Python 运行" in readme_zh
+    assert "Hook 安装" in readme_zh
 
 
 def test_deploy_assets_document_restart_requirements():
     deploy_script = (PROJECT_ROOT / "deploy.sh").read_text(encoding="utf-8")
     compose = (PROJECT_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
-    readme_en = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
-    readme_cn = (PROJECT_ROOT / "README_CN.md").read_text(encoding="utf-8")
+    readme_zh = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    readme_en = (PROJECT_ROOT / "README_EN.md").read_text(encoding="utf-8")
 
     assert compose.count("restart: unless-stopped") >= 2
     assert "systemctl is-enabled docker" in deploy_script
     assert "restart: unless-stopped" in readme_en
     assert "systemctl enable --now docker" in readme_en
-    assert "restart: unless-stopped" in readme_cn
-    assert "systemctl enable --now docker" in readme_cn
+    assert "restart: unless-stopped" in readme_zh
+    assert "systemctl enable --now docker" in readme_zh

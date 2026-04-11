@@ -11,7 +11,7 @@ def test_docs_page_renders_current_project_markdown_source(auth_session):
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "TokenLeague Documentation" in html
-    assert "token usage leaderboard application" in html
+    assert "record AI assistant token usage and prompt efficiency" in html
 
 
 def test_docs_page_prefers_chinese_variant_when_available(auth_session):
@@ -20,7 +20,7 @@ def test_docs_page_prefers_chinese_variant_when_available(auth_session):
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "TokenLeague 文档" in html
-    assert "Token 使用排行榜应用" in html
+    assert "记录 AI 助手的 Token 用量与使用效率" in html
 
 
 def test_docs_page_prefers_cookie_locale_over_accept_language(auth_session):
@@ -31,7 +31,7 @@ def test_docs_page_prefers_cookie_locale_over_accept_language(auth_session):
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "TokenLeague 文档" in html
-    assert "Token 使用排行榜应用" in html
+    assert "记录 AI 助手的 Token 用量与使用效率" in html
 
 
 def test_docs_page_can_force_english_with_cookie(auth_session):
@@ -42,7 +42,7 @@ def test_docs_page_can_force_english_with_cookie(auth_session):
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "TokenLeague Documentation" in html
-    assert "token usage leaderboard application" in html
+    assert "record AI assistant token usage and prompt efficiency" in html
 
 
 def test_docs_page_falls_back_to_english_when_localized_file_is_missing(auth_session):
@@ -51,7 +51,7 @@ def test_docs_page_falls_back_to_english_when_localized_file_is_missing(auth_ses
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "TokenLeague Hooks" in html
-    assert "automatically track token usage" in html
+    assert "collects token usage statistics" in html
 
 
 def test_docs_sidebar_does_not_duplicate_localized_variants(auth_session):

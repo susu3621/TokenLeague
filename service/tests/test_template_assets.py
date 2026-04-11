@@ -7,6 +7,7 @@ TEMPLATE_DIR = Path(__file__).resolve().parents[2]
 def test_template_bootstrap_files_exist():
     expected_files = [
         "README.md",
+        "README_EN.md",
         ".env.example",
         "Dockerfile",
         "docker-compose.yml",
@@ -37,8 +38,12 @@ def test_init_schema_covers_base_tables():
 
 
 def test_template_readme_documents_tokenleague_product_setup():
-    content = (TEMPLATE_DIR / "README.md").read_text(encoding="utf-8")
+    content_zh = (TEMPLATE_DIR / "README.md").read_text(encoding="utf-8")
+    content_en = (TEMPLATE_DIR / "README_EN.md").read_text(encoding="utf-8")
 
-    assert "token usage dashboard" in content.lower()
-    assert "docker compose (recommended)" in content.lower()
-    assert "local python setup" in content.lower()
+    assert "团队级 ai token 观测" in content_zh.lower()
+    assert "docker compose 部署（推荐）" in content_zh.lower()
+    assert "本地 python 运行" in content_zh.lower()
+    assert "team-level ai token analytics" in content_en.lower()
+    assert "docker compose (recommended)" in content_en.lower()
+    assert "local python setup" in content_en.lower()
