@@ -9,7 +9,6 @@ def test_deploy_script_targets_tokenleague_defaults():
 
     assert "REMOTE_PATH=\"~/project/TokenLeague\"" in content
     assert "HEALTH_PORT=5006" in content
-    assert "--exclude='.env'" not in content
     assert "personal-information-flow" not in content
     assert "MY_API_KEY_ZHIPU" not in content
 
@@ -23,10 +22,15 @@ def test_runtime_assets_use_port_5006():
     assert '"5006:5006"' in compose
     assert '"3306:3306"' not in compose
     assert "\n  mysql:\n" not in compose
+    assert "\n  postgres:\n" in compose
+    assert "postgres:16" in compose
+    assert "./data/postgres:/var/lib/postgresql/data" in compose
     assert "env_file:" in compose
     assert "MY_APP_DB_HOST: mysql" not in compose
+    assert "MY_APP_DB_HOST: postgres" in compose
     assert "EXPOSE 5006" in dockerfile
     assert "PORT=5006" in env_example
+    assert "MY_APP_DB_PORT=5432" in env_example
 
 
 def test_db_scripts_support_kmm_env_aliases():
@@ -47,6 +51,15 @@ def test_db_scripts_support_kmm_env_aliases():
         content = path.read_text(encoding="utf-8")
         for token in expected_tokens:
             assert token in content, f"{token} missing in {path.name}"
+
+
+def test_deploy_preserves_runtime_env_and_postgres_data():
+    content = (PROJECT_ROOT / "deploy.sh").read_text(encoding="utf-8")
+
+    assert "--exclude='.env'" in content
+    assert "--exclude='.env.*'" in content
+    assert "--exclude='data/'" in content
+    assert "mkdir -p data/postgres" in content
 
 
 def test_project_name_schema_assets_exist():

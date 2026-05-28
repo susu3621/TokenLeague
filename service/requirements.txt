@@ -1,4 +1,5 @@
 flask
+psycopg[binary]
 mysql-connector-python
 werkzeug
 ldap3

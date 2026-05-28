@@ -9,7 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-import mysql.connector
+import psycopg
+from psycopg.rows import dict_row
 
 
 MIGRATION_FILE_PATTERN = re.compile(r"^(\d+)_.*\.py$")
@@ -33,17 +34,17 @@ def _required_env(name: str) -> str:
 
 
 def _db_port() -> int:
-    return int(_required_env("MY_APP_DB_PORT") if os.getenv("MY_APP_DB_PORT") or os.getenv("MY_KMM_DB_PORT") else "3306")
+    return int(_required_env("MY_APP_DB_PORT") if os.getenv("MY_APP_DB_PORT") or os.getenv("MY_KMM_DB_PORT") else "5432")
 
 
 def get_connection():
-    return mysql.connector.connect(
+    return psycopg.connect(
         host=_required_env("MY_APP_DB_HOST"),
         port=_db_port(),
-        database=_required_env("MY_APP_DB_NAME"),
+        dbname=_required_env("MY_APP_DB_NAME"),
         user=_required_env("MY_APP_DB_USER"),
         password=_required_env("MY_APP_DB_PWD"),
-        charset="utf8mb4",
+        row_factory=dict_row,
     )
 
 
@@ -52,10 +53,10 @@ def ensure_migration_table(conn):
     cursor.execute(
         f"""
         CREATE TABLE IF NOT EXISTS {MIGRATION_TABLE} (
-            id INT AUTO_INCREMENT PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             migration_name VARCHAR(255) NOT NULL UNIQUE,
-            applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
         """
     )
     conn.commit()
@@ -67,7 +68,7 @@ def get_applied_migrations(conn) -> set[str]:
     cursor.execute(f"SELECT migration_name FROM {MIGRATION_TABLE}")
     rows = cursor.fetchall()
     cursor.close()
-    return {row[0] for row in rows}
+    return {row["migration_name"] for row in rows}
 
 
 def list_migration_files(migrations_dir: Path) -> list[Path]:
@@ -101,7 +102,7 @@ def run_single_migration(path: Path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run pending template migrations")
+    parser = argparse.ArgumentParser(description="Run pending TokenLeague migrations")
     parser.add_argument("--dry-run", action="store_true", help="List pending migrations without running them")
     args = parser.parse_args()
 

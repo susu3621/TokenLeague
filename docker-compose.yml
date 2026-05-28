@@ -1,11 +1,37 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    env_file:
+      - .env
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${MY_APP_DB_NAME:-tokenleague}
+      POSTGRES_USER: ${MY_APP_DB_USER:-tokenleague_user}
+      POSTGRES_PASSWORD: ${MY_APP_DB_PWD:-tokenleague_password}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 5s
+      retries: 20
   web:
     build: .
     env_file:
       - .env
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       MY_FLASK_SECRET_KEY: ${MY_FLASK_SECRET_KEY:-change-me}
+      MY_APP_DB_HOST: postgres
+      MY_APP_DB_PORT: 5432
+      MY_APP_DB_NAME: ${MY_APP_DB_NAME:-tokenleague}
+      MY_APP_DB_USER: ${MY_APP_DB_USER:-tokenleague_user}
+      MY_APP_DB_PWD: ${MY_APP_DB_PWD:-tokenleague_password}
       PORT: 5006
     ports:
       - "5006:5006"
@@ -15,7 +41,16 @@ services:
       - .env
     restart: unless-stopped
     depends_on:
-      - web
+      postgres:
+        condition: service_healthy
+      web:
+        condition: service_started
+    environment:
+      MY_APP_DB_HOST: postgres
+      MY_APP_DB_PORT: 5432
+      MY_APP_DB_NAME: ${MY_APP_DB_NAME:-tokenleague}
+      MY_APP_DB_USER: ${MY_APP_DB_USER:-tokenleague_user}
+      MY_APP_DB_PWD: ${MY_APP_DB_PWD:-tokenleague_password}
     command:
       - bash
       - -lc

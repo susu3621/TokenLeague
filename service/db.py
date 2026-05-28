@@ -7,7 +7,9 @@ import os
 import secrets
 from typing import Any
 
-import mysql.connector
+import psycopg
+from psycopg.rows import dict_row
+from psycopg.types.json import Json
 from werkzeug.security import generate_password_hash
 
 
@@ -79,6 +81,14 @@ def _normalize_metadata(metadata: Any) -> dict[str, Any]:
     if isinstance(metadata, dict):
         return metadata
     return {}
+
+
+def _decode_json_value(value: Any, default: Any) -> Any:
+    if value is None or value == "":
+        return default
+    if isinstance(value, str):
+        return json.loads(value)
+    return value
 
 
 def _normalize_project_name(value: Any) -> str:
@@ -172,17 +182,17 @@ def _required_env(name: str) -> str:
 
 
 def _db_port() -> int:
-    return int(_required_env("MY_APP_DB_PORT") if os.getenv("MY_APP_DB_PORT") or os.getenv("MY_KMM_DB_PORT") else "3306")
+    return int(_required_env("MY_APP_DB_PORT") if os.getenv("MY_APP_DB_PORT") or os.getenv("MY_KMM_DB_PORT") else "5432")
 
 
 def get_connection():
-    return mysql.connector.connect(
+    return psycopg.connect(
         host=_required_env("MY_APP_DB_HOST"),
         port=_db_port(),
-        database=_required_env("MY_APP_DB_NAME"),
+        dbname=_required_env("MY_APP_DB_NAME"),
         user=_required_env("MY_APP_DB_USER"),
         password=_required_env("MY_APP_DB_PWD"),
-        charset="utf8mb4",
+        row_factory=dict_row,
     )
 
 
@@ -208,7 +218,7 @@ def get_user_by_id(user_id: int | None):
         return _full_user(user) if user else None
 
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
     cursor.execute(
         """
         SELECT id, username, display_name, password_hash, role, status, auth_source,
@@ -229,7 +239,7 @@ def get_user_by_username(username: str):
         return _full_user(user) if user else None
 
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
     cursor.execute(
         """
         SELECT id, username, display_name, password_hash, role, status, auth_source,
@@ -255,7 +265,7 @@ def get_user_by_hook_key(hook_key: str | None):
         return _full_user(user) if user else None
 
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
     cursor.execute(
         """
         SELECT id, username, display_name, password_hash, role, status, auth_source,
@@ -275,7 +285,7 @@ def get_all_users() -> list[dict[str, Any]]:
         return [_public_user(user) for user in sorted(_memory_users, key=lambda item: item["id"])]
 
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
     cursor.execute(
         """
         SELECT id, username, display_name, role, status, auth_source, ldap_dn,
@@ -327,13 +337,14 @@ def create_user(
         return _full_user(user)
 
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
     cursor.execute(
         """
         INSERT INTO users (
             username, display_name, password_hash, role, status, auth_source,
             ldap_dn, last_synced_at, hook_key, hook_key_created_at, created_at, updated_at
         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
         """,
         (
             username,
@@ -350,8 +361,9 @@ def create_user(
             now.replace(tzinfo=None),
         ),
     )
+    row = cursor.fetchone()
     conn.commit()
-    user_id = cursor.lastrowid
+    user_id = row["id"]
     cursor.close()
     conn.close()
     return get_user_by_id(user_id)
@@ -439,7 +451,7 @@ def get_setting(key: str):
         return _memory_settings.get(key)
 
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
     cursor.execute(
         "SELECT setting_value FROM system_settings WHERE setting_key = %s",
         (key,),
@@ -470,7 +482,7 @@ def get_leaderboard_snapshot(snapshot_key: str = DEFAULT_LEADERBOARD_SNAPSHOT_KE
         }
 
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
     cursor.execute(
         """
         SELECT snapshot_key, generated_at, rows_json
@@ -489,13 +501,7 @@ def get_leaderboard_snapshot(snapshot_key: str = DEFAULT_LEADERBOARD_SNAPSHOT_KE
             "rows": [],
         }
 
-    rows_value = row.get("rows_json")
-    if isinstance(rows_value, str):
-        rows = json.loads(rows_value or "[]")
-    elif isinstance(rows_value, list):
-        rows = rows_value
-    else:
-        rows = []
+    rows = _decode_json_value(row.get("rows_json"), [])
     return {
         "snapshot_key": str(row.get("snapshot_key") or snapshot_key),
         "generated_at": _parse_datetime(row.get("generated_at")),
@@ -526,15 +532,15 @@ def save_leaderboard_snapshot(
         """
         INSERT INTO leaderboard_snapshots (snapshot_key, generated_at, rows_json, created_at, updated_at)
         VALUES (%s, %s, %s, %s, %s)
-        ON DUPLICATE KEY UPDATE
-            generated_at = VALUES(generated_at),
-            rows_json = VALUES(rows_json),
-            updated_at = VALUES(updated_at)
+        ON CONFLICT (snapshot_key) DO UPDATE SET
+            generated_at = EXCLUDED.generated_at,
+            rows_json = EXCLUDED.rows_json,
+            updated_at = EXCLUDED.updated_at
         """,
         (
             snapshot_key,
             normalized_generated_at.replace(tzinfo=None) if normalized_generated_at else None,
-            json.dumps(normalized_rows),
+            Json(normalized_rows),
             now.replace(tzinfo=None),
             now.replace(tzinfo=None),
         ),
@@ -640,7 +646,9 @@ def set_setting(key: str, value: str) -> None:
         """
         INSERT INTO system_settings (setting_key, setting_value, updated_at)
         VALUES (%s, %s, %s)
-        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)
+        ON CONFLICT (setting_key) DO UPDATE SET
+            setting_value = EXCLUDED.setting_value,
+            updated_at = EXCLUDED.updated_at
         """,
         (key, value, now.replace(tzinfo=None)),
     )
@@ -740,22 +748,22 @@ def upsert_prompt_event(user_id: int, payload: dict[str, Any]):
             input_token_count, output_token_count, cached_input_token_count, total_token_count, duration_ms,
             agent_type, agent_version, model_name, status, metadata_json, created_at, updated_at
         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ON DUPLICATE KEY UPDATE
-            task_id = VALUES(task_id),
-            project_name = VALUES(project_name),
-            prompt_started_at = VALUES(prompt_started_at),
-            prompt_finished_at = VALUES(prompt_finished_at),
-            input_token_count = VALUES(input_token_count),
-            output_token_count = VALUES(output_token_count),
-            cached_input_token_count = VALUES(cached_input_token_count),
-            total_token_count = VALUES(total_token_count),
-            duration_ms = VALUES(duration_ms),
-            agent_type = VALUES(agent_type),
-            agent_version = VALUES(agent_version),
-            model_name = VALUES(model_name),
-            status = VALUES(status),
-            metadata_json = VALUES(metadata_json),
-            updated_at = VALUES(updated_at)
+        ON CONFLICT (user_id, external_event_id) DO UPDATE SET
+            task_id = EXCLUDED.task_id,
+            project_name = EXCLUDED.project_name,
+            prompt_started_at = EXCLUDED.prompt_started_at,
+            prompt_finished_at = EXCLUDED.prompt_finished_at,
+            input_token_count = EXCLUDED.input_token_count,
+            output_token_count = EXCLUDED.output_token_count,
+            cached_input_token_count = EXCLUDED.cached_input_token_count,
+            total_token_count = EXCLUDED.total_token_count,
+            duration_ms = EXCLUDED.duration_ms,
+            agent_type = EXCLUDED.agent_type,
+            agent_version = EXCLUDED.agent_version,
+            model_name = EXCLUDED.model_name,
+            status = EXCLUDED.status,
+            metadata_json = EXCLUDED.metadata_json,
+            updated_at = EXCLUDED.updated_at
         """,
         (
             user_id,
@@ -773,7 +781,7 @@ def upsert_prompt_event(user_id: int, payload: dict[str, Any]):
             event["agent_version"],
             event["model_name"],
             event["status"],
-            json.dumps(event["metadata"]),
+            Json(event["metadata"]),
             now.replace(tzinfo=None),
             now.replace(tzinfo=None),
         ),
@@ -813,23 +821,23 @@ def upsert_task_run(user_id: int, payload: dict[str, Any]):
             input_token_count, output_token_count, cached_input_token_count, total_token_count, total_duration_ms,
             agent_type, agent_version, model_name, status, metadata_json, created_at, updated_at
         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ON DUPLICATE KEY UPDATE
-            task_id = VALUES(task_id),
-            project_name = VALUES(project_name),
-            started_at = VALUES(started_at),
-            finished_at = VALUES(finished_at),
-            prompt_count = VALUES(prompt_count),
-            input_token_count = VALUES(input_token_count),
-            output_token_count = VALUES(output_token_count),
-            cached_input_token_count = VALUES(cached_input_token_count),
-            total_token_count = VALUES(total_token_count),
-            total_duration_ms = VALUES(total_duration_ms),
-            agent_type = VALUES(agent_type),
-            agent_version = VALUES(agent_version),
-            model_name = VALUES(model_name),
-            status = VALUES(status),
-            metadata_json = VALUES(metadata_json),
-            updated_at = VALUES(updated_at)
+        ON CONFLICT (user_id, external_task_id) DO UPDATE SET
+            task_id = EXCLUDED.task_id,
+            project_name = EXCLUDED.project_name,
+            started_at = EXCLUDED.started_at,
+            finished_at = EXCLUDED.finished_at,
+            prompt_count = EXCLUDED.prompt_count,
+            input_token_count = EXCLUDED.input_token_count,
+            output_token_count = EXCLUDED.output_token_count,
+            cached_input_token_count = EXCLUDED.cached_input_token_count,
+            total_token_count = EXCLUDED.total_token_count,
+            total_duration_ms = EXCLUDED.total_duration_ms,
+            agent_type = EXCLUDED.agent_type,
+            agent_version = EXCLUDED.agent_version,
+            model_name = EXCLUDED.model_name,
+            status = EXCLUDED.status,
+            metadata_json = EXCLUDED.metadata_json,
+            updated_at = EXCLUDED.updated_at
         """,
         (
             user_id,
@@ -848,7 +856,7 @@ def upsert_task_run(user_id: int, payload: dict[str, Any]):
             task_run["agent_version"],
             task_run["model_name"],
             task_run["status"],
-            json.dumps(task_run["metadata"]),
+            Json(task_run["metadata"]),
             now.replace(tzinfo=None),
             now.replace(tzinfo=None),
         ),
@@ -958,7 +966,7 @@ def _build_leaderboard_rows(
 
 def _fetch_prompt_events_from_db() -> list[dict[str, Any]]:
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
     cursor.execute(
         """
         SELECT user_id, task_id, external_event_id, prompt_started_at, prompt_finished_at,
@@ -972,13 +980,13 @@ def _fetch_prompt_events_from_db() -> list[dict[str, Any]]:
     conn.close()
     for row in rows:
         _normalize_datetime_fields(row, "prompt_started_at", "prompt_finished_at")
-        row["metadata"] = json.loads(row.pop("metadata_json") or "{}")
+        row["metadata"] = _decode_json_value(row.pop("metadata_json"), {})
     return rows
 
 
 def _fetch_task_runs_from_db() -> list[dict[str, Any]]:
     conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
     cursor.execute(
         """
         SELECT user_id, task_id, external_task_id, started_at, finished_at, prompt_count,
@@ -992,7 +1000,7 @@ def _fetch_task_runs_from_db() -> list[dict[str, Any]]:
     conn.close()
     for row in rows:
         _normalize_datetime_fields(row, "started_at", "finished_at")
-        row["metadata"] = json.loads(row.pop("metadata_json") or "{}")
+        row["metadata"] = _decode_json_value(row.pop("metadata_json"), {})
     return rows
 
 

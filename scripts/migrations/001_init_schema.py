@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import os
-import sys
 import secrets
+import sys
 
-import mysql.connector
+import psycopg
 
 
 DB_ENV_ALIASES = {
@@ -28,17 +28,16 @@ def _required_env(name: str) -> str:
 
 
 def _db_port() -> int:
-    return int(_required_env("MY_APP_DB_PORT") if os.getenv("MY_APP_DB_PORT") or os.getenv("MY_KMM_DB_PORT") else "3306")
+    return int(_required_env("MY_APP_DB_PORT") if os.getenv("MY_APP_DB_PORT") or os.getenv("MY_KMM_DB_PORT") else "5432")
 
 
 def get_connection():
-    return mysql.connector.connect(
+    return psycopg.connect(
         host=_required_env("MY_APP_DB_HOST"),
         port=_db_port(),
-        database=_required_env("MY_APP_DB_NAME"),
+        dbname=_required_env("MY_APP_DB_NAME"),
         user=_required_env("MY_APP_DB_USER"),
         password=_required_env("MY_APP_DB_PWD"),
-        charset="utf8mb4",
     )
 
 
@@ -46,26 +45,12 @@ def _column_exists(cursor, table_name: str, column_name: str) -> bool:
     cursor.execute(
         """
         SELECT 1
-        FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = %s
-          AND COLUMN_NAME = %s
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = %s
+          AND column_name = %s
         """,
         (table_name, column_name),
-    )
-    return cursor.fetchone() is not None
-
-
-def _index_exists(cursor, table_name: str, index_name: str) -> bool:
-    cursor.execute(
-        """
-        SELECT 1
-        FROM information_schema.STATISTICS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = %s
-          AND INDEX_NAME = %s
-        """,
-        (table_name, index_name),
     )
     return cursor.fetchone() is not None
 
@@ -76,12 +61,6 @@ def _add_column_if_missing(cursor, table_name: str, column_name: str, ddl: str) 
     cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {ddl}")
 
 
-def _add_unique_key_if_missing(cursor, table_name: str, index_name: str, column_name: str) -> None:
-    if _index_exists(cursor, table_name, index_name):
-        return
-    cursor.execute(f"ALTER TABLE {table_name} ADD UNIQUE KEY {index_name} ({column_name})")
-
-
 def main():
     conn = get_connection()
     cursor = conn.cursor()
@@ -89,126 +68,127 @@ def main():
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
-            id INT AUTO_INCREMENT PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             username VARCHAR(64) NOT NULL UNIQUE,
             display_name VARCHAR(128) NULL,
             password_hash VARCHAR(255) NOT NULL,
-            role ENUM('admin', 'user') NOT NULL DEFAULT 'user',
-            status ENUM('active', 'disabled') NOT NULL DEFAULT 'active',
-            auth_source ENUM('local', 'ldap') NOT NULL DEFAULT 'local',
+            role VARCHAR(16) NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+            status VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
+            auth_source VARCHAR(16) NOT NULL DEFAULT 'local' CHECK (auth_source IN ('local', 'ldap')),
             ldap_dn VARCHAR(255) NULL,
-            last_synced_at DATETIME NULL,
+            last_synced_at TIMESTAMP NULL,
             hook_key VARCHAR(64) NULL,
-            hook_key_created_at DATETIME NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY uniq_users_hook_key (hook_key)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            hook_key_created_at TIMESTAMP NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
         """
     )
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS uniq_users_hook_key ON users (hook_key)")
 
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS system_settings (
-            id INT AUTO_INCREMENT PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             setting_key VARCHAR(128) NOT NULL UNIQUE,
             setting_value TEXT NULL,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
         """
     )
 
-    _add_column_if_missing(cursor, "users", "display_name", "display_name VARCHAR(128) NULL AFTER username")
+    _add_column_if_missing(cursor, "users", "display_name", "display_name VARCHAR(128) NULL")
     _add_column_if_missing(
         cursor,
         "users",
         "status",
-        "status ENUM('active', 'disabled') NOT NULL DEFAULT 'active' AFTER role",
+        "status VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled'))",
     )
-    _add_column_if_missing(cursor, "users", "hook_key", "hook_key VARCHAR(64) NULL AFTER status")
+    _add_column_if_missing(cursor, "users", "hook_key", "hook_key VARCHAR(64) NULL")
     _add_column_if_missing(
         cursor,
         "users",
         "hook_key_created_at",
-        "hook_key_created_at DATETIME NULL AFTER hook_key",
+        "hook_key_created_at TIMESTAMP NULL",
     )
     _add_column_if_missing(
         cursor,
         "users",
         "auth_source",
-        "auth_source ENUM('local', 'ldap') NOT NULL DEFAULT 'local' AFTER status",
+        "auth_source VARCHAR(16) NOT NULL DEFAULT 'local' CHECK (auth_source IN ('local', 'ldap'))",
     )
-    _add_column_if_missing(cursor, "users", "ldap_dn", "ldap_dn VARCHAR(255) NULL AFTER auth_source")
-    _add_column_if_missing(cursor, "users", "last_synced_at", "last_synced_at DATETIME NULL AFTER ldap_dn")
-    _add_unique_key_if_missing(cursor, "users", "uniq_users_hook_key", "hook_key")
+    _add_column_if_missing(cursor, "users", "ldap_dn", "ldap_dn VARCHAR(255) NULL")
+    _add_column_if_missing(cursor, "users", "last_synced_at", "last_synced_at TIMESTAMP NULL")
 
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS prompt_events (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            user_id INT NOT NULL,
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
             task_id VARCHAR(128) NOT NULL,
             external_event_id VARCHAR(128) NOT NULL,
             project_name VARCHAR(255) NOT NULL DEFAULT '',
-            prompt_started_at DATETIME NOT NULL,
-            prompt_finished_at DATETIME NOT NULL,
-            input_token_count INT NOT NULL DEFAULT 0,
-            output_token_count INT NOT NULL DEFAULT 0,
-            total_token_count INT NOT NULL DEFAULT 0,
-            duration_ms INT NOT NULL DEFAULT 0,
+            prompt_started_at TIMESTAMP NOT NULL,
+            prompt_finished_at TIMESTAMP NOT NULL,
+            input_token_count INTEGER NOT NULL DEFAULT 0,
+            output_token_count INTEGER NOT NULL DEFAULT 0,
+            cached_input_token_count INTEGER NOT NULL DEFAULT 0,
+            total_token_count INTEGER NOT NULL DEFAULT 0,
+            duration_ms INTEGER NOT NULL DEFAULT 0,
             agent_type VARCHAR(128) NOT NULL,
             agent_version VARCHAR(128) NOT NULL,
             model_name VARCHAR(128) NOT NULL,
             status VARCHAR(32) NOT NULL DEFAULT 'completed',
-            metadata_json JSON NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY uniq_prompt_event_user_external (user_id, external_event_id),
-            KEY idx_prompt_finished_at (prompt_finished_at),
-            KEY idx_prompt_agent (agent_type, agent_version, model_name)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            metadata_json JSONB NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT uniq_prompt_event_user_external UNIQUE (user_id, external_event_id)
+        )
         """
     )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_prompt_finished_at ON prompt_events (prompt_finished_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_prompt_agent ON prompt_events (agent_type, agent_version, model_name)")
 
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS task_runs (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            user_id INT NOT NULL,
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
             task_id VARCHAR(128) NOT NULL,
             external_task_id VARCHAR(128) NOT NULL,
             project_name VARCHAR(255) NOT NULL DEFAULT '',
-            started_at DATETIME NOT NULL,
-            finished_at DATETIME NOT NULL,
-            prompt_count INT NOT NULL DEFAULT 0,
-            input_token_count INT NOT NULL DEFAULT 0,
-            output_token_count INT NOT NULL DEFAULT 0,
-            total_token_count INT NOT NULL DEFAULT 0,
-            total_duration_ms INT NOT NULL DEFAULT 0,
+            started_at TIMESTAMP NOT NULL,
+            finished_at TIMESTAMP NOT NULL,
+            prompt_count INTEGER NOT NULL DEFAULT 0,
+            input_token_count INTEGER NOT NULL DEFAULT 0,
+            output_token_count INTEGER NOT NULL DEFAULT 0,
+            cached_input_token_count INTEGER NOT NULL DEFAULT 0,
+            total_token_count INTEGER NOT NULL DEFAULT 0,
+            total_duration_ms INTEGER NOT NULL DEFAULT 0,
             agent_type VARCHAR(128) NOT NULL,
             agent_version VARCHAR(128) NOT NULL,
             model_name VARCHAR(128) NOT NULL,
             status VARCHAR(32) NOT NULL DEFAULT 'completed',
-            metadata_json JSON NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY uniq_task_run_user_external (user_id, external_task_id),
-            KEY idx_task_finished_at (finished_at),
-            KEY idx_task_agent (agent_type, agent_version, model_name)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            metadata_json JSONB NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT uniq_task_run_user_external UNIQUE (user_id, external_task_id)
+        )
         """
     )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_finished_at ON task_runs (finished_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_agent ON task_runs (agent_type, agent_version, model_name)")
 
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS leaderboard_snapshots (
-            id INT AUTO_INCREMENT PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             snapshot_key VARCHAR(128) NOT NULL UNIQUE,
-            generated_at DATETIME NULL,
-            rows_json JSON NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            generated_at TIMESTAMP NULL,
+            rows_json JSONB NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
         """
     )
 

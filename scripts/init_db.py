@@ -9,7 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-import mysql.connector
+import psycopg
+from psycopg import sql
 from werkzeug.security import generate_password_hash
 
 
@@ -32,58 +33,60 @@ def _required_env(name: str) -> str:
 
 
 def _db_port() -> int:
-    return int(_required_env("MY_APP_DB_PORT") if os.getenv("MY_APP_DB_PORT") or os.getenv("MY_KMM_DB_PORT") else "3306")
+    return int(_required_env("MY_APP_DB_PORT") if os.getenv("MY_APP_DB_PORT") or os.getenv("MY_KMM_DB_PORT") else "5432")
+
+
+def _connect(database: str):
+    return psycopg.connect(
+        host=_required_env("MY_APP_DB_HOST"),
+        port=_db_port(),
+        dbname=database,
+        user=_required_env("MY_APP_DB_USER"),
+        password=_required_env("MY_APP_DB_PWD"),
+    )
+
+
+def ensure_database_exists(database: str) -> None:
+    admin_database = os.getenv("MY_APP_DB_ADMIN_DB") or os.getenv("MY_KMM_DB_ADMIN_DB") or "postgres"
+    conn = _connect(admin_database)
+    conn.autocommit = True
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM pg_database WHERE datname = %s", (database,))
+        if cursor.fetchone():
+            cursor.close()
+            return
+        cursor.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database)))
+        cursor.close()
+    finally:
+        conn.close()
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Initialize the template project database")
+    parser = argparse.ArgumentParser(description="Initialize the TokenLeague PostgreSQL database")
     parser.add_argument("--admin-password", required=True, help="Initial admin password")
     args = parser.parse_args()
 
-    host = _required_env("MY_APP_DB_HOST")
-    port = _db_port()
     database = _required_env("MY_APP_DB_NAME")
-    user = _required_env("MY_APP_DB_USER")
-    password = _required_env("MY_APP_DB_PWD")
-
-    conn = mysql.connector.connect(
-        host=host,
-        port=port,
-        user=user,
-        password=password,
-        charset="utf8mb4",
-    )
-    cursor = conn.cursor()
-    cursor.execute(
-        f"CREATE DATABASE IF NOT EXISTS `{database}` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
-    )
-    cursor.close()
-    conn.close()
+    ensure_database_exists(database)
 
     script_dir = Path(__file__).resolve().parent
     subprocess.run([sys.executable, str(script_dir / "run_migrations.py")], check=True)
 
-    conn = mysql.connector.connect(
-        host=host,
-        port=port,
-        database=database,
-        user=user,
-        password=password,
-        charset="utf8mb4",
-    )
+    conn = _connect(database)
     cursor = conn.cursor()
     cursor.execute(
         """
         INSERT INTO users (username, display_name, password_hash, role, status, auth_source, hook_key, hook_key_created_at)
         VALUES (%s, %s, %s, 'admin', 'active', 'local', %s, NOW())
-        ON DUPLICATE KEY UPDATE
-            display_name = VALUES(display_name),
-            password_hash = VALUES(password_hash),
-            role = VALUES(role),
-            status = VALUES(status),
-            auth_source = VALUES(auth_source),
-            hook_key = COALESCE(users.hook_key, VALUES(hook_key)),
-            hook_key_created_at = COALESCE(users.hook_key_created_at, VALUES(hook_key_created_at))
+        ON CONFLICT (username) DO UPDATE SET
+            display_name = EXCLUDED.display_name,
+            password_hash = EXCLUDED.password_hash,
+            role = EXCLUDED.role,
+            status = EXCLUDED.status,
+            auth_source = EXCLUDED.auth_source,
+            hook_key = COALESCE(users.hook_key, EXCLUDED.hook_key),
+            hook_key_created_at = COALESCE(users.hook_key_created_at, EXCLUDED.hook_key_created_at)
         """,
         ("admin", "Admin", generate_password_hash(args.admin_password), secrets.token_hex(16)),
     )
@@ -91,7 +94,7 @@ def main():
         """
         INSERT INTO system_settings (setting_key, setting_value)
         VALUES (%s, %s)
-        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+        ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value
         """,
         ("project_title", "TokenLeague"),
     )
@@ -99,7 +102,7 @@ def main():
         """
         INSERT INTO system_settings (setting_key, setting_value)
         VALUES (%s, %s)
-        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+        ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value
         """,
         ("project_subtitle", "Rank users by token usage across agent runs"),
     )

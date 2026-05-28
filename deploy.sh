@@ -146,6 +146,9 @@ run_rsync() {
     --exclude='__pycache__/'
     --exclude='*.pyc'
     --exclude='.git/'
+    --exclude='.env'
+    --exclude='.env.*'
+    --exclude='data/'
     --exclude='.pytest_cache/'
     --exclude='.worktrees/'
     "${LOCAL_PATH}/"
@@ -191,7 +194,7 @@ REMOTE_OS="$(detect_remote_os)"
 check_remote_docker_autostart "$REMOTE_OS"
 
 step 4 "创建远端目录"
-run_ssh "mkdir -p ${REMOTE_PATH}"
+run_ssh "mkdir -p data/postgres"
 success "远端目录已就绪"
 
 step 5 "rsync 同步代码"

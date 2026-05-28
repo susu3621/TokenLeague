@@ -8,7 +8,7 @@
   <p>
     <img src="https://img.shields.io/badge/Python-3.12%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.12+">
     <img src="https://img.shields.io/badge/Web-Flask-000000?style=flat-square&logo=flask&logoColor=white" alt="Flask">
-    <img src="https://img.shields.io/badge/Database-MySQL%20%2F%20MariaDB-4479A1?style=flat-square&logo=mysql&logoColor=white" alt="MySQL or MariaDB">
+    <img src="https://img.shields.io/badge/Database-PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL">
     <img src="https://img.shields.io/badge/Ingestion-Hooks%20%26%20Collectors-0A7B83?style=flat-square" alt="Hooks and collectors">
     <img src="https://img.shields.io/badge/License-MIT-lightgrey?style=flat-square" alt="MIT license">
   </p>
@@ -37,7 +37,7 @@
 
 TokenLeague gives engineering teams one place to inspect how AI coding assistants are used across people, projects, and models. Instead of relying on rough impressions or screenshots, teams get a persistent dashboard with leaderboard rankings, usage timelines, prompt counts, and average tokens per prompt.
 
-The system is built around lightweight local hooks and collectors. Supported agent tools upload usage metadata to the Flask service, which stores it in MySQL or MariaDB and serves both the UI and the API.
+The system is built around lightweight local hooks and collectors. Supported agent tools upload usage metadata to the Flask service, which stores it in PostgreSQL and serves both the UI and the API.
 
 <a id="why-tokenleague"></a>
 ## Why TokenLeague
@@ -69,7 +69,7 @@ hooks/* or collector scripts
 POST /api/ingest/*
         |
         v
-Flask app + MySQL/MariaDB
+Flask app + PostgreSQL
         |
         +--> /leaderboard
         +--> /users/<id>
@@ -102,7 +102,7 @@ Detailed per-agent commands, installed file locations, privacy notes, and troubl
 
 ## Quick Start
 
-1. Prepare a MySQL or MariaDB instance and fill in `.env`.
+1. Prepare `.env`; Docker Compose starts PostgreSQL for you.
 2. Bootstrap the schema and create the initial admin account.
 3. Start the web app and the leaderboard snapshot worker.
 4. Sign in, get a hook key, and install hooks on developer machines.
@@ -110,23 +110,23 @@ Detailed per-agent commands, installed file locations, privacy notes, and troubl
 ## Requirements
 
 - Python 3.12+
-- MySQL or MariaDB reachable from the app environment
+- Docker Compose managed PostgreSQL
 - A writable `.env` file based on `.env.example`
 
-`docker-compose.yml` does **not** provision a database container. Set `MY_APP_DB_HOST`, `MY_APP_DB_PORT`, `MY_APP_DB_NAME`, `MY_APP_DB_USER`, and `MY_APP_DB_PWD` to an existing database service before starting the app.
+`docker-compose.yml` provisions a PostgreSQL container. The default data directory is `./data/postgres`; on `homegpu1` this resolves to `/home/juns/project/TokenLeague/data/postgres`.
 
 <a id="docker-compose-recommended"></a>
 ## Docker Compose (Recommended)
 
 Use this path when you want the simplest repeatable deployment on one host.
 
-1. Copy the environment template and edit the database connection values:
+1. Copy the environment template and edit the Flask secret plus database password:
 
 ```bash
 cp .env.example .env
 ```
 
-2. Initialize the database schema and bootstrap the admin account through the app image:
+2. Initialize the PostgreSQL schema and bootstrap the admin account through the app image:
 
 ```bash
 docker compose run --rm web python3 /app/scripts/init_db.py --admin-password '<strong-password>'
@@ -138,7 +138,7 @@ docker compose run --rm web python3 /app/scripts/init_db.py --admin-password '<s
 docker compose up --build -d
 ```
 
-`docker-compose.yml` sets both services to `restart: unless-stopped`, so they come back automatically after the Docker daemon starts again. On Linux hosts, also enable Docker at boot so a full machine reboot restores the stack without manual intervention:
+`docker-compose.yml` sets `postgres`, `web`, and `worker` to `restart: unless-stopped`, so they come back automatically after the Docker daemon starts again. On Linux hosts, also enable Docker at boot so a full machine reboot restores the stack without manual intervention:
 
 ```bash
 sudo systemctl enable --now docker
@@ -204,11 +204,12 @@ python3 scripts/run_leaderboard_snapshot_worker.py
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `MY_FLASK_SECRET_KEY` | Yes | Flask session signing key |
-| `MY_APP_DB_HOST` | Yes | Database host |
-| `MY_APP_DB_PORT` | No | Database port, defaults to `3306` |
+| `MY_APP_DB_HOST` | Yes | Database host, defaults to `postgres` in Docker Compose |
+| `MY_APP_DB_PORT` | No | Database port, defaults to `5432` |
 | `MY_APP_DB_NAME` | Yes | Database name |
 | `MY_APP_DB_USER` | Yes | Database user |
 | `MY_APP_DB_PWD` | Yes | Database password |
+| `POSTGRES_PASSWORD` | Yes | PostgreSQL container initialization password; keep it aligned with `MY_APP_DB_PWD` |
 | `PORT` | No | HTTP port, defaults to `5006` |
 
 The repository also accepts the legacy `MY_KMM_DB_*` aliases used by the migration and init scripts.
