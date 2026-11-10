@@ -4,8 +4,8 @@
     'use strict';
     const seen = new WeakSet();
     const zh = document.documentElement.lang.startsWith('zh');
-    const labels = zh ? {prev: '上一页', next: '下一页', jump: '跳转到第几页', go: '跳转'}
-        : {prev: 'Previous', next: 'Next', jump: 'Go to page', go: 'Go'};
+    const labels = zh ? {prev: '上一页', next: '下一页', jump: '跳转到第几页', go: '跳转', table: '数据表格', scroll: '横向滚动查看全部列'}
+        : {prev: 'Previous', next: 'Next', jump: 'Go to page', go: 'Go', table: 'Data table', scroll: 'Scroll horizontally to see all columns'};
     function element(tag, text) {
         const result = document.createElement(tag);
         if (text !== undefined) result.textContent = text;
@@ -31,7 +31,13 @@
         let rows = [...body.rows], page = 1, sort = -1, direction = 1;
         const size = 15;
         const wrapper = element('div'); wrapper.className = 'tl-table-wrap';
+        wrapper.tabIndex = 0; wrapper.setAttribute('role', 'region');
+        wrapper.setAttribute('aria-label', table.caption?.textContent || table.closest('section, .usage-detail-panel, .card')?.querySelector('h2')?.textContent || labels.table);
         table.before(wrapper); wrapper.append(table);
+        const scrollHint = element('p', `↔ ${labels.scroll}`); scrollHint.className = 'table-scroll-hint'; scrollHint.hidden = true;
+        wrapper.after(scrollHint);
+        const updateOverflow = () => { scrollHint.hidden = wrapper.scrollWidth <= wrapper.clientWidth + 1; };
+        const resizeObserver = new ResizeObserver(updateOverflow); resizeObserver.observe(wrapper); resizeObserver.observe(table);
         const controls = element('nav'); controls.className = 'tl-table-controls';
         controls.setAttribute('aria-label', labels.jump);
         const info = element('span'); info.setAttribute('aria-live', 'polite');
@@ -44,7 +50,7 @@
         jumpLabel.append(input);
         const go = element('button', labels.go); go.type = 'submit';
         jumpForm.append(jumpLabel, go);
-        controls.append(info, previous, next, jumpForm); wrapper.after(controls);
+        controls.append(info, previous, next, jumpForm); scrollHint.after(controls);
         const buttons = headers.map((th, index) => {
             const button = element('button'); button.type = 'button'; button.className = 'tl-table-sort';
             const label = th.textContent.trim();
@@ -66,6 +72,14 @@
             const pages = Math.max(1, Math.ceil(total / size));
             page = Math.min(pages, Math.max(1, page));
             const ordered = [...rows];
+            if (!placeholder) headers.forEach((header, index) => {
+                const numeric = header.classList.contains('numeric') || rows.every(row => {
+                    const cell = row.cells[index];
+                    const raw = (cell?.dataset.sortValue ?? cell?.textContent ?? '').trim().replaceAll(',', '');
+                    return /^-?\d+(?:\.\d+)?\s*[KMB%]?$/i.test(raw);
+                });
+                if (numeric) { header.classList.add('numeric'); rows.forEach(row => row.cells[index]?.classList.add('numeric')); }
+            });
             if (sort >= 0 && !placeholder) ordered.sort((a, b) => {
                 const left = sortValue(a.cells[sort]), right = sortValue(b.cells[sort]);
                 if (left === null || right === null) return left === right ? 0 : left === null ? 1 : -1;
@@ -81,6 +95,7 @@
             previous.disabled = page <= 1; next.disabled = page >= pages;
             input.value = page; input.max = pages;
             observer.observe(table, {childList: true, subtree: true});
+            requestAnimationFrame(updateOverflow);
         }
         previous.addEventListener('click', () => { page -= 1; render(); });
         next.addEventListener('click', () => { page += 1; render(); });

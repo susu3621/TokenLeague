@@ -4,16 +4,19 @@
 
 {% block content %}
 <section class="stack">
-    <div class="card">
+    <header class="page-header"><div>
         <h1 class="hero-title">{{ t('admin_users.title') }}</h1>
-        <p class="muted" style="margin-top: 10px;">{{ t('admin_users.description') }}</p>
+        <p class="page-description">{{ t('admin_users.description') }}</p>
+    </div></header>
+    <div class="card">
         {% if message %}
-        <p style="color: #027a48;">{{ message }}</p>
+        <p class="notice" role="status">{{ message }}</p>
         {% endif %}
         {% if error %}
-        <p style="color: #b42318;">{{ error }}</p>
+        <p class="notice notice-error" role="alert">{{ error }}</p>
         {% endif %}
-        <form method="POST" class="stack">
+        <h2>{{ t('admin_users.create_user') }}</h2>
+        <form method="POST" class="stack form-grid">
             <input type="hidden" name="action" value="create_user">
             <div>
                 <label for="display_name">{{ t('admin_users.display_name') }}</label>
@@ -52,7 +55,7 @@
                     <td>{{ user.username }}</td>
                     <td>{{ t('enum.role.' ~ user.role) }}</td>
                     <td>{{ t('enum.status.' ~ user.status) }}</td>
-                    <td style="font-family: monospace;">{{ user.hook_key }}</td>
+                    <td class="monospace"><details class="table-secret"><summary>{{ t('ui.show_key') }}</summary><code>{{ user.hook_key }}</code></details></td>
                     <td>
                         <form method="POST" class="inline-form">
                             <input type="hidden" name="action" value="rotate_hook_key">

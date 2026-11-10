@@ -1038,7 +1038,7 @@ def test_user_detail_defaults_to_week_window(auth_session, monkeypatch):
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "Past 7 Days" in html
-    assert "details in the selected" in html
+    assert "Token usage and project trends" in html
     assert "let currentWindow = 'week';" in html
     assert "today-event" in html
     assert "yesterday-event" in html
@@ -1056,7 +1056,7 @@ def test_user_detail_page_uses_week_as_default_window(auth_session, monkeypatch)
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "Past 7 Days" in html
-    assert "details in the selected" in html
+    assert "Token usage and project trends" in html
     assert "let currentWindow = 'week';" in html
     assert "const windowParam = 'week';" not in html
 
@@ -1081,7 +1081,7 @@ def test_user_detail_page_renders_refresh_targets_for_stats_sections(auth_sessio
     assert 'data-user-detail-recent-prompt-events-body' in html
 
 
-def test_user_detail_all_window_keeps_no_active_selector(auth_session, monkeypatch):
+def test_user_detail_all_window_has_matching_active_selector(auth_session, monkeypatch):
     _seed_user_detail_window_data(monkeypatch)
 
     response = auth_session.get("/users/1?window=all")
@@ -1090,6 +1090,7 @@ def test_user_detail_all_window_keeps_no_active_selector(auth_session, monkeypat
     html = response.get_data(as_text=True)
     assert "let currentWindow = 'all';" in html
     assert 'data-user-detail-window-selector="all"' in html
+    assert 'class="timeline-range-button is-active" data-user-detail-window-option="all"' in html
     assert 'class="timeline-range-button is-active" data-user-detail-window-option="today"' not in html
     assert 'class="timeline-range-button is-active" data-user-detail-window-option="week"' not in html
     assert 'class="timeline-range-button is-active" data-user-detail-window-option="month"' not in html
@@ -1168,15 +1169,14 @@ def test_user_detail_page_script_requests_all_sections_with_selected_window(auth
     assert "Object.entries(extraSearchParams).forEach(([key, value]) => {" in html
     assert "params.set(key, value);" in html
     assert "url.search = params.toString();" in html
-    assert "fetch(buildRefreshUrl(`/api/users/${userId}/stats`, windowValue))" in html
-    assert "fetch(buildRefreshUrl(`/api/users/${userId}/projects`, windowValue))" in html
-    assert "fetch(buildRefreshUrl(`/api/users/${userId}/models`, windowValue))" in html
-    assert "fetch(buildRefreshUrl(`/api/users/${userId}/timeline`, windowValue, { granularity }))" in html
-    assert html.count("if (requestId !== refreshRequestId) {") == 4
+    assert "['stats', 'projects', 'models', 'timeline']" in html
+    assert "await Promise.all(" in html
+    assert "if (!response.ok) throw new Error" in html
+    assert "if (requestId !== refreshRequestId) return;" in html
     assert "renderSummary(data.summary || {});" in html
-    assert "renderProjects(data.projects || []);" in html
-    assert "renderModels(data.models || []);" in html
-    assert "renderTimeline(data.timeline || [], windowValue);" in html
+    assert "renderProjects(projectData.projects || []);" in html
+    assert "renderModels(modelData.models || []);" in html
+    assert "renderTimeline(timelineData.timeline || [], windowValue);" in html
     assert "refreshUserDetail(currentWindow);" in html
 
 
@@ -1209,7 +1209,7 @@ def test_user_detail_day_window_aliases_to_today(auth_session, monkeypatch):
     day_html = day_response.get_data(as_text=True)
     today_html = today_response.get_data(as_text=True)
     assert day_html == today_html
-    assert "details in the selected Today window." in day_html
+    assert "admin · Today · Token usage and project trends." in day_html
     assert "let currentWindow = 'today';" in day_html
     assert "today-event" in day_html
     assert "yesterday-event" not in day_html
@@ -1460,7 +1460,7 @@ def test_user_detail_page_script_renders_prompt_average_timeline_from_timeline_b
     assert "data: timeline.map(bucket => averageTokensPerPrompt(bucket, projectName))" in html
     assert "formatTokenCount(context.parsed.y)" in html
     assert "callback: value => formatTokenCount(value)" in html
-    assert "renderPromptAverageTimeline(data.timeline || [], windowValue, selectedTimelineProject);" in html
+    assert "renderPromptAverageTimeline(timelineData.timeline || [], windowValue, selectedTimelineProject);" in html
 
 
 def test_user_detail_page_script_renders_prompt_count_timeline_with_hourly_today_view(auth_session):
@@ -1482,7 +1482,7 @@ def test_user_detail_page_script_renders_prompt_count_timeline_with_hourly_today
     assert "data: promptTimeline.map(bucket => Number(bucket.prompt_count || 0))" in html
     assert "formatCount(context.parsed.y)" in html
     assert "callback: value => formatCount(value)" in html
-    assert "renderPromptCountTimeline(data.timeline || [], windowValue, selectedTimelineProject);" in html
+    assert "renderPromptCountTimeline(timelineData.timeline || [], windowValue, selectedTimelineProject);" in html
 
 
 def test_user_detail_page_script_supports_single_project_timeline_focus(auth_session):
@@ -1515,8 +1515,8 @@ def test_user_detail_page_script_updates_prompt_average_and_prompt_count_timelin
     assert "return timeline.map(bucket => ({" in html
     assert "renderPromptAverageTimeline(latestTimeline, currentWindow, selectedTimelineProject);" in html
     assert "renderPromptCountTimeline(latestTimeline, currentWindow, selectedTimelineProject);" in html
-    assert "renderPromptAverageTimeline(data.timeline || [], windowValue, selectedTimelineProject);" in html
-    assert "renderPromptCountTimeline(data.timeline || [], windowValue, selectedTimelineProject);" in html
+    assert "renderPromptAverageTimeline(timelineData.timeline || [], windowValue, selectedTimelineProject);" in html
+    assert "renderPromptCountTimeline(timelineData.timeline || [], windowValue, selectedTimelineProject);" in html
 
 
 def test_user_detail_page_script_binds_project_table_rows_to_timeline_focus(auth_session):

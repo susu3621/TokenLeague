@@ -14,6 +14,9 @@
         turns: ['turn_id', 'project_name', 'session_id', 'agent_type', 'model_name', 'duration_ms', 'time_to_first_token_ms', 'timing_source', 'finished_at'],
     };
     let state, controller, table;
+    const scrollArea = $('.timing-table-scroll');
+    const updateOverflow = () => { $('#timing-scroll-hint').hidden = scrollArea.scrollWidth <= scrollArea.clientWidth + 1; };
+    new ResizeObserver(updateOverflow).observe(scrollArea);
 
     function node(tag, value, className) {
         const element = document.createElement(tag);
@@ -40,11 +43,56 @@
             if (form.elements[field]) form.elements[field].value = state[field] || '';
         }
         showDates();
+        showAdvanced();
     }
     function defaultSort(view) { return view === 'tools' ? 'exclusive_ms' : view === 'turns' ? 'duration_ms' : 'agent_ms'; }
     function showDates() {
         const custom = form.elements.window.value === 'custom';
-        document.querySelectorAll('.timing-custom').forEach(el => { el.hidden = !custom; el.querySelector('input').required = custom; });
+        document.querySelectorAll('.timing-custom').forEach(el => {
+            el.hidden = !custom;
+            const input = el.querySelector('input'); input.required = custom; input.disabled = !custom;
+        });
+        form.elements.from.max = form.elements.to.value;
+        form.elements.to.min = form.elements.from.value;
+    }
+    function showAdvanced() {
+        const active = ['session_id', 'model_name'].filter(key => state[key]).length;
+        $('#timing-advanced-count').textContent = active ? ` · ${active}` : '';
+        if (active) $('#timing-advanced').open = true;
+    }
+    function renderBreadcrumbs() {
+        const trail = $('#timing-breadcrumbs');
+        trail.replaceChildren();
+        trail.hidden = !state.project_name && !state.session_id;
+        if (trail.hidden) return;
+        const overview = node('button', text('all_projects'));
+        overview.type = 'button';
+        overview.addEventListener('click', () => {
+            delete state.project_name; delete state.session_id;
+            state.view = 'projects'; state.page = 1; state.sort = defaultSort(state.view);
+            form.elements.project_name.value = ''; form.elements.session_id.value = '';
+            saveLocation(); refresh();
+        });
+        trail.append(overview);
+        if (state.project_name) {
+            const separator = node('span', '/'); separator.setAttribute('aria-hidden', 'true'); trail.append(separator);
+            const project = node(state.session_id ? 'button' : 'span', state.project_name);
+            project.title = state.project_name;
+            if (state.session_id) {
+                project.type = 'button';
+                project.addEventListener('click', () => {
+                    delete state.session_id; state.view = 'sessions'; state.page = 1; state.sort = defaultSort(state.view);
+                    form.elements.session_id.value = ''; saveLocation(); refresh();
+                });
+            }
+            trail.append(project);
+        }
+        if (state.session_id) {
+            const separator = node('span', '/'); separator.setAttribute('aria-hidden', 'true');
+            const session = node('span', state.session_id); session.title = state.session_id;
+            trail.append(separator, session);
+        }
+        trail.lastElementChild.setAttribute('aria-current', 'location');
     }
     function saveLocation(push = true) {
         const params = new URLSearchParams();
@@ -79,6 +127,8 @@
         $('#timing-scope-note').textContent = scope.join(' · ');
         $('#timing-scope-note').hidden = scope.length === 0;
         $('#timing-empty').hidden = s.turn_count > 0;
+        for (const selector of ['.timing-metrics', '.timing-charts', '.timing-insight', '.timing-details']) $(selector).hidden = !s.turn_count;
+        $('.timing-coverage').hidden = !s.turn_count && !s.observed_session_count;
         const metrics = [
             ['agent_ms', duration(s.agent_ms), `${number.format(s.turn_count)} ${text('turn_count')}`],
             ['active_wall_ms', duration(s.active_wall_ms), `${number.format(s.session_count)} ${text('session_count')}`],
@@ -108,7 +158,7 @@
             total.share += row.share;
         }
         const slices = [...byKind.values()].sort((a, b) => b.duration_ms - a.duration_ms);
-        $('#timing-breakdown').replaceChildren(...slices.map(row => {
+        const breakdownRows = slices.map(row => {
             const item = node('div', undefined, 'timing-breakdown-row');
             if (row.kind === 'unobserved') item.dataset.unknown = 'true';
             item.append(node('span', text(row.kind)), node('span', `${duration(row.duration_ms)} · ${(row.share * 100).toFixed(1)}%`));
@@ -117,10 +167,19 @@
             fill.style.width = `${row.share * 100}%`;
             track.append(fill); item.append(track);
             return item;
-        }));
+        });
+        $('#timing-breakdown').replaceChildren(...breakdownRows.slice(0, 6));
+        $('#timing-breakdown-rest').replaceChildren(...breakdownRows.slice(6));
+        $('#timing-more-breakdown').hidden = slices.length <= 6;
+        $('#timing-more-label').textContent = text('more_categories', {count: slices.length});
         if (!slices.length) $('#timing-breakdown').append(node('p', text('empty'), 'muted'));
         const largest = slices.find(row => row.kind !== 'unobserved' && row.duration_ms > 0);
         const unknown = slices.find(row => row.kind === 'unobserved');
+        $('#timing-coverage-summary').textContent = text('coverage_summary', {
+            observed: number.format(s.tool_observed_turns), total: number.format(s.turn_count),
+            unknown: s.turn_count ? ((unknown?.share || 0) * 100).toFixed(1) : '—',
+        });
+        $('.timing-coverage').dataset.complete = String(s.turn_count > 0 && s.tool_measured_turns === s.turn_count);
         $('#timing-insight').textContent = largest
             ? `${text('bottleneck')}: ${text(largest.kind)} · ${duration(largest.duration_ms)} (${(largest.share * 100).toFixed(1)}%). ${unknown && unknown.share > .25 ? text('unobserved_note') : ''}`
             : text('unobserved_note');
@@ -178,6 +237,7 @@
         const header = node('tr');
         for (const key of columns[state.view]) {
             const th = node('th');
+            if (!['project_name', 'session_id', 'turn_id', 'agent_type', 'model_name', 'tool', 'kind', 'timing_source', 'finished_at'].includes(key)) th.className = 'numeric';
             th.scope = 'col';
             const selected = key === table.sort;
             th.setAttribute('aria-sort', selected ? table.order === 'asc' ? 'ascending' : 'descending' : 'none');
@@ -197,6 +257,7 @@
             const tr = node('tr');
             for (const key of columns[state.view]) {
                 const td = node('td');
+                if (typeof valueFor(row, key) === 'number') td.className = 'numeric';
                 const value = formatCell(row, key);
                 if (['project_name', 'session_id'].includes(key)) {
                     const link = node('a', value);
@@ -223,6 +284,7 @@
         $('#timing-page-input').value = table.page;
         $('#timing-page-input').max = table.pages;
         $('#timing-view-note').textContent = state.view === 'tools' ? text('tool_note') : state.view === 'sessions' ? text('gap_note') : '';
+        requestAnimationFrame(updateOverflow);
     }
     async function refresh() {
         const focusedSort = document.activeElement?.dataset.sort;
@@ -233,6 +295,8 @@
         $('#timing-retry').hidden = true;
         $('#timing-results').classList.add('is-loading');
         $('#timing-results').setAttribute('aria-busy', 'true');
+        showAdvanced();
+        renderBreadcrumbs();
         document.querySelectorAll('[data-view]').forEach(button => {
             const selected = button.dataset.view === state.view;
             button.setAttribute('aria-selected', String(selected)); button.tabIndex = selected ? 0 : -1;
@@ -268,9 +332,11 @@
         state.page = 1; saveLocation(); refresh();
     });
     form.elements.window.addEventListener('change', showDates);
+    form.elements.from.addEventListener('change', showDates);
+    form.elements.to.addEventListener('change', showDates);
     $('#timing-reset').addEventListener('click', () => {
         state = {window: 'week', view: 'projects', page: 1, sort: 'agent_ms', order: 'desc'};
-        form.reset(); showDates(); saveLocation(); refresh();
+        form.reset(); $('#timing-advanced').open = false; showDates(); saveLocation(); refresh();
     });
     document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => {
         state.view = button.dataset.view; state.page = 1; state.sort = defaultSort(state.view); state.order = 'desc';

@@ -4,10 +4,12 @@
 
 {% block content %}
 <section class="stack account-page">
-    <div class="card">
+    <header class="page-header">
+        <div>
         <h1 class="hero-title">{{ t('account.title') }}</h1>
-        <p class="muted" style="margin-top: 10px;">{{ t('account.description') }}</p>
-    </div>
+        <p class="page-description">{{ t('account.description') }}</p>
+        </div>
+    </header>
 
     <div class="card stack">
         <div>
@@ -21,7 +23,7 @@
                 <input
                     id="hook_key"
                     data-account-hook-key
-                    type="text"
+                    type="password"
                     value="{{ account_user.hook_key }}"
                     readonly
                     spellcheck="false"
@@ -35,6 +37,7 @@
 
             <div class="account-actions">
                 <button type="button" class="btn-primary" data-account-copy-key>{{ t('account.copy') }}</button>
+                <button type="button" data-account-reveal-key aria-pressed="false">{{ t('ui.show_key') }}</button>
                 <button type="button" data-account-rotate-key>{{ t('account.rotate') }}</button>
             </div>
 
@@ -123,6 +126,13 @@
     const copyButton = document.querySelector('[data-account-copy-key]');
     const rotateButton = document.querySelector('[data-account-rotate-key]');
     const keyStatus = document.querySelector('[data-account-key-status]');
+    const revealButton = document.querySelector('[data-account-reveal-key]');
+    revealButton?.addEventListener('click', () => {
+        const visible = hookKeyInput.type === 'password';
+        hookKeyInput.type = visible ? 'text' : 'password';
+        revealButton.setAttribute('aria-pressed', String(visible));
+        revealButton.textContent = visible ? {{ t('ui.hide_key') | tojson }} : {{ t('ui.show_key') | tojson }};
+    });
     function setStatus(element, message, isError = false) {
         if (!element) {
             return;

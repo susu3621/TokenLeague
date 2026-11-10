@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 from urllib.parse import urlparse
 
-from flask import Flask, abort, g, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, abort, g, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 
 import auth as auth_module
 import db
@@ -980,7 +980,14 @@ def api_list():
 def docs_page(filepath: str = "README.md"):
     if ".." in filepath or filepath.startswith("/"):
         return "Invalid path", 403
-    target = _resolve_doc_target(filepath, g.locale)
+    project_readme = filepath.startswith("project/")
+    if project_readme:
+        filename = filepath.removeprefix("project/")
+        if filename not in {"README.md", "README_EN.md"}:
+            abort(404)
+        target = BASE_DIR.parent / filename
+    else:
+        target = _resolve_doc_target(filepath, g.locale)
     if not target.exists():
         raw_markdown = f"# Not Found\n\nMissing document: {filepath}"
     else:
@@ -988,9 +995,16 @@ def docs_page(filepath: str = "README.md"):
     return render_template(
         "docs.html",
         doc_list=_get_doc_list(g.locale),
-        current_doc=filepath,
+        current_doc=filepath if project_readme else _logical_doc_path(filepath),
         raw_markdown=raw_markdown,
+        doc_base="/" if project_readme else "/docs/",
     )
+
+
+@app.route("/docs/assets/<path:filename>")
+@auth_module.login_required
+def docs_asset(filename: str):
+    return send_from_directory(DOCS_DIR / "assets", filename)
 
 
 if __name__ == "__main__":

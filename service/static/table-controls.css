@@ -1,12 +1,14 @@
-.tl-table-wrap { max-width: 100%; overflow-x: auto; }
-.tl-table-sort { border: 0; background: transparent; color: inherit; cursor: pointer; padding: 5px 0; font: inherit; text-align: left; white-space: nowrap; }
-.tl-table-sort:hover { text-decoration: underline; text-underline-offset: 4px; }
-.tl-table-sort:focus-visible, .tl-table-controls :focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
-.tl-table-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 18px; font-size: .8rem; }
-.tl-table-controls[hidden] { display: none; }
+.tl-table-wrap { max-width: 100%; overflow-x: auto; border-radius: 7px 7px 0 0; }
+.tl-table-wrap:focus { outline-offset: 2px; }
+.table-scroll-hint { margin: 10px 0 0; color: var(--muted); font-size: 11px; }
+.tl-table-sort { display: block; width: 100%; border: 0; background: transparent; color: inherit; cursor: pointer; padding: 2px 0; min-height: 24px; font: inherit; text-align: inherit; white-space: nowrap; }
+.tl-table-sort:hover { background: transparent; color: var(--primary); }
+th[aria-sort=ascending], th[aria-sort=descending] { color: var(--primary); }
+.tl-table-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 18px; color: var(--muted); font-size: 11px; }
 .tl-table-controls > span { margin-right: auto; }
-.tl-table-controls form, .tl-table-controls label { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 400; }
-.tl-table-controls input { width: 64px; padding: 8px; border-radius: 6px; }
-.tl-table-controls button { cursor: pointer; font: inherit; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--panel); }
-.tl-table-controls button:disabled { cursor: default; opacity: .4; }
-@media (max-width: 640px) { .tl-table-controls > span { flex-basis: 100%; } .tl-table-controls form { flex-wrap: wrap; } }
+.tl-table-controls form, .tl-table-controls label { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 400; font-size: 11px; }
+.tl-table-controls form { margin-left: 14px; }
+.tl-table-controls input { width: 58px; padding: 7px; border-radius: 6px; min-height: 34px; font-size: 12px; }
+.tl-table-controls button { font: inherit; padding: 7px 11px; min-height: 34px; }
+@media (max-width: 640px) { .tl-table-controls > span { flex-basis: 100%; } .tl-table-controls form { margin-left: auto; flex-wrap: wrap; } .tl-table-controls button { min-height: 40px; } }
+@media (max-width: 450px) { .tl-table-controls form { margin-left: 0; } }

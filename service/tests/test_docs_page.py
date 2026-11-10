@@ -1,3 +1,12 @@
+import json
+import re
+
+
+def markdown(response):
+    match = re.search(r'<script id="raw-markdown" type="application/json">(.*?)</script>', response.get_data(as_text=True), re.S)
+    return json.loads(match.group(1))
+
+
 def test_docs_page_requires_login(client):
     response = client.get("/docs")
 
@@ -20,7 +29,7 @@ def test_docs_page_prefers_chinese_variant_when_available(auth_session):
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "TokenLeague 文档" in html
-    assert "记录 AI 助手的 Token 用量与使用效率" in html
+    assert "记录 AI 助手的 Token 用量与使用效率" in markdown(response)
 
 
 def test_docs_page_prefers_cookie_locale_over_accept_language(auth_session):
@@ -31,7 +40,7 @@ def test_docs_page_prefers_cookie_locale_over_accept_language(auth_session):
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "TokenLeague 文档" in html
-    assert "记录 AI 助手的 Token 用量与使用效率" in html
+    assert "记录 AI 助手的 Token 用量与使用效率" in markdown(response)
 
 
 def test_docs_page_can_force_english_with_cookie(auth_session):
@@ -99,5 +108,39 @@ def test_docs_page_resolves_logical_path_to_localized_only_doc_for_english_reque
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "仅中文指南" in html
-    assert "仅本地化内容" in html
+    assert "仅本地化内容" in markdown(response)
     assert "Missing document: GUIDE.md" not in html
+
+
+def test_project_guide_renders_only_allowed_root_documents(auth_session, monkeypatch, tmp_path):
+    import app as app_module
+
+    (tmp_path / 'service').mkdir()
+    (tmp_path / 'README.md').write_text('# 项目说明\n\n部署步骤', encoding='utf-8')
+    monkeypatch.setattr(app_module, 'BASE_DIR', tmp_path / 'service')
+    response = auth_session.get('/docs/project/README.md')
+    assert response.status_code == 200
+    assert '部署步骤' in markdown(response)
+    assert auth_session.get('/docs/project/.env').status_code == 404
+    assert auth_session.get('/docs/project/service/app.py').status_code == 404
+
+
+def test_document_assets_are_authenticated_and_sent_as_images(client, auth_session, monkeypatch, tmp_path):
+    import app as app_module
+
+    assets = tmp_path / 'assets'
+    assets.mkdir()
+    content = b'\x89PNG\r\n\x1a\nimage-content'
+    (assets / 'sample.png').write_bytes(content)
+    monkeypatch.setattr(app_module, 'DOCS_DIR', tmp_path)
+    # auth_session and client share the same test client; explicitly clear it first.
+    with client.session_transaction() as session:
+        session.clear()
+    assert client.get('/docs/assets/sample.png').status_code == 302
+    with client.session_transaction() as session:
+        session['user_id'] = 1
+    response = client.get('/docs/assets/sample.png')
+    assert response.status_code == 200
+    assert response.content_type == 'image/png'
+    assert response.data == content
+    assert client.get('/docs/assets/../README.md').status_code == 404

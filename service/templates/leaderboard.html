@@ -3,24 +3,32 @@
 {% block title %}{{ t('leaderboard.title') }} | {{ project_title }}{% endblock %}
 
 {% block content %}
-<section class="stack">
-    <div class="card">
+<section class="leaderboard-workspace">
+    <header class="page-header">
+        <div>
+        <p class="page-eyebrow">{{ t('user_detail.window.all') }}</p>
         <h1 class="hero-title">{{ t('leaderboard.title') }}</h1>
-        <p class="muted" style="margin-top: 10px;">{{ t('leaderboard.description') }}</p>
-        <p class="muted" data-leaderboard-last-updated>{{ t('leaderboard.last_updated', value=t('leaderboard.pending')) }}</p>
-        <p class="muted" data-leaderboard-status data-leaderboard-preparing-message="{{ t('leaderboard.preparing') }}">{{ t('leaderboard.loading') }}</p>
+        <p class="page-description">{{ t('ui.team_description') }}</p>
+        </div>
+    </header>
+    <div class="leaderboard-summary" aria-busy="true">
+        <div><span class="summary-label">{{ t('user_detail.total_tokens') }}</span><strong data-team-tokens>—</strong></div>
+        <div><span class="summary-label">{{ t('ui.members') }}</span><strong data-team-members>—</strong></div>
+        <div><span class="summary-label">{{ t('user_detail.prompt_count') }}</span><strong data-team-prompts>—</strong></div>
     </div>
+    <div class="section-header leaderboard-table-heading"><h2>{{ t('nav.leaderboard') }}</h2><span class="section-meta" data-leaderboard-last-updated>{{ t('leaderboard.last_updated', value=t('leaderboard.pending')) }}</span></div>
+    <p class="muted inline-status" role="status" aria-live="polite" data-leaderboard-status data-leaderboard-preparing-message="{{ t('leaderboard.preparing') }}">{{ t('leaderboard.loading') }}</p>
 
-    <div class="card">
+    <div>
         <table>
             <thead>
                 <tr>
                     <th>{{ t('leaderboard.rank') }}</th>
                     <th>{{ t('leaderboard.user') }}</th>
-                    <th>{{ t('leaderboard.total_token') }}</th>
-                    <th>{{ t('leaderboard.prompts') }}</th>
-                    <th>{{ t('leaderboard.tasks') }}</th>
-                    <th>{{ t('leaderboard.total_duration_ms') }}</th>
+                    <th class="numeric">{{ t('leaderboard.total_token') }}</th>
+                    <th class="numeric">{{ t('leaderboard.prompts') }}</th>
+                    <th class="numeric">{{ t('leaderboard.tasks') }}</th>
+                    <th class="numeric">{{ t('ui.duration') }}</th>
                     <th>{{ t('leaderboard.last_active') }}</th>
                 </tr>
             </thead>
@@ -31,6 +39,7 @@
             </tbody>
         </table>
     </div>
+    <details class="snapshot-note"><summary>{{ t('ui.snapshot_note') }}</summary><p>{{ t('leaderboard.description') }}</p></details>
 </section>
 {% endblock %}
 
@@ -46,6 +55,18 @@
 <script>
     const viewerUserId = {{ g.user["id"] if g.user else "null" }};
     const viewerIsAdmin = {{ "true" if g.user and g.user.role == "admin" else "false" }};
+    const leaderboardNumber = new Intl.NumberFormat(document.documentElement.lang);
+    function compactTokens(value) {
+        for (const [size, unit] of [[1e9, 'B'], [1e6, 'M'], [1e3, 'K']]) {
+            if (Math.abs(value) >= size) return `${+(value / size).toFixed(1)}${unit}`;
+        }
+        return leaderboardNumber.format(value);
+    }
+    function readableDuration(value) {
+        if (value >= 3600000) return `${+(value / 3600000).toFixed(1)} h`;
+        if (value >= 60000) return `${+(value / 60000).toFixed(1)} min`;
+        return `${+(value / 1000).toFixed(1)} s`;
+    }
     const leaderboardMessages = {{ {
         "pending": t("leaderboard.pending"),
         "loading": t("leaderboard.loading"),
@@ -99,11 +120,11 @@
             <tr>
                 <td>${escapeHtml(row.rank)}</td>
                 <td>${renderUserCell(row)}</td>
-                <td>${escapeHtml(row.total_token_count)}</td>
-                <td>${escapeHtml(row.prompt_count)}</td>
-                <td>${escapeHtml(row.task_count)}</td>
-                <td>${escapeHtml(row.total_duration_ms)}</td>
-                <td>${escapeHtml(row.last_active_at || '-')}</td>
+                <td class="numeric" data-sort-value="${Number(row.total_token_count) || 0}" title="${leaderboardNumber.format(row.total_token_count)}">${compactTokens(row.total_token_count)}</td>
+                <td class="numeric">${leaderboardNumber.format(row.prompt_count)}</td>
+                <td class="numeric">${leaderboardNumber.format(row.task_count)}</td>
+                <td class="numeric" data-sort-value="${Number(row.total_duration_ms) || 0}">${readableDuration(row.total_duration_ms || 0)}</td>
+                <td data-sort-value="${escapeHtml(row.last_active_at || '')}" title="${escapeHtml(row.last_active_at || '')}">${row.last_active_at ? escapeHtml(new Date(row.last_active_at).toLocaleString(document.documentElement.lang, {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false})) : '—'}</td>
             </tr>
         `).join('');
     }
@@ -132,6 +153,11 @@
                 throw new Error(`HTTP ${response.status}`);
             }
             const payload = await response.json();
+            const rows = payload.rows || [];
+            document.querySelector('[data-team-tokens]').textContent = compactTokens(rows.reduce((total, row) => total + Number(row.total_token_count || 0), 0));
+            document.querySelector('[data-team-members]').textContent = leaderboardNumber.format(rows.length);
+            document.querySelector('[data-team-prompts]').textContent = leaderboardNumber.format(rows.reduce((total, row) => total + Number(row.prompt_count || 0), 0));
+            document.querySelector('.leaderboard-summary').setAttribute('aria-busy', 'false');
             renderLeaderboardLastUpdated(payload.generated_at);
             if (!payload.generated_at && !(payload.rows || []).length) {
                 renderLeaderboardStatus(leaderboardMessages.preparing);

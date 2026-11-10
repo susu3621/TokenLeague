@@ -1,71 +1,44 @@
 {% extends "base.html" %}
-
 {% block title %}{{ t('docs.title') }} | {{ project_title }}{% endblock %}
-
-{% block styles %}
-<style>
-    .docs-layout {
-        display: grid;
-        grid-template-columns: 240px 1fr;
-        gap: 20px;
-    }
-
-    .docs-sidebar ul {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-    }
-
-    .docs-sidebar li + li {
-        margin-top: 8px;
-    }
-
-    .docs-sidebar a {
-        color: var(--muted);
-        text-decoration: none;
-    }
-
-    .docs-content pre {
-        overflow-x: auto;
-        background: #111827;
-        color: #f9fafb;
-        padding: 14px;
-        border-radius: 10px;
-    }
-    @media (max-width: 760px) {
-        .docs-layout {
-            grid-template-columns: 1fr;
-        }
-    }
-</style>
-{% endblock %}
-
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='docs.css') }}">{% endblock %}
 {% block content %}
+<header class="page-header"><div><h1>{{ t('docs.title') }}</h1></div></header>
 <section class="docs-layout">
-    <aside class="card docs-sidebar">
-        <h2 style="margin-top: 0;">{{ t('docs.sidebar_title') }}</h2>
-        <ul>
-            {% for doc in doc_list %}
-            <li><a href="{{ url_for('docs_page', filepath=doc.path) }}">{{ doc.title }}</a></li>
-            {% endfor %}
-        </ul>
+    <aside class="docs-sidebar">
+        <details class="docs-index" open>
+            <summary>{{ t('docs.sidebar_title') }}</summary>
+            <nav aria-label="{{ t('docs.sidebar_title') }}"><ul>
+                {% set project_readme = 'README.md' if locale == 'zh-CN' else 'README_EN.md' %}
+                <li><a href="{{ url_for('docs_page', filepath='project/' ~ project_readme) }}"{% if current_doc.startswith('project/') %} aria-current="page"{% endif %}>{{ t('ui.project_guide') }}</a></li>
+                {% for doc in doc_list %}
+                <li><a href="{{ url_for('docs_page', filepath=doc.path) }}"{% if doc.path == current_doc %} aria-current="page"{% endif %}>{{ doc.title }}</a></li>
+                {% endfor %}
+            </ul></nav>
+        </details>
     </aside>
-    <article class="card docs-content">
-        <div id="docs-content"></div>
-    </article>
+    <article class="docs-content"><div id="docs-content"></div></article>
 </section>
-
-<script id="raw-markdown" type="text/plain">{{ raw_markdown }}</script>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script id="raw-markdown" type="application/json">{{ raw_markdown | tojson }}</script>
+<script src="{{ url_for('static', filename='vendor/marked.umd.js') }}"></script>
 <script>
-    (function () {
-        var raw = document.getElementById("raw-markdown").textContent;
-        var target = document.getElementById("docs-content");
-        if (window.marked && raw.trim()) {
-            target.innerHTML = marked.parse(raw);
-        } else {
-            target.textContent = raw;
-        }
-    }());
+    (() => {
+        const raw = JSON.parse(document.getElementById('raw-markdown').textContent);
+        const target = document.getElementById('docs-content');
+        if (window.marked && raw.trim()) target.innerHTML = marked.parse(raw);
+        else target.textContent = raw;
+        const base = new URL({{ doc_base | tojson }}, location.origin);
+        target.querySelectorAll('a[href], img[src]').forEach(element => {
+            const attribute = element.tagName === 'IMG' ? 'src' : 'href';
+            const value = element.getAttribute(attribute);
+            if (!value || value.startsWith('#') || /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(value)) return;
+            const resolved = new URL(value, base);
+            if (['/README.md', '/README_EN.md'].includes(resolved.pathname)) resolved.pathname = `/docs/project${resolved.pathname}`;
+            element.setAttribute(attribute, `${resolved.pathname}${resolved.search}${resolved.hash}`);
+        });
+        const mobile = matchMedia('(max-width: 760px)');
+        const index = document.querySelector('.docs-index');
+        index.open = !mobile.matches;
+        mobile.addEventListener('change', () => { index.open = !mobile.matches; });
+    })();
 </script>
 {% endblock %}

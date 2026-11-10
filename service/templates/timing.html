@@ -3,16 +3,17 @@
 {% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='timing.css') }}">{% endblock %}
 {% block content %}
 <section class="timing-workspace" aria-labelledby="timing-heading">
-    <header class="timing-heading">
+    <header class="timing-heading page-header">
         <div>
-            <p class="timing-eyebrow">{{ timing_user.display_name if timing_user else (t('timing.team') if g.user.role == 'admin' else g.user.display_name) }}</p>
+            <p class="timing-eyebrow page-eyebrow">{{ timing_user.display_name if timing_user else (t('timing.team') if g.user.role == 'admin' else g.user.display_name) }}</p>
             <h1 id="timing-heading">{{ t('timing.title') }}</h1>
-            <p class="muted">{{ t('timing.description') }}</p>
+            <p class="page-description">{{ t('timing.description') }}</p>
         </div>
         <button type="button" id="timing-reset">{{ t('timing.clear') }}</button>
     </header>
 
     <form id="timing-filters" class="timing-filters">
+        <div class="timing-filter-main">
         <label>{{ t('timing.window') }}<select name="window">
             {% for value in ['today', 'week', 'month', 'quarter', 'all', 'custom'] %}
             <option value="{{ value }}"{% if value == 'week' %} selected{% endif %}>{{ t('timing.' ~ value) }}</option>
@@ -20,11 +21,17 @@
         </select></label>
         <label>{{ t('timing.project_name') }}<input name="project_name" list="timing-projects" placeholder="{{ t('timing.any') }}"><datalist id="timing-projects"></datalist></label>
         <label>{{ t('timing.agent_type') }}<select name="agent_type"><option value="">{{ t('timing.any') }}</option><option value="codex">Codex</option><option value="claude-code">Claude Code</option></select></label>
-        <label>{{ t('timing.session_id') }}<input name="session_id" placeholder="{{ t('timing.any') }}"></label>
-        <label>{{ t('timing.model_name') }}<input name="model_name" placeholder="{{ t('timing.any') }}"></label>
         <label class="timing-custom" hidden>{{ t('timing.from') }}<input name="from" type="date"></label>
         <label class="timing-custom" hidden>{{ t('timing.to') }}<input name="to" type="date"></label>
         <button type="submit" class="btn-primary">{{ t('timing.apply') }}</button>
+        </div>
+        <details class="timing-advanced" id="timing-advanced">
+            <summary>{{ t('timing.advanced') }}<span id="timing-advanced-count"></span></summary>
+            <div class="timing-advanced-fields">
+                <label>{{ t('timing.session_id') }}<input name="session_id" placeholder="{{ t('timing.any') }}"></label>
+                <label>{{ t('timing.model_name') }}<input name="model_name" placeholder="{{ t('timing.any') }}"></label>
+            </div>
+        </details>
     </form>
 
     <p id="timing-scope-note" class="timing-note" hidden></p>
@@ -34,10 +41,10 @@
 
     <div id="timing-results" hidden>
         <div class="timing-metrics" id="timing-metrics"></div>
-        <section class="timing-coverage" aria-label="{{ t('timing.coverage') }}">
-            <p id="timing-coverage"></p>
-            <p class="muted" id="timing-tools-coverage"></p>
-        </section>
+        <details class="timing-coverage" aria-label="{{ t('timing.coverage') }}">
+            <summary><span class="coverage-dot" aria-hidden="true"></span><span id="timing-coverage-summary"></span><span class="coverage-disclosure">{{ t('timing.coverage_details') }} <span aria-hidden="true">⌄</span></span></summary>
+            <div class="timing-coverage-content"><p id="timing-coverage"></p><p class="muted" id="timing-tools-coverage"></p></div>
+        </details>
         <div class="timing-charts">
             <section>
                 <h2>{{ t('timing.distribution') }}</h2>
@@ -47,6 +54,7 @@
             <section>
                 <h2>{{ t('timing.breakdown') }}</h2>
                 <div id="timing-breakdown"></div>
+                <details id="timing-more-breakdown" class="timing-more-breakdown" hidden><summary id="timing-more-label"></summary><div id="timing-breakdown-rest"></div></details>
                 <p class="timing-note">{{ t('timing.breakdown_note') }}</p>
             </section>
         </div>
@@ -61,6 +69,7 @@ python3 scripts/backfill_timing.py --source all</code></pre>
         </section>
 
         <section class="timing-details">
+            <nav id="timing-breadcrumbs" class="timing-breadcrumbs" aria-label="{{ t('timing.scope') }}" hidden></nav>
             <div class="timing-tabs" role="tablist" aria-label="{{ t('timing.scope') }}">
                 {% for view in ['projects', 'sessions', 'tools', 'turns'] %}
                 <button type="button" role="tab" aria-selected="{{ 'true' if loop.first else 'false' }}" id="tab-{{ view }}" aria-controls="timing-table-panel" data-view="{{ view }}" tabindex="{{ '0' if loop.first else '-1' }}">{{ t('timing.' ~ view) }}</button>
@@ -74,6 +83,7 @@ python3 scripts/backfill_timing.py --source all</code></pre>
                         <thead></thead><tbody></tbody>
                     </table>
                 </div>
+                <p id="timing-scroll-hint" class="table-scroll-hint" hidden>↔ {{ t('timing.scroll_hint') }}</p>
                 <nav class="timing-pagination" aria-label="{{ t('timing.jump') }}">
                     <span id="timing-page" aria-live="polite"></span>
                     <div>

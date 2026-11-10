@@ -3,9 +3,11 @@
 {% block title %}{{ t('api_list.title') }} | {{ project_title }}{% endblock %}
 
 {% block content %}
-<section class="card">
+<section>
+    <header class="page-header"><div>
     <h1 style="margin-top: 0;">{{ t('api_list.title') }}</h1>
-    <p class="muted">{{ t('api_list.description') }}</p>
+    <p class="page-description">{{ t('api_list.description') }}</p>
+    </div></header>
     <table>
         <thead>
             <tr>

@@ -3,88 +3,36 @@
 {% block title %}{{ t('user_detail.title_page', display_name=stats.user.display_name) }} | {{ project_title }}{% endblock %}
 
 {% block styles %}
-<style>
-    .chart-container {
-        position: relative;
-        height: 300px;
-        width: 100%;
-    }
-    .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 16px;
-        margin-bottom: 20px;
-    }
-    .stat-card {
-        background: var(--bg);
-        border-radius: 8px;
-        padding: 16px;
-        text-align: center;
-    }
-    .stat-value {
-        font-family: var(--font-serif);
-        font-size: 1.5rem;
-        font-weight: 700;
-        color: var(--text);
-    }
-    .stat-label {
-        color: var(--muted);
-        font-size: 0.875rem;
-        margin-top: 4px;
-    }
-    .section-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 16px;
-    }
-    .section-header h2 {
-        margin: 0;
-    }
-    .timeline-range {
-        display: inline-flex;
-        gap: 8px;
-        padding: 4px;
-        background: #f3f4f6;
-        border-radius: 999px;
-    }
-    .timeline-range-button {
-        border: 0;
-        background: transparent;
-        color: var(--muted);
-        border-radius: 999px;
-        padding: 8px 12px;
-        cursor: pointer;
-        font: inherit;
-    }
-    .timeline-range-button.is-active {
-        background: var(--primary);
-        color: #fff;
-    }
-    #project-table tbody tr[data-project-name] {
-        cursor: pointer;
-    }
-    #project-table tbody tr.is-active {
-        background: rgba(37, 99, 235, 0.08);
-    }
-    @media (max-width: 640px) {
-        .section-header {
-            align-items: flex-start;
-            flex-direction: column;
-        }
-    }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='usage.css') }}">
 {% endblock %}
 
 {% block content %}
-<section class="stack">
-    <div class="card">
-        <h1 class="hero-title">{{ stats.user.display_name }}</h1>
-        <p><a href="{{ url_for('timing_analysis', user_id=stats.user.id, window=window, **filters) }}">{{ t('timing.title') }} →</a></p>
-        <p class="muted" style="margin-top: 10px;">{{ t('user_detail.description', username=stats.user.username, window_label=t('user_detail.window.' ~ window)) }}</p>
-
-        <div class="stats-grid">
+<section class="usage-workspace">
+    <header class="page-header">
+        <div>
+            <p class="page-eyebrow">{{ t('shell.usage') }}</p>
+            <h1 class="hero-title">{{ stats.user.display_name }}</h1>
+            <p class="page-description" data-usage-description>{{ t('user_detail.description', username=stats.user.username, window_label=t('user_detail.window.' ~ window)) }}</p>
+        </div>
+        <a class="page-action" data-usage-timing-link href="{{ url_for('timing_analysis', user_id=stats.user.id, window=window, **filters) }}">{{ t('timing.title') }} <span aria-hidden="true">↗</span></a>
+    </header>
+    {% if filters %}
+    <div class="usage-scope" aria-label="{{ t('timing.scope') }}">
+        {% for key, value in filters.items() %}
+        <span><span class="muted">{{ t('user_detail.agent_type' if key == 'agent_type' else 'user_detail.version' if key == 'agent_version' else 'user_detail.model') }}：</span>{{ value }}</span>
+        {% endfor %}
+        <a href="{{ url_for('user_detail', user_id=stats.user.id, window=window) }}">{{ t('timing.clear') }}</a>
+    </div>
+    {% endif %}
+    <div class="usage-toolbar">
+        <div class="timeline-range" aria-label="{{ t('user_detail.timeline_range_selector') }}" data-user-detail-window-selector="{{ window }}">
+            {% for option in ['today', 'week', 'month', 'quarter', 'all'] %}
+            <button type="button" class="timeline-range-button{% if window == option %} is-active{% endif %}" data-user-detail-window-option="{{ option }}" aria-pressed="{{ 'true' if window == option else 'false' }}">{{ t('user_detail.window.' ~ option) }}</button>
+            {% endfor %}
+        </div>
+        <div class="usage-load-feedback"><span id="usage-load-status" role="status" aria-live="polite"></span><button type="button" id="usage-retry" hidden>{{ t('ui.retry') }}</button></div>
+    </div>
+    <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-value" data-user-detail-summary-value="total-token-count">{{ format_token_count(stats.summary.total_token_count) }}</div>
                 <div class="stat-label">{{ t('user_detail.total_tokens') }}</div>
@@ -102,32 +50,40 @@
                 <div class="stat-label">{{ t('user_detail.avg_tokens_per_prompt') }}</div>
             </div>
         </div>
-    </div>
-
-    <div class="card">
+    <section id="usage-empty" class="usage-empty"{% if stats.summary.prompt_count %} hidden{% endif %}>
+        <h2>{{ t('ui.usage_empty') }}</h2>
+        <p class="muted">{{ t('ui.usage_empty_help') }}</p>
+        <a href="{{ url_for('docs_page', filepath='HOOKS.md') }}">{{ t('ui.collection_guide') }} <span aria-hidden="true">→</span></a>
+    </section>
+    <section class="usage-timeline"{% if not stats.summary.prompt_count %} hidden{% endif %}>
         <div class="section-header">
             <h2>{{ t('user_detail.timeline_heading') }}</h2>
-            <div class="timeline-range" aria-label="{{ t('user_detail.timeline_range_selector') }}" data-user-detail-window-selector="{{ window }}">
-                <button type="button" class="timeline-range-button{% if window == 'today' %} is-active{% endif %}" data-user-detail-window-option="today">{{ t('user_detail.window.today') }}</button>
-                <button type="button" class="timeline-range-button{% if window == 'week' %} is-active{% endif %}" data-user-detail-window-option="week">{{ t('user_detail.window.week') }}</button>
-                <button type="button" class="timeline-range-button{% if window == 'month' %} is-active{% endif %}" data-user-detail-window-option="month">{{ t('user_detail.window.month') }}</button>
-                <button type="button" class="timeline-range-button{% if window == 'quarter' %} is-active{% endif %}" data-user-detail-window-option="quarter">{{ t('user_detail.window.quarter') }}</button>
-            </div>
+            <label class="usage-project-filter" for="usage-project-select">{{ t('ui.trend_project') }}<select id="usage-project-select"><option value="">{{ t('ui.all_projects') }}</option></select></label>
         </div>
+        <p class="section-description">{{ t('ui.project_focus') }}</p>
         <div class="chart-container">
-            <canvas id="timeline-chart"></canvas>
+            <canvas id="timeline-chart" role="img" aria-label="{{ t('user_detail.timeline_heading') }}"></canvas>
         </div>
-        <h3 style="margin: 24px 0 12px;">{{ t('user_detail.prompt_average_timeline_heading') }}</h3>
-        <div class="chart-container" aria-label="{{ t('user_detail.avg_tokens_per_prompt') }}">
-            <canvas id="prompt-average-timeline-chart"></canvas>
+        <div class="usage-secondary-charts">
+        <section>
+            <h3>{{ t('user_detail.prompt_average_timeline_heading') }}</h3>
+            <div class="chart-container"><canvas id="prompt-average-timeline-chart" role="img" aria-label="{{ t('user_detail.avg_tokens_per_prompt') }}"></canvas></div>
+        </section>
+        <section>
+            <h3>{{ t('user_detail.prompt_count_timeline') }}</h3>
+            <div class="chart-container"><canvas id="prompt-count-timeline-chart" role="img" aria-label="{{ t('user_detail.prompt_count_timeline') }}"></canvas></div>
+        </section>
         </div>
-        <h3 style="margin: 24px 0 12px;">{{ t('user_detail.prompt_count_timeline') }}</h3>
-        <div class="chart-container" aria-label="{{ t('user_detail.prompt_count_timeline') }}">
-            <canvas id="prompt-count-timeline-chart"></canvas>
-        </div>
-    </div>
+    </section>
 
-    <div class="card">
+    <section class="usage-details"{% if not stats.summary.prompt_count and not stats.summary.task_count %} hidden{% endif %}>
+    <h2>{{ t('ui.details') }}</h2>
+    <div class="usage-details-tabs" role="tablist" aria-label="{{ t('ui.details') }}" hidden>
+        {% for tab, label in [('projects', 'ui.project'), ('models', 'ui.model'), ('agents', 'ui.agent'), ('events', 'ui.events')] %}
+        <button type="button" role="tab" id="usage-tab-{{ tab }}" data-usage-tab="{{ tab }}" aria-controls="usage-panel-{{ tab }}" aria-selected="{{ 'true' if loop.first else 'false' }}" tabindex="{{ '0' if loop.first else '-1' }}">{{ t(label) }}</button>
+        {% endfor %}
+    </div>
+    <div class="usage-detail-panel" id="usage-panel-projects" data-usage-panel="projects">
         <h2 style="margin-top: 0;">{{ t('user_detail.project_breakdown') }}</h2>
         <table id="project-table">
             <thead>
@@ -146,10 +102,10 @@
         </table>
     </div>
 
-    <div class="card">
+    <div class="usage-detail-panel" id="usage-panel-models" data-usage-panel="models">
         <h2 style="margin-top: 0;">{{ t('user_detail.model_breakdown') }}</h2>
         <div class="chart-container">
-            <canvas id="model-chart"></canvas>
+            <canvas id="model-chart" role="img" aria-label="{{ t('user_detail.model_breakdown') }}"></canvas>
         </div>
         <table id="model-table" style="margin-top: 20px;">
             <thead>
@@ -167,7 +123,7 @@
         </table>
     </div>
 
-    <div class="card">
+    <div class="usage-detail-panel" id="usage-panel-agents" data-usage-panel="agents">
         <h2 style="margin-top: 0;">{{ t('user_detail.agent_breakdown') }}</h2>
         <table>
             <thead>
@@ -199,7 +155,7 @@
         </table>
     </div>
 
-    <div class="card">
+    <div class="usage-detail-panel" id="usage-panel-events" data-usage-panel="events">
         <h2 style="margin-top: 0;">{{ t('user_detail.recent_prompt_events') }}</h2>
         <table>
             <thead>
@@ -230,13 +186,19 @@
             </tbody>
         </table>
     </div>
+    </section>
 </section>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
 <script>
 (function() {
     const userDetailMessages = {{ {
         "loading": t("user_detail.loading"),
+        "chart_error": t("ui.chart_error"),
+        "all_projects": t("ui.all_projects"),
+        "other_projects": t("ui.other_projects"),
+        "description": t("user_detail.description", username=stats.user.username, window_label="__WINDOW__"),
+        "windows": {"today": t("user_detail.window.today"), "week": t("user_detail.window.week"), "month": t("user_detail.window.month"), "quarter": t("user_detail.window.quarter"), "all": t("user_detail.window.all")},
         "no_data": t("user_detail.no_data"),
         "project_empty": t("user_detail.project_empty"),
         "model_empty": t("user_detail.model_empty"),
@@ -254,10 +216,20 @@
     let promptAverageTimelineChart = null;
     let promptCountTimelineChart = null;
     let refreshRequestId = 0;
+    let refreshController = null;
+    let attemptedWindow = currentWindow;
     let latestTimeline = [];
     let latestProjects = [];
     let selectedTimelineProject = null;
     const timelineColorCache = new Map();
+    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+    Chart.defaults.font.size = 11;
+    Chart.defaults.color = '#65737e';
+    Chart.defaults.borderColor = '#edf1f3';
+    Chart.defaults.plugins.legend.labels.boxWidth = 8;
+    Chart.defaults.plugins.legend.labels.boxHeight = 8;
+    Chart.defaults.plugins.legend.labels.padding = 16;
+    Chart.defaults.animation.duration = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 250;
 
     function trimTrailingDecimal(value) {
         const rounded = Math.round((value + Number.EPSILON) * 10) / 10;
@@ -372,6 +344,10 @@
     }
 
     function renderSummary(summary) {
+        const hasPrompts = Number(summary.prompt_count || 0) > 0;
+        document.getElementById('usage-empty').hidden = hasPrompts;
+        document.querySelector('.usage-timeline').hidden = !hasPrompts;
+        document.querySelector('.usage-details').hidden = !hasPrompts && !Number(summary.task_count || 0);
         const values = {
             'total-token-count': formatTokenCount(summary.total_token_count),
             'prompt-count': formatCount(summary.prompt_count),
@@ -431,6 +407,7 @@
         latestProjects = projects || [];
         if (!projects || projects.length === 0) {
             selectedTimelineProject = null;
+            document.getElementById('usage-project-select').replaceChildren(new Option(userDetailMessages.all_projects, ''));
             tbody.innerHTML = `<tr><td colspan="6" class="muted">${escapeHtml(userDetailMessages.project_empty)}</td></tr>`;
             return;
         }
@@ -439,11 +416,15 @@
             selectedTimelineProject = null;
         }
 
+        const selector = document.getElementById('usage-project-select');
+        selector.replaceChildren(new Option(userDetailMessages.all_projects, ''), ...projects.map(project => new Option(project.project_name, project.project_name)));
+        selector.value = selectedTimelineProject || '';
+
         tbody.innerHTML = projects.map(project => {
             const isActive = project.project_name === selectedTimelineProject;
             return `
             <tr data-project-name="${escapeHtml(project.project_name)}" class="${isActive ? 'is-active' : ''}">
-                <td>${escapeHtml(project.project_name)}</td>
+                <td><button type="button" class="project-focus-button" aria-pressed="${isActive ? 'true' : 'false'}">${escapeHtml(project.project_name)}</button></td>
                 <td data-sort-value="${Number(project.total_token_count) || 0}">${formatTokenCount(project.total_token_count)}</td>
                 <td data-sort-value="${Number(project.input_token_count) || 0}">${formatTokenCount(project.input_token_count)}</td>
                 <td data-sort-value="${Number(project.output_token_count) || 0}">${formatTokenCount(project.output_token_count)}</td>
@@ -533,6 +514,7 @@
         }
         document.querySelectorAll('[data-user-detail-window-option]').forEach(button => {
             button.classList.toggle('is-active', button.dataset.userDetailWindowOption === windowValue);
+            button.setAttribute('aria-pressed', String(button.dataset.userDetailWindowOption === windowValue));
         });
     }
 
@@ -546,7 +528,7 @@
     function renderEmptyChart(ctx, chart) {
         const nextChart = clearChart(chart);
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-        ctx.font = '14px DM Sans';
+        ctx.font = `13px ${getComputedStyle(document.body).fontFamily}`;
         ctx.fillStyle = '#6b7280';
         ctx.textAlign = 'center';
         ctx.fillText(userDetailMessages.timeline_empty, ctx.canvas.width / 2, ctx.canvas.height / 2);
@@ -584,19 +566,10 @@
         }));
     }
 
-    function hashString(value) {
-        let hash = 0;
-        for (let i = 0; i < value.length; i += 1) {
-            hash = ((hash << 5) - hash) + value.charCodeAt(i);
-            hash |= 0;
-        }
-        return Math.abs(hash);
-    }
-
     function colorForProject(projectName) {
         if (!timelineColorCache.has(projectName)) {
-            const hue = hashString(projectName) % 360;
-            timelineColorCache.set(projectName, `hsl(${hue}, 62%, 52%)`);
+            const palette = ['#397d6e', '#6d92ac', '#a39b74', '#8c7fa6', '#a86e72'];
+            timelineColorCache.set(projectName, palette[timelineColorCache.size % palette.length]);
         }
         return timelineColorCache.get(projectName);
     }
@@ -625,7 +598,13 @@
     }
 
     function buildTimelineDatasets(timeline) {
-        return getVisibleProjectNames(timeline).map(projectName => {
+        const totals = new Map();
+        timeline.forEach(bucket => (bucket.project_breakdown || []).forEach(project => {
+            totals.set(project.project_name, (totals.get(project.project_name) || 0) + project.total_token_count);
+        }));
+        const projects = selectedTimelineProject ? getVisibleProjectNames(timeline)
+            : [...totals.keys()].sort((a, b) => totals.get(b) - totals.get(a)).slice(0, 5);
+        const datasets = projects.map(projectName => {
             const color = colorForProject(projectName);
             return {
                 label: projectName,
@@ -633,8 +612,17 @@
                 backgroundColor: color,
                 borderColor: color,
                 borderWidth: 1,
+                maxBarThickness: 60,
             };
         });
+        if (!selectedTimelineProject && totals.size > projects.length) {
+            datasets.push({
+                label: userDetailMessages.other_projects,
+                data: timeline.map(bucket => (bucket.project_breakdown || []).filter(project => !projects.includes(project.project_name)).reduce((sum, project) => sum + project.total_token_count, 0)),
+                backgroundColor: '#d1dce0', borderColor: '#d1dce0', borderWidth: 1, maxBarThickness: 60, isAggregate: true,
+            });
+        }
+        return datasets;
     }
 
     function buildRefreshUrl(pathname, windowValue, extraSearchParams = {}) {
@@ -649,12 +637,17 @@
     }
 
     function updateTimelineProjectFocus(projectName) {
+        const focusedProject = document.activeElement?.closest('tr[data-project-name]')?.dataset.projectName;
         const clickedProject = projectName;
         selectedTimelineProject = selectedTimelineProject === clickedProject ? null : clickedProject;
         renderProjects(latestProjects);
         renderTimeline(latestTimeline, currentWindow, { preserveSelection: true });
         renderPromptAverageTimeline(latestTimeline, currentWindow, selectedTimelineProject);
         renderPromptCountTimeline(latestTimeline, currentWindow, selectedTimelineProject);
+        document.getElementById('usage-project-select').value = selectedTimelineProject || '';
+        if (focusedProject) requestAnimationFrame(() => {
+            [...document.querySelectorAll('#project-table tbody tr')].find(row => row.dataset.projectName === focusedProject)?.querySelector('button')?.focus({preventScroll: true});
+        });
     }
 
     function renderTimeline(timeline, windowValue, { preserveSelection = false } = {}) {
@@ -687,9 +680,11 @@
                 maintainAspectRatio: false,
                 plugins: {
                     legend: {
+                        display: datasets.length <= 8,
                         position: 'bottom',
                         onClick: (_event, legendItem) => {
                             const clickedProject = legendItem.text;
+                            if (timelineChart.data.datasets[legendItem.datasetIndex]?.isAggregate) return;
                             updateTimelineProjectFocus(clickedProject);
                         }
                     },
@@ -735,8 +730,8 @@
                     {
                         label: userDetailMessages.avg_tokens_per_prompt,
                         data: timeline.map(bucket => averageTokensPerPrompt(bucket, projectName)),
-                        borderColor: '#b45309',
-                        backgroundColor: 'rgba(180, 83, 9, 0.18)',
+                        borderColor: '#397d6e',
+                        backgroundColor: 'rgba(57, 125, 110, 0.12)',
                     },
                 ],
             },
@@ -788,7 +783,7 @@
                     {
                         label: userDetailMessages.prompt_count_timeline,
                         data: promptTimeline.map(bucket => Number(bucket.prompt_count || 0)),
-                        backgroundColor: '#2563eb',
+                        backgroundColor: '#468f80',
                         borderRadius: 6,
                         maxBarThickness: 28,
                     },
@@ -823,61 +818,108 @@
         });
     }
 
-    function refreshUserDetail(windowValue) {
+    async function refreshUserDetail(windowValue) {
         const requestId = ++refreshRequestId;
-        selectedTimelineProject = null;
-        const nextUrl = new URL(window.location.href);
-        nextUrl.searchParams.set('window', windowValue);
-        history.replaceState({}, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
-
-        fetch(buildRefreshUrl(`/api/users/${userId}/stats`, windowValue))
-            .then(r => r.json())
-            .then(data => {
-                if (requestId !== refreshRequestId) {
-                    return;
-                }
-                renderSummary(data.summary || {});
-                renderAgentBreakdown(data.agent_breakdown || []);
-                renderRecentPromptEvents(data.recent_prompt_events || []);
-            });
-
-        fetch(buildRefreshUrl(`/api/users/${userId}/projects`, windowValue))
-            .then(r => r.json())
-            .then(data => {
-                if (requestId !== refreshRequestId) {
-                    return;
-                }
-                renderProjects(data.projects || []);
-            });
-
-        fetch(buildRefreshUrl(`/api/users/${userId}/models`, windowValue))
-            .then(r => r.json())
-            .then(data => {
-                if (requestId !== refreshRequestId) {
-                    return;
-                }
-                renderModels(data.models || []);
-            });
-
+        attemptedWindow = windowValue;
+        refreshController?.abort();
+        refreshController = new AbortController();
+        const { signal } = refreshController;
+        const status = document.getElementById('usage-load-status');
+        const workspace = document.querySelector('.usage-workspace');
+        const feedback = document.querySelector('.usage-load-feedback');
+        workspace.setAttribute('aria-busy', 'true');
+        feedback.classList.remove('is-error');
+        status.textContent = userDetailMessages.loading;
+        document.getElementById('usage-retry').hidden = true;
+        document.querySelectorAll('[data-user-detail-window-option]').forEach(button => {
+            button.toggleAttribute('data-pending', button.dataset.userDetailWindowOption === windowValue);
+        });
         const granularity = windowValue === 'today' ? 'hour' : 'day';
-        fetch(buildRefreshUrl(`/api/users/${userId}/timeline`, windowValue, { granularity }))
-            .then(r => r.json())
-            .then(data => {
-                if (requestId !== refreshRequestId) {
-                    return;
-                }
-                renderTimeline(data.timeline || [], windowValue);
-                renderPromptAverageTimeline(data.timeline || [], windowValue, selectedTimelineProject);
-                renderPromptCountTimeline(data.timeline || [], windowValue, selectedTimelineProject);
-            });
+        try {
+            const [data, projectData, modelData, timelineData] = await Promise.all(
+                ['stats', 'projects', 'models', 'timeline'].map(async resource => {
+                    const response = await fetch(buildRefreshUrl(`/api/users/${userId}/${resource}`, windowValue, resource === 'timeline' ? { granularity } : {}), { signal });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    return response.json();
+                })
+            );
+            if (requestId !== refreshRequestId) return;
+            selectedTimelineProject = null;
+            setTimelineWindow(windowValue);
+            const nextUrl = new URL(window.location.href);
+            nextUrl.searchParams.set('window', windowValue);
+            history.replaceState({}, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+            document.querySelector('[data-locale-switcher] input[name=next]').value = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+            const timingLink = document.querySelector('[data-usage-timing-link]');
+            const timingUrl = new URL(timingLink.href);
+            timingUrl.searchParams.set('window', windowValue);
+            timingLink.href = timingUrl.toString();
+            document.querySelector('[data-usage-description]').textContent = userDetailMessages.description.replace('__WINDOW__', userDetailMessages.windows[windowValue]);
+            renderSummary(data.summary || {});
+            renderAgentBreakdown(data.agent_breakdown || []);
+            renderRecentPromptEvents(data.recent_prompt_events || []);
+            renderProjects(projectData.projects || []);
+            renderModels(modelData.models || []);
+            renderTimeline(timelineData.timeline || [], windowValue);
+            renderPromptAverageTimeline(timelineData.timeline || [], windowValue, selectedTimelineProject);
+            renderPromptCountTimeline(timelineData.timeline || [], windowValue, selectedTimelineProject);
+            status.textContent = '';
+        } catch (error) {
+            if (signal.aborted || requestId !== refreshRequestId) return;
+            status.textContent = userDetailMessages.chart_error;
+            feedback.classList.add('is-error');
+            document.getElementById('usage-retry').hidden = false;
+        } finally {
+            if (requestId === refreshRequestId) {
+                workspace.setAttribute('aria-busy', 'false');
+                document.querySelectorAll('[data-pending]').forEach(button => button.removeAttribute('data-pending'));
+            }
+        }
     }
 
     document.querySelectorAll('[data-user-detail-window-option]').forEach(button => {
         button.addEventListener('click', () => {
-            setTimelineWindow(button.dataset.userDetailWindowOption);
-            refreshUserDetail(currentWindow);
+            refreshUserDetail(button.dataset.userDetailWindowOption);
         });
     });
+    document.getElementById('usage-retry').addEventListener('click', () => refreshUserDetail(attemptedWindow));
+    document.getElementById('usage-project-select').addEventListener('change', event => {
+        const project = event.target.value;
+        if (!project) {
+            const selected = selectedTimelineProject;
+            if (selected) updateTimelineProjectFocus(selected);
+        } else updateTimelineProjectFocus(project);
+    });
+    const detailTabs = [...document.querySelectorAll('[data-usage-tab]')];
+    function selectDetailTab(tab, save = true) {
+        detailTabs.forEach(button => {
+            const selected = button.dataset.usageTab === tab;
+            button.setAttribute('aria-selected', String(selected)); button.tabIndex = selected ? 0 : -1;
+        });
+        document.querySelectorAll('[data-usage-panel]').forEach(panel => {
+            panel.hidden = panel.dataset.usagePanel !== tab;
+            panel.setAttribute('role', 'tabpanel');
+            panel.setAttribute('aria-labelledby', `usage-tab-${panel.dataset.usagePanel}`);
+        });
+        if (tab === 'models') modelChart?.resize();
+        if (save) {
+            const next = `${location.pathname}${location.search}#usage-${tab}`;
+            history.replaceState({}, '', next);
+            document.querySelector('[data-locale-switcher] input[name=next]').value = next;
+        }
+    }
+    document.querySelector('.usage-details-tabs').hidden = false;
+    detailTabs.forEach(button => button.addEventListener('click', () => selectDetailTab(button.dataset.usageTab)));
+    document.querySelector('.usage-details-tabs').addEventListener('keydown', event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        const current = detailTabs.indexOf(document.activeElement);
+        if (current < 0) return;
+        event.preventDefault();
+        const index = event.key === 'Home' ? 0 : event.key === 'End' ? detailTabs.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + detailTabs.length) % detailTabs.length;
+        detailTabs[index].focus(); detailTabs[index].click();
+    });
+    const initialTab = location.hash.replace('#usage-', '');
+    selectDetailTab(detailTabs.some(button => button.dataset.usageTab === initialTab) ? initialTab : 'projects', false);
 
     refreshUserDetail(currentWindow);
 })();

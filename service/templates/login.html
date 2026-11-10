@@ -3,24 +3,24 @@
 {% block title %}{{ t('login.title') }} | {{ project_title }}{% endblock %}
 
 {% block content %}
-<section class="card" style="max-width: 440px; margin: 40px auto;">
-    <h1 style="margin-top: 0;">TokenLeague</h1>
+<section class="auth-panel">
+    <h1>{{ t('login.title') }}</h1>
     <p class="muted">{{ t('login.description') }}</p>
     {% if error %}
-    <p style="color: #b42318;">{{ error }}</p>
+    <p class="notice notice-error" role="alert">{{ error }}</p>
     {% endif %}
     <form method="POST" class="stack">
         <div>
             <label for="username">{{ t('login.username') }}</label>
-            <input id="username" name="username" value="admin" required>
+            <input id="username" name="username" value="{{ request.form.get('username', '') }}" autocomplete="username" autocapitalize="none" spellcheck="false" required>
         </div>
         <div>
             <label for="password">{{ t('login.password') }}</label>
-            <input id="password" name="password" type="password" required>
+            <input id="password" name="password" type="password" autocomplete="current-password" required>
         </div>
         <button class="btn-primary" type="submit">{{ t('login.submit') }}</button>
     </form>
-    <p class="muted" style="margin-bottom: 0;">
+    <p class="muted auth-footnote">
         {{ t('login.recovery_prompt') }} <a href="{{ url_for('local_admin_login') }}">{{ t('login.local_admin_link') }}</a>
     </p>
 </section>

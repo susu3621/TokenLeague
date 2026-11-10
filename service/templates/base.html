@@ -1,292 +1,104 @@
+{% macro icon(name) -%}
+<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{% if name == 'usage' %}<path d="M4 19V5m0 14h16M8 15v-4m5 4V7m5 8v-6"/>
+{% elif name == 'timing' %}<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6m-3 0v3m6 1 2-2"/>
+{% elif name == 'team' %}<path d="M8 20v-7h8v7M3 20v-4h5m8 4h5V9h-5M2 20h20M10 5l2-3 2 3 3 .5-2 2 .5 3-3.5-1.5L9 10l.5-2.5-2-2z"/>
+{% elif name == 'docs' %}<path d="M4 3h6a3 3 0 0 1 3 3v15a4 4 0 0 0-4-2H4zm9 3a3 3 0 0 1 3-3h5v16h-5a4 4 0 0 0-3 2"/>
+{% elif name == 'users' %}<circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2m1-15a3 3 0 0 1 0 6m3 9v-2a5 5 0 0 0-2-4"/>
+{% elif name == 'settings' %}<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="var(--panel)"/><circle cx="15" cy="17" r="3" fill="var(--panel)"/>
+{% elif name == 'api' %}<path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 20"/>
+{% elif name == 'directory' %}<path d="M9 3h6v5H9zM3 16h6v5H3zm12 0h6v5h-6zM12 8v4m-6 4v-4h12v4"/>
+{% elif name == 'agents' %}<rect x="4" y="6" width="16" height="14" rx="3"/><path d="M12 2v4m-4 5v2m8-2v2m-7 4h6M1 11v4m22-4v4"/>
+{% elif name == 'menu' %}<path d="M4 6h16M4 12h16M4 18h16"/>
+{% elif name == 'chevron' %}<path d="m9 5 7 7-7 7"/>
+{% endif %}
+</svg>
+{%- endmacro %}
+{% macro nav_link(endpoint, label, glyph, kwargs={}) -%}
+<a class="sidebar-link{% if request.endpoint == endpoint %} is-active{% endif %}" href="{{ url_for(endpoint, **kwargs) }}"{% if request.endpoint == endpoint %} aria-current="page"{% endif %}>{{ icon(glyph) }}<span>{{ label }}</span></a>
+{%- endmacro %}
 <!DOCTYPE html>
 <html lang="{{ locale }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#f7f9fa">
     <title>{% block title %}{{ project_title }}{% endblock %}</title>
-    <!-- Manus Style: Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            /* Manus Color Palette - White, Gray, Black */
-            --bg: #fafafa;
-            --panel: #ffffff;
-            --text: #111827;
-            --muted: #6b7280;
-            --border: #e5e7eb;
-            --primary: #1f2937;
-            --accent: #374151;
-
-            /* Manus Typography */
-            --font-serif: 'Libre Baskerville', Georgia, serif;
-            --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-        }
-
-        body {
-            margin: 0;
-            font-family: var(--font-sans);
-            background: var(--bg);
-            color: var(--text);
-        }
-
-        .shell {
-            min-height: 100vh;
-        }
-
-        .topbar {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            justify-content: space-between;
-            align-items: center;
-            padding: 14px 20px;
-            background: var(--panel);
-            border-bottom: 1px solid var(--border);
-        }
-
-        .brand {
-            font-weight: 700;
-            text-decoration: none;
-            color: var(--text);
-        }
-
-        .nav {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            align-items: center;
-        }
-
-        .topbar-actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            align-items: center;
-        }
-
-        .nav a,
-        .nav button {
-            font: inherit;
-            color: var(--muted);
-            text-decoration: none;
-            border: 1px solid var(--border);
-            background: transparent;
-            border-radius: 8px;
-            padding: 8px 12px;
-            cursor: pointer;
-        }
-
-        .locale-switcher {
-            display: inline-flex;
-            gap: 6px;
-            align-items: center;
-            padding: 4px;
-            border: 1px solid var(--border);
-            border-radius: 999px;
-            background: var(--bg);
-        }
-
-        .locale-switcher-button {
-            font: inherit;
-            border: 0;
-            background: transparent;
-            color: var(--muted);
-            border-radius: 999px;
-            padding: 6px 10px;
-            cursor: pointer;
-        }
-
-        .locale-switcher-button.is-active {
-            background: var(--primary);
-            color: #fff;
-        }
-
-        .nav-menu {
-            position: relative;
-        }
-
-        .nav-menu summary {
-            list-style: none;
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            color: var(--text);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 8px 12px;
-            cursor: pointer;
-            min-width: 180px;
-        }
-
-        .nav-menu summary::-webkit-details-marker {
-            display: none;
-        }
-
-        .nav-menu-label {
-            font-weight: 600;
-        }
-
-        .nav-menu-handle {
-            color: var(--muted);
-            font-size: 0.92rem;
-        }
-
-        .nav-menu-panel {
-            position: absolute;
-            right: 0;
-            top: calc(100% + 8px);
-            z-index: 10;
-            min-width: 180px;
-            display: grid;
-            gap: 8px;
-            padding: 10px;
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            background: var(--panel);
-            box-shadow: 0 18px 36px rgba(17, 24, 39, 0.12);
-        }
-
-        .nav-menu-panel a,
-        .nav-menu-panel button {
-            width: 100%;
-            text-align: left;
-            justify-content: flex-start;
-        }
-
-        .container {
-            max-width: 1080px;
-            margin: 0 auto;
-            padding: 28px 20px 40px;
-        }
-
-        .hero-title {
-            margin: 0;
-            font-size: 2rem;
-            font-family: var(--font-serif);
-        }
-
-        h1, h2, h3 {
-            font-family: var(--font-serif);
-        }
-
-        .inline-form {
-            display: inline;
-            margin: 0;
-        }
-
-        .card {
-            background: var(--panel);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 24px;
-        }
-
-        .btn-primary {
-            background: var(--primary);
-            color: #fff;
-            border-color: var(--primary);
-        }
-
-        .muted {
-            color: var(--muted);
-        }
-
-        input,
-        textarea {
-            width: 100%;
-            box-sizing: border-box;
-            padding: 10px 12px;
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            font: inherit;
-        }
-
-        label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 6px;
-        }
-
-        .stack {
-            display: grid;
-            gap: 16px;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th,
-        td {
-            text-align: left;
-            padding: 10px 8px;
-            border-bottom: 1px solid var(--border);
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='table-controls.css') }}">
     {% block styles %}{% endblock %}
 </head>
-<body>
+<body class="{% if g.user %}authenticated{% else %}signed-out{% endif %}">
+    <a class="skip-link" href="#main-content">{{ t('shell.skip') }}</a>
     <div class="shell">
-        <header class="topbar">
-            <a class="brand" href="{{ url_for('leaderboard') if g.user else url_for('login') }}">{{ project_title }}</a>
-            <div class="topbar-actions">
-                <form
-                    method="POST"
-                    action="{{ url_for('set_locale') }}"
-                    class="locale-switcher"
-                    data-locale-switcher
-                    aria-label="{{ t('locale.switcher_label') }}"
-                >
-                    <input type="hidden" name="next" value="{{ locale_switch_next }}">
-                    <button
-                        type="submit"
-                        name="locale"
-                        value="en"
-                        class="locale-switcher-button{% if locale == 'en' %} is-active{% endif %}"
-                    >{{ t('locale.option.en') }}</button>
-                    <button
-                        type="submit"
-                        name="locale"
-                        value="zh-CN"
-                        class="locale-switcher-button{% if locale == 'zh-CN' %} is-active{% endif %}"
-                    >{{ t('locale.option.zh-CN') }}</button>
-                </form>
+        {% if g.user %}
+        <aside class="sidebar" id="workspace-navigation" aria-label="{{ t('shell.navigation') }}">
+            <button class="navigation-close" type="button" aria-label="{{ t('shell.close_navigation') }}"><span aria-hidden="true">×</span></button>
+            <a class="brand" href="{{ url_for('leaderboard') }}">
+                <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6 17v-5m6 5V6m6 11V9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></span>
+                <span class="brand-name">{{ project_title }}</span>
+            </a>
+            <nav class="sidebar-nav">
+                <p class="nav-group-label">{{ t('shell.analytics') }}</p>
+                {{ nav_link('user_detail', t('shell.usage'), 'usage', {'user_id': g.user.id}) }}
+                {{ nav_link('timing_analysis', t('timing.title'), 'timing') }}
+                {{ nav_link('leaderboard', t('nav.leaderboard'), 'team') }}
+                <p class="nav-group-label">{{ t('shell.workspace') }}</p>
+                {{ nav_link('docs_page', t('nav.docs'), 'docs') }}
+                {{ nav_link('account', t('nav.account'), 'users') }}
+                {% if g.user.role == 'admin' %}
+                <p class="nav-group-label">{{ t('shell.administration') }}</p>
+                {{ nav_link('admin_users', t('nav.admin_users'), 'users') }}
+                {{ nav_link('admin_agents', t('nav.agent_catalog'), 'agents') }}
+                {{ nav_link('admin_ldap', t('nav.ldap'), 'directory') }}
+                {{ nav_link('settings', t('nav.settings'), 'settings') }}
+                {{ nav_link('api_list', t('nav.api'), 'api') }}
+                {% endif %}
+            </nav>
+            <div class="sidebar-footer"><span class="status-dot" aria-hidden="true"></span>{{ t('shell.product') }}</div>
+        </aside>
+        <button class="sidebar-backdrop" type="button" tabindex="-1" aria-label="{{ t('shell.close_navigation') }}" hidden></button>
+        {% endif %}
+        <div class="workspace-body">
+            <header class="topbar">
                 {% if g.user %}
-                <div class="nav">
-                    <a href="{{ url_for('leaderboard') }}">{{ t('nav.leaderboard') }}</a>
-                    <a href="{{ url_for('timing_analysis') }}">{{ t('timing.title') }}</a>
-                    <a href="{{ url_for('docs_page') }}">{{ t('nav.docs') }}</a>
+                <div class="topbar-context">
+                    <button type="button" class="navigation-toggle" aria-controls="workspace-navigation" aria-expanded="false" aria-label="{{ t('shell.navigation') }}">{{ icon('menu') }}</button>
+                    <span class="workspace-label">{{ t('shell.workspace') }}</span>
+                    <span class="context-divider" aria-hidden="true">/</span>
+                    <span class="current-page">{% if request.endpoint == 'user_detail' %}{{ t('shell.usage') }}{% elif request.endpoint == 'timing_analysis' %}{{ t('timing.title') }}{% elif request.endpoint == 'leaderboard' %}{{ t('nav.leaderboard') }}{% elif request.endpoint == 'docs_page' %}{{ t('nav.docs') }}{% elif request.endpoint == 'account' %}{{ t('nav.account') }}{% elif request.endpoint == 'settings' %}{{ t('nav.settings') }}{% elif request.endpoint == 'admin_users' %}{{ t('nav.admin_users') }}{% elif request.endpoint == 'admin_agents' %}{{ t('nav.agent_catalog') }}{% elif request.endpoint == 'admin_ldap' %}{{ t('nav.ldap') }}{% elif request.endpoint == 'api_list' %}{{ t('nav.api') }}{% endif %}</span>
+                </div>
+                {% else %}
+                <a class="brand" href="{{ url_for('login') }}"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6 17v-5m6 5V6m6 11V9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></span><span class="brand-name">{{ project_title }}</span></a>
+                {% endif %}
+                <div class="topbar-actions">
+                    <form method="POST" action="{{ url_for('set_locale') }}" class="locale-switcher" data-locale-switcher aria-label="{{ t('locale.switcher_label') }}">
+                        <input type="hidden" name="next" value="{{ locale_switch_next }}">
+                        <button type="submit" name="locale" value="en" class="locale-switcher-button{% if locale == 'en' %} is-active{% endif %}" aria-pressed="{{ 'true' if locale == 'en' else 'false' }}">{{ t('locale.option.en') }}</button>
+                        <button type="submit" name="locale" value="zh-CN" class="locale-switcher-button{% if locale == 'zh-CN' %} is-active{% endif %}" aria-pressed="{{ 'true' if locale == 'zh-CN' else 'false' }}">{{ t('locale.option.zh-CN') }}</button>
+                    </form>
+                    {% if g.user %}
                     <details class="nav-menu">
-                        <summary>
-                            <span class="nav-menu-label">{{ g.user.display_name if g.user.display_name else g.user.username }}</span>
-                            <span class="nav-menu-handle">{{ g.user.username }}</span>
+                        <summary aria-label="{{ t('nav.account') }} · {{ g.user.display_name or g.user.username }}">
+                            <span class="user-avatar" aria-hidden="true">{{ (g.user.display_name or g.user.username)[:1]|upper }}</span>
+                            <span class="nav-menu-label">{{ g.user.display_name or g.user.username }}</span>
+                            <span class="menu-caret" aria-hidden="true">⌄</span>
                         </summary>
                         <div class="nav-menu-panel">
+                            <p class="nav-menu-handle">{{ g.user.username }}</p>
                             <a href="{{ url_for('account') }}">{{ t('nav.account') }}</a>
-                            <form method="POST" action="{{ url_for('logout') }}" style="margin: 0;">
-                                <button type="submit">{{ t('nav.logout') }}</button>
-                            </form>
+                            <form method="POST" action="{{ url_for('logout') }}"><button type="submit">{{ t('nav.logout') }}</button></form>
                         </div>
                     </details>
-                    {% if g.user.role == 'admin' %}
-                    <a href="{{ url_for('settings') }}">{{ t('nav.settings') }}</a>
-                    <a href="{{ url_for('api_list') }}">{{ t('nav.api') }}</a>
-                    <a href="{{ url_for('admin_users') }}">{{ t('nav.admin_users') }}</a>
-                    <a href="{{ url_for('admin_ldap') }}">{{ t('nav.ldap') }}</a>
-                    <a href="{{ url_for('admin_agents') }}">{{ t('nav.agent_catalog') }}</a>
                     {% endif %}
                 </div>
-                {% endif %}
-            </div>
-        </header>
-        <main class="container">
-            {% block content %}{% endblock %}
-        </main>
+            </header>
+            <main class="container" id="main-content" tabindex="-1">
+                {% block content %}{% endblock %}
+            </main>
+        </div>
     </div>
+    <script src="{{ url_for('static', filename='shell.js') }}" defer></script>
     <script src="{{ url_for('static', filename='table-controls.js') }}" defer></script>
     {% block scripts %}{% endblock %}
 </body>

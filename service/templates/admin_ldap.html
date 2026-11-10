@@ -4,18 +4,20 @@
 
 {% block content %}
 <section class="stack">
-    <div class="card">
+    <header class="page-header"><div>
         <h1 class="hero-title">{{ t('admin_ldap.title') }}</h1>
-        <p class="muted" style="margin-top: 10px;">{{ t('admin_ldap.description') }}</p>
+        <p class="page-description">{{ t('admin_ldap.description') }}</p>
+    </div></header>
+    <div class="card">
         {% if message %}
-        <p style="color: #027a48;">{{ message }}</p>
+        <p class="notice" role="status">{{ message }}</p>
         {% endif %}
         {% if error %}
-        <p style="color: #b42318;">{{ error }}</p>
+        <p class="notice notice-error" role="alert">{{ error }}</p>
         {% endif %}
-        <form method="POST" class="stack">
+        <form method="POST" class="stack form-grid">
             <input type="hidden" name="action" value="save_config">
-            <label><input type="checkbox" name="ldap_enabled" {% if ldap_settings.enabled %}checked{% endif %}> {{ t('admin_ldap.enable_ldap') }}</label>
+            <label class="form-full"><input type="checkbox" name="ldap_enabled" {% if ldap_settings.enabled %}checked{% endif %}> {{ t('admin_ldap.enable_ldap') }}</label>
             <div>
                 <label for="ldap_host">{{ t('admin_ldap.host') }}</label>
                 <input id="ldap_host" name="ldap_host" value="{{ ldap_settings.host }}">
