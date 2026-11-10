@@ -15,6 +15,8 @@ import db
 import exception_logger
 import i18n
 import ldap_auth
+import timing
+import timing_i18n
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -527,6 +529,18 @@ def user_detail(user_id: int):
     )
 
 
+@app.route("/timing")
+@app.route("/users/<int:user_id>/timing")
+@auth_module.login_required
+def timing_analysis(user_id=None):
+    if user_id is not None and g.user["role"] != "admin" and user_id != g.user["id"]:
+        abort(403)
+    timing_user = db.get_user_by_id(user_id) if user_id is not None else None
+    if user_id is not None and not timing_user:
+        abort(404)
+    return render_template("timing.html", timing_user=timing_user, timing_strings=timing_i18n.MESSAGES[g.locale])
+
+
 @app.route("/settings", methods=["GET", "POST"])
 @auth_module.admin_required
 def settings():
@@ -789,6 +803,61 @@ def api_ingest_task_run():
     task_run = db.upsert_task_run(user["id"], data)
     _log_ingest("task-run", "accepted", user=user, payload=task_run)
     return jsonify({"success": True, "task_run": {"external_task_id": task_run["external_task_id"]}})
+
+
+@app.route("/api/ingest/turn-timing", methods=["POST"])
+def api_ingest_turn_timing():
+    """Upsert completed-turn timing without changing token usage"""
+    user = _hook_user()
+    if not user:
+        return _json_error("Valid hook key is required", 401)
+    try:
+        row = db.upsert_turn_timing(user["id"], request.get_json(silent=True))
+    except ValueError as exc:
+        return _json_error(str(exc), 400)
+    return jsonify({"success": True, "session_id": row["session_id"], "turn_id": row["turn_id"]})
+
+
+@app.route("/api/timing")
+@app.route("/api/users/<int:user_id>/timing")
+@auth_module.login_required
+def api_timing(user_id=None):
+    """Analyze project/session latency, exclusive time and slow tools"""
+    if user_id is None and request.args.get("user_id"):
+        try:
+            user_id = int(request.args["user_id"])
+        except ValueError:
+            return _json_error("Invalid user_id", 400)
+    if g.user["role"] != "admin":
+        if user_id is not None and user_id != g.user["id"]:
+            return _json_error("Forbidden", 403)
+        user_id = g.user["id"]
+    if user_id is not None and not db.get_user_by_id(user_id):
+        return _json_error("User not found", 404)
+    view = request.args.get("view", "summary")
+    if view != "summary" and view not in timing.SORT_FIELDS:
+        return _json_error("Invalid view", 400)
+    order = request.args.get("order", "desc")
+    if order not in {"asc", "desc"}:
+        return _json_error("Invalid sort order", 400)
+    try:
+        page, page_size = int(request.args.get("page", 1)), int(request.args.get("page_size", 15))
+        lower, upper = timing.window_bounds(
+            _requested_user_detail_window(), db._utcnow(),
+            timing.parse_time(request.args["from"]) if "from" in request.args else None,
+            timing.parse_time(request.args["to"]) if "to" in request.args else None,
+        )
+    except (ValueError, TypeError, OverflowError) as exc:
+        return _json_error(str(exc), 400)
+    filters = {**_requested_filters(), **{k: request.args[k].strip() for k in ("project_name", "session_id") if request.args.get(k)}}
+    rows, known = db.get_timing_data(user_id=user_id, lower=lower, upper=upper, filters=filters)
+    report = timing.build_report(rows, lower=lower, upper=upper, known_sessions=known)
+    result = {"success": True, "window": {"from": lower.isoformat() if lower else None, "to": upper.isoformat()},
+              "summary": report["summary"], "histogram": report["histogram"]}
+    if view != "summary":
+        result["table"] = timing.paginate(report[view], view, sort=request.args.get("sort"), order=order,
+                                          page=page, page_size=page_size)
+    return jsonify(result)
 
 
 @app.route("/api/leaderboard")

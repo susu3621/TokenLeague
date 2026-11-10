@@ -568,6 +568,18 @@ def _handle_stop(event_data: dict[str, Any]) -> None:
         _send_api_request("/api/ingest/prompt-event", prompt_event)
     _send_api_request("/api/ingest/task-run", task_run)
 
+    for directory in (Path(__file__).resolve().parent, Path(__file__).resolve().parents[1] / "common"):
+        if (directory / "tokenleague_timing.py").is_file():
+            sys.path.insert(0, str(directory))
+            break
+    from tokenleague_timing import build_turn_timings
+    for timing_payload in build_turn_timings(
+        _load_transcript_entries(event_data.get("transcript_path")), source="claude",
+        session_id=task_run["external_task_id"], project_name=task_run["project_name"],
+        agent_version=task_run["agent_version"], model_name=task_run["model_name"],
+    ):
+        _send_api_request("/api/ingest/turn-timing", timing_payload)
+
 
 def main() -> None:
     """Main entry point for the hook script."""

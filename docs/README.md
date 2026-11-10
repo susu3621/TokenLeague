@@ -7,6 +7,7 @@ TokenLeague helps teams record AI assistant token usage and prompt efficiency, t
 - **[Project Overview](../README_EN.md)** - English introduction, setup, and dashboard positioning
 - **[项目说明（中文）](../README.md)** - 中文首页说明与部署指南
 - **[Hooks Guide](HOOKS.md)** - Configure documented usage ingestion sources
+- **[Time Analysis](TIMING.md)** - Project/session timing, collection, and historical backfill
 
 ## Quick Links
 

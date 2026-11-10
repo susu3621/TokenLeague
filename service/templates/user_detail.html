@@ -81,6 +81,7 @@
 <section class="stack">
     <div class="card">
         <h1 class="hero-title">{{ stats.user.display_name }}</h1>
+        <p><a href="{{ url_for('timing_analysis', user_id=stats.user.id, window=window, **filters) }}">{{ t('timing.title') }} →</a></p>
         <p class="muted" style="margin-top: 10px;">{{ t('user_detail.description', username=stats.user.username, window_label=t('user_detail.window.' ~ window)) }}</p>
 
         <div class="stats-grid">
@@ -185,7 +186,7 @@
                     <td>{{ row.agent_type }}</td>
                     <td>{{ row.agent_version }}</td>
                     <td>{{ row.model_name }}</td>
-                    <td>{{ format_token_count(row.total_token_count) }}</td>
+                    <td data-sort-value="{{ row.total_token_count }}">{{ format_token_count(row.total_token_count) }}</td>
                     <td>{{ "{:,}".format(row.prompt_count) }}</td>
                     <td>{{ "{:,}".format(row.task_count) }}</td>
                 </tr>
@@ -217,7 +218,7 @@
                     <td style="font-family: monospace; font-size: 0.875rem;">{{ row.external_event_id[:16] }}...</td>
                     <td>{{ row.project_name }}</td>
                     <td style="font-family: monospace; font-size: 0.875rem;">{{ row.task_id[:16] }}...</td>
-                    <td>{{ format_token_count(row.total_token_count) }}</td>
+                    <td data-sort-value="{{ row.total_token_count }}">{{ format_token_count(row.total_token_count) }}</td>
                     <td>{{ row.model_name }}</td>
                     <td data-utc-time="{{ row.prompt_finished_at or '' }}">{{ row.prompt_finished_at or '-' }}</td>
                 </tr>
@@ -398,7 +399,7 @@
                 <td>${escapeHtml(row.agent_type)}</td>
                 <td>${escapeHtml(row.agent_version)}</td>
                 <td>${escapeHtml(row.model_name)}</td>
-                <td>${formatTokenCount(row.total_token_count)}</td>
+                <td data-sort-value="${Number(row.total_token_count) || 0}">${formatTokenCount(row.total_token_count)}</td>
                 <td>${formatCount(row.prompt_count)}</td>
                 <td>${formatCount(row.task_count)}</td>
             </tr>
@@ -417,7 +418,7 @@
                 <td style="font-family: monospace; font-size: 0.875rem;">${escapeHtml((row.external_event_id || '').slice(0, 16))}...</td>
                 <td>${escapeHtml(row.project_name)}</td>
                 <td style="font-family: monospace; font-size: 0.875rem;">${escapeHtml((row.task_id || '').slice(0, 16))}...</td>
-                <td>${formatTokenCount(row.total_token_count)}</td>
+                <td data-sort-value="${Number(row.total_token_count) || 0}">${formatTokenCount(row.total_token_count)}</td>
                 <td>${escapeHtml(row.model_name)}</td>
                 <td data-utc-time="${escapeHtml(row.prompt_finished_at || '')}">${escapeHtml(row.prompt_finished_at || '-')}</td>
             </tr>
@@ -443,9 +444,9 @@
             return `
             <tr data-project-name="${escapeHtml(project.project_name)}" class="${isActive ? 'is-active' : ''}">
                 <td>${escapeHtml(project.project_name)}</td>
-                <td>${formatTokenCount(project.total_token_count)}</td>
-                <td>${formatTokenCount(project.input_token_count)}</td>
-                <td>${formatTokenCount(project.output_token_count)}</td>
+                <td data-sort-value="${Number(project.total_token_count) || 0}">${formatTokenCount(project.total_token_count)}</td>
+                <td data-sort-value="${Number(project.input_token_count) || 0}">${formatTokenCount(project.input_token_count)}</td>
+                <td data-sort-value="${Number(project.output_token_count) || 0}">${formatTokenCount(project.output_token_count)}</td>
                 <td>${formatCount(project.prompt_count)}</td>
                 <td>${formatCount(project.task_count)}</td>
             </tr>
@@ -476,9 +477,9 @@
         tbody.innerHTML = models.map(model => `
             <tr>
                 <td>${escapeHtml(model.model_name)}</td>
-                <td>${formatTokenCount(model.total_token_count)}</td>
-                <td>${formatTokenCount(model.input_token_count)}</td>
-                <td>${formatTokenCount(model.output_token_count)}</td>
+                <td data-sort-value="${Number(model.total_token_count) || 0}">${formatTokenCount(model.total_token_count)}</td>
+                <td data-sort-value="${Number(model.input_token_count) || 0}">${formatTokenCount(model.input_token_count)}</td>
+                <td data-sort-value="${Number(model.output_token_count) || 0}">${formatTokenCount(model.output_token_count)}</td>
                 <td>${formatCount(model.prompt_count)}</td>
             </tr>
         `).join('');

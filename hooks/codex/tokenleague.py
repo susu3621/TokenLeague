@@ -698,6 +698,21 @@ def _handle_stop(event_data: dict[str, Any]) -> None:
             if not _send_api_request("/api/ingest/task-run", task_run):
                 return
 
+            # Timing uses a separate identity and never contributes token counts.
+            for directory in (Path(__file__).resolve().parent, Path(__file__).resolve().parents[1] / "common"):
+                if (directory / "tokenleague_timing.py").is_file():
+                    sys.path.insert(0, str(directory))
+                    break
+            from tokenleague_timing import build_turn_timings
+            new_ids = {str(turn["turn_id"]) for turn in unprocessed_turns}
+            for timing_payload in build_turn_timings(
+                entries, source="codex", session_id=session_id, project_name=project_name,
+                agent_version=agent_version, model_name=model_name,
+            ):
+                if timing_payload["turn_id"] in new_ids:
+                    if not _send_api_request("/api/ingest/turn-timing", timing_payload):
+                        return
+
             session_state["processed_turn_ids"] = [
                 *session_state["processed_turn_ids"],
                 *[str(turn["turn_id"]) for turn in unprocessed_turns],

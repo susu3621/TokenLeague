@@ -156,6 +156,7 @@ _memory_settings: dict[str, str] = {}
 _memory_prompt_events: list[dict[str, Any]] = []
 _memory_task_runs: list[dict[str, Any]] = []
 _memory_leaderboard_snapshots: dict[str, dict[str, Any]] = {}
+_memory_turn_timings: dict[tuple, dict[str, Any]] = {}
 
 
 def reset_in_memory_state() -> None:
@@ -168,6 +169,7 @@ def reset_in_memory_state() -> None:
     _memory_prompt_events = []
     _memory_task_runs = []
     _memory_leaderboard_snapshots = {}
+    _memory_turn_timings.clear()
 
 
 reset_in_memory_state()
@@ -1476,3 +1478,76 @@ def get_user_time_series(
         ]
     result.sort(key=lambda item: item["time_bucket"])
     return result
+
+
+def upsert_turn_timing(user_id: int, payload: dict[str, Any]):
+    import timing
+
+    row = {"user_id": user_id, **timing.normalize(payload)}
+    identity = (user_id, row["agent_type"], row["session_id"], row["turn_id"])
+    if use_in_memory_store():
+        _memory_turn_timings[identity] = row
+        return row
+    fields = ("user_id", "session_id", "turn_id", "project_name", "agent_type", "agent_version", "model_name",
+              "started_at", "finished_at", "duration_ms", "time_to_first_token_ms", "timing_source", "tool_status")
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO turn_timings (
+                    user_id, session_id, turn_id, project_name, agent_type, agent_version, model_name,
+                    started_at, finished_at, duration_ms, time_to_first_token_ms, timing_source, tool_status, details_json
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (user_id, agent_type, session_id, turn_id) DO UPDATE SET
+                    project_name = EXCLUDED.project_name, agent_version = EXCLUDED.agent_version,
+                    model_name = EXCLUDED.model_name, started_at = EXCLUDED.started_at,
+                    finished_at = EXCLUDED.finished_at, duration_ms = EXCLUDED.duration_ms,
+                    time_to_first_token_ms = EXCLUDED.time_to_first_token_ms,
+                    timing_source = EXCLUDED.timing_source, tool_status = EXCLUDED.tool_status,
+                    details_json = EXCLUDED.details_json, updated_at = NOW()
+            """, (*[row[field] for field in fields], Json({"tools": row["tools"], "model_blocks": row["model_blocks"]})))
+    return row
+
+
+def get_timing_data(*, user_id=None, lower=None, upper=None, filters=None):
+    """Push ownership, interval and dimension filters into SQL before analysis."""
+    filters = filters or {}
+    upper = upper or _utcnow()
+    if use_in_memory_store():
+        def matches(row, start_field, end_field, *, session_field):
+            start, end = _parse_datetime(row.get(start_field)), _parse_datetime(row.get(end_field))
+            return (start is not None and end is not None and start < upper
+                    and (lower is None or end > lower or start == end == lower)
+                    and (user_id is None or row["user_id"] == user_id)
+                    and all(row.get(session_field if key == "session_id" else key) == value for key, value in filters.items() if value))
+        rows = [dict(row) for row in _memory_turn_timings.values() if matches(row, "started_at", "finished_at", session_field="session_id")]
+        known = {(r["user_id"], r["agent_type"], r["external_task_id"]) for r in _memory_task_runs if matches(r, "started_at", "finished_at", session_field="external_task_id")}
+        return rows, known
+
+    clauses, params = ["started_at < %s"], [upper]
+    task_clauses, task_params = ["started_at < %s"], [upper.replace(tzinfo=None)]
+    if lower is not None:
+        clauses.append("(finished_at > %s OR (started_at = finished_at AND finished_at = %s))")
+        params.extend((lower, lower))
+        task_clauses.append("(finished_at > %s OR (started_at = finished_at AND finished_at = %s))")
+        task_params.extend((lower.replace(tzinfo=None), lower.replace(tzinfo=None)))
+    if user_id is not None:
+        clauses.append("user_id = %s")
+        params.append(user_id)
+        task_clauses.append("user_id = %s")
+        task_params.append(user_id)
+    for field in ("project_name", "session_id", "agent_type", "agent_version", "model_name"):
+        if filters.get(field):
+            clauses.append(f"{field} = %s")
+            params.append(filters[field])
+            task_clauses.append(f"{'external_task_id' if field == 'session_id' else field} = %s")
+            task_params.append(filters[field])
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT user_id, session_id, turn_id, project_name, agent_type, agent_version, model_name, started_at, finished_at, duration_ms, time_to_first_token_ms, timing_source, tool_status, details_json FROM turn_timings WHERE " + " AND ".join(clauses), params)
+            rows = cursor.fetchall()
+            for row in rows:
+                details = _decode_json_value(row.pop("details_json"), {})
+                row["tools"], row["model_blocks"] = details.get("tools", []), details.get("model_blocks", [])
+            cursor.execute("SELECT DISTINCT user_id, agent_type, external_task_id FROM task_runs WHERE " + " AND ".join(task_clauses), task_params)
+            known = {(r["user_id"], r["agent_type"], r["external_task_id"]) for r in cursor.fetchall()}
+    return rows, known

@@ -939,6 +939,7 @@ install_claude_hooks() {
 
     # Copy hook script
     cp "$HOOKS_SOURCE_DIR/claude/tokenleague.py" "$target_dir/hooks/tokenleague.py"
+    cp "$HOOKS_SOURCE_DIR/common/tokenleague_timing.py" "$target_dir/hooks/tokenleague_timing.py"
     chmod +x "$target_dir/hooks/tokenleague.py"
 
     # Copy env example
@@ -1134,6 +1135,7 @@ install_codex_hooks() {
 
     # Copy hook script
     cp "$HOOKS_SOURCE_DIR/codex/tokenleague.py" "$target_dir/hooks/tokenleague.py"
+    cp "$HOOKS_SOURCE_DIR/common/tokenleague_timing.py" "$target_dir/hooks/tokenleague_timing.py"
     chmod +x "$target_dir/hooks/tokenleague.py"
 
     # Copy env example
@@ -1328,6 +1330,8 @@ uninstall_claude_hooks() {
 
     echo -e "${YELLOW}Uninstalling Claude Code hooks from: $target_dir${NC}"
 
+    rm -f "$target_dir/hooks/tokenleague_timing.py"
+
     # Remove hook script
     if [[ -f "$target_dir/hooks/tokenleague.py" ]]; then
         rm -f "$target_dir/hooks/tokenleague.py"
@@ -1358,6 +1362,8 @@ uninstall_codex_hooks() {
     fi
 
     echo -e "${YELLOW}Uninstalling Codex CLI hooks from: $target_dir${NC}"
+
+    rm -f "$target_dir/hooks/tokenleague_timing.py"
 
     # Remove hook script
     if [[ -f "$target_dir/hooks/tokenleague.py" ]]; then

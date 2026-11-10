@@ -37,6 +37,8 @@
 
         .topbar {
             display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
             justify-content: space-between;
             align-items: center;
             padding: 14px 20px;
@@ -52,12 +54,14 @@
 
         .nav {
             display: flex;
+            flex-wrap: wrap;
             gap: 10px;
             align-items: center;
         }
 
         .topbar-actions {
             display: flex;
+            flex-wrap: wrap;
             gap: 12px;
             align-items: center;
         }
@@ -222,6 +226,7 @@
             border-bottom: 1px solid var(--border);
         }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='table-controls.css') }}">
     {% block styles %}{% endblock %}
 </head>
 <body>
@@ -253,6 +258,7 @@
                 {% if g.user %}
                 <div class="nav">
                     <a href="{{ url_for('leaderboard') }}">{{ t('nav.leaderboard') }}</a>
+                    <a href="{{ url_for('timing_analysis') }}">{{ t('timing.title') }}</a>
                     <a href="{{ url_for('docs_page') }}">{{ t('nav.docs') }}</a>
                     <details class="nav-menu">
                         <summary>
@@ -281,6 +287,7 @@
             {% block content %}{% endblock %}
         </main>
     </div>
+    <script src="{{ url_for('static', filename='table-controls.js') }}" defer></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

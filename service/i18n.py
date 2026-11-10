@@ -434,6 +434,11 @@ MESSAGES = {
 }
 
 
+from timing_i18n import MESSAGES as TIMING_MESSAGES
+for _locale, _messages in TIMING_MESSAGES.items():
+    MESSAGES[_locale].update({f"timing.{key}": value for key, value in _messages.items()})
+
+
 def normalize_locale_preference(value: str | None) -> str | None:
     text = (value or "").strip()
     return text if text in SUPPORTED_LOCALES else None

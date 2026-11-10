@@ -1,4 +1,6 @@
 # TokenLeague
+
+Project/session time analysis is available at `/timing`: duration distributions, P50/P95, recorded TTFT, effective parallelism, tool bottlenecks, and slow turns. Codex / Claude hooks and independent historical timing backfill are supported. See the [time analysis guide](docs/TIMING.md).
 > Team-level AI token analytics and agent ingestion dashboard
 
 <div align="center">

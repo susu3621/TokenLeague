@@ -129,7 +129,11 @@ def test_handle_stop_parses_transcript_and_uploads_prompt_and_task_usage(tmp_pat
         }
     )
 
-    assert uploads == [
+    timing_uploads = [data for endpoint, data in uploads if endpoint == "/api/ingest/turn-timing"]
+    assert len(timing_uploads) == 1
+    assert timing_uploads[0]["duration_ms"] == 19027
+    assert timing_uploads[0]["time_to_first_token_ms"] is None
+    assert [item for item in uploads if item[0] != "/api/ingest/turn-timing"] == [
         (
             "/api/ingest/prompt-event",
             {

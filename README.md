@@ -51,7 +51,9 @@ TokenLeague 为工程团队提供一个统一的 AI 编码助手使用观测面�
 ## 能力概览
 
 - 仪表盘视图：预计算排行榜、用户详情页、账户设置、管理后台、站内文档
+- 表格交互：统计与管理表格支持点击表头排序、页数提示、上一页 / 下一页和直接跳页
 - 效率指标：Token 时间线、Prompt 次数、平均每次 Prompt Token、项目分布、模型分布
+- 耗时分析：项目 / 会话下钻、轮次分布与 P50/P95、首 Token 延迟、有效并发度、工具瓶颈与慢轮次；支持 Codex / Claude 采集与独立历史补录，详见 [耗时分析指南](docs/TIMING.zh-CN.md)
 - 团队运维：hook key 轮换、本地密码修改、LDAP 配置、已观测 Agent 目录、双语界面
 - 集成能力：内置 Claude Code、Codex CLI、Workbuddy / CodeBuddy CLI、Gemini CLI、OpenClaw 的模板与安装流程
 - 恢复能力：支持对 Claude Code 和 Codex 的历史记录进行补录
@@ -93,6 +95,7 @@ Flask 应用 + PostgreSQL
 
 - `/leaderboard`：默认预计算排行榜，查看整体排名
 - `/users/<id>`：单个用户的项目、模型和时间线分析页
+- `/timing`：项目与会话耗时分布、工具瓶颈和慢轮次分析
 - `/account`：个人 hook key 轮换与密码管理
 - `/admin/users`：用户创建、禁用/启用和 hook key 轮换
 - `/admin/ldap`：LDAP 配置、连通性测试和目录同步

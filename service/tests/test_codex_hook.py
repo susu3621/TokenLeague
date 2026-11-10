@@ -104,6 +104,8 @@ def test_install_script_can_install_codex_hooks_globally(tmp_path):
 
     assert result.returncode == 0, result.stderr
 
+    assert (home_dir / ".codex" / "hooks" / "tokenleague_timing.py").is_file()
+
     hooks_config_path = home_dir / ".codex" / "hooks.json"
     payload = json.loads(hooks_config_path.read_text(encoding="utf-8"))
 
@@ -215,7 +217,10 @@ def test_handle_stop_uploads_latest_completed_turn_and_accumulates_task_run(tmp_
         }
     )
 
-    assert uploads == [
+    timing_uploads = [data for endpoint, data in uploads if endpoint == "/api/ingest/turn-timing"]
+    assert [data["turn_id"] for data in timing_uploads] == ["turn-2"]
+    assert timing_uploads[0]["duration_ms"] == 14000
+    assert [item for item in uploads if item[0] != "/api/ingest/turn-timing"] == [
         (
             "/api/ingest/prompt-event",
             {
@@ -293,7 +298,7 @@ def test_handle_stop_uploads_latest_completed_turn_and_accumulates_task_run(tmp_
         }
     )
 
-    assert uploads == [
+    assert [item for item in uploads if item[0] != "/api/ingest/turn-timing"] == [
         (
             "/api/ingest/prompt-event",
             {
