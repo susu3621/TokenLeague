@@ -102,6 +102,13 @@ def main(argv: list[str] | None = None) -> int:
     if not args.dry_run and not backfill_common.ensure_upload_env():
         print("Missing TOKENLEAGUE_HOOK_KEY")
         return 1
+    if not args.dry_run:
+        api_url = hook._get_api_url()
+        retry_url = hook._build_private_ip_retry_url(api_url)
+        upload_ready, error_message = backfill_common.ensure_upload_ready(api_url, retry_url=retry_url)
+        if not upload_ready:
+            print(error_message)
+            return 1
 
     if not root.exists():
         backfill_common.print_summary(summary, dry_run=args.dry_run)

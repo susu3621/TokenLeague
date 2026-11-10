@@ -9,6 +9,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import os
 from typing import Any, Callable
+import urllib.error
+import urllib.request
 
 
 @dataclass
@@ -73,6 +75,48 @@ def build_parser(default_root: Path, description: str) -> argparse.ArgumentParse
 
 def ensure_upload_env() -> bool:
     return bool((os.getenv("TOKENLEAGUE_HOOK_KEY") or "").strip())
+
+
+def _probe_url(url: str, timeout_seconds: float = 5.0) -> int:
+    request = urllib.request.Request(url, method="GET")
+    with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+        return int(response.status)
+
+
+def _format_probe_error(exc: Exception) -> str:
+    if isinstance(exc, urllib.error.HTTPError):
+        return f"HTTP {exc.code} {exc.reason}"
+    return str(exc)
+
+
+def ensure_upload_ready(api_url: str, retry_url: str | None = None) -> tuple[bool, str | None]:
+    candidate_urls: list[str] = []
+    for url in (api_url, retry_url):
+        normalized = str(url or "").rstrip("/")
+        if normalized and normalized not in candidate_urls:
+            candidate_urls.append(normalized)
+
+    if not candidate_urls:
+        return False, "Cannot reach TokenLeague API: missing API URL."
+
+    last_error = "unknown error"
+    for candidate_url in candidate_urls:
+        health_url = f"{candidate_url}/health"
+        try:
+            status = _probe_url(health_url)
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+            last_error = _format_probe_error(exc)
+            continue
+        if 200 <= status < 300:
+            return True, None
+        last_error = f"HTTP {status}"
+
+    primary_url = candidate_urls[0]
+    return (
+        False,
+        "Cannot reach TokenLeague API at "
+        f"{primary_url}: {last_error}. Check TOKENLEAGUE_API_URL or start the service, then retry.",
+    )
 
 
 def modified_within_days(path: Path, *, days: int, now: datetime | None = None) -> bool:

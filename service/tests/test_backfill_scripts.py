@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import time
+import urllib.error
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -164,6 +165,8 @@ def test_backfill_uploads_prompt_events_before_task_run(tmp_path, monkeypatch):
     module = _load_module("tokenleague_backfill_codex_upload", CODEX_SCRIPT_PATH)
     uploads: list[tuple[str, str]] = []
 
+    monkeypatch.setattr(module.backfill_common, "ensure_upload_ready", lambda api_url, retry_url=None: (True, None))
+
     def fake_send_request(endpoint: str, payload: dict) -> bool:
         payload_id = payload.get("external_event_id") or payload.get("external_task_id") or ""
         uploads.append((endpoint, str(payload_id)))
@@ -178,6 +181,39 @@ def test_backfill_uploads_prompt_events_before_task_run(tmp_path, monkeypatch):
         ("/api/ingest/prompt-event", "session-1:turn:turn-1"),
         ("/api/ingest/task-run", "session-1"),
     ]
+
+
+def test_codex_upload_exits_early_when_api_is_unreachable(tmp_path, monkeypatch, capsys):
+    home_dir = tmp_path / "home"
+    transcript_path = (
+        home_dir
+        / ".codex"
+        / "sessions"
+        / "2026"
+        / "03"
+        / "27"
+        / "rollout-2026-03-27T08-00-00-session-1.jsonl"
+    )
+    _write_jsonl(transcript_path, _codex_entries())
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("TOKENLEAGUE_HOOK_KEY", "hook-key")
+    monkeypatch.setenv("TOKENLEAGUE_API_URL", "http://192.168.9.11:5006")
+
+    module = _load_module("tokenleague_backfill_codex_unreachable", CODEX_SCRIPT_PATH)
+    monkeypatch.setattr(
+        module.backfill_common,
+        "_probe_url",
+        lambda url, timeout_seconds=5.0: (_ for _ in ()).throw(urllib.error.URLError("No route to host")),
+    )
+
+    exit_code = module.main([])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "Cannot reach TokenLeague API" in captured.out
+    assert "http://192.168.9.11:5006" in captured.out
+    assert "No route to host" in captured.out
+    assert "Scanned files:" not in captured.out
 
 
 def test_codex_days_filter_only_processes_recent_files(tmp_path, monkeypatch, capsys):
@@ -239,6 +275,8 @@ def test_claude_backfill_skips_subagent_transcripts(tmp_path, monkeypatch):
     module = _load_module("tokenleague_backfill_claude", CLAUDE_SCRIPT_PATH)
     uploads: list[tuple[str, str]] = []
 
+    monkeypatch.setattr(module.backfill_common, "ensure_upload_ready", lambda api_url, retry_url=None: (True, None))
+
     def fake_send_request(endpoint: str, payload: dict) -> bool:
         payload_id = payload.get("external_event_id") or payload.get("external_task_id") or ""
         uploads.append((endpoint, str(payload_id)))
@@ -279,6 +317,8 @@ def test_claude_days_filter_only_processes_recent_files(tmp_path, monkeypatch):
 
     module = _load_module("tokenleague_backfill_claude_days", CLAUDE_SCRIPT_PATH)
     uploads: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(module.backfill_common, "ensure_upload_ready", lambda api_url, retry_url=None: (True, None))
 
     def fake_send_request(endpoint: str, payload: dict) -> bool:
         payload_id = payload.get("external_event_id") or payload.get("external_task_id") or ""
