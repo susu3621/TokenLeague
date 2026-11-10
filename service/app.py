@@ -994,4 +994,5 @@ def docs_page(filepath: str = "README.md"):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5006")), debug=True)
+    debug = os.getenv("FLASK_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5006")), debug=debug)

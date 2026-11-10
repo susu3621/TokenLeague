@@ -1,7 +1,26 @@
 from pathlib import Path
+import re
+import runpy
+import subprocess
+
+import pytest
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.mark.parametrize("debug_value,expected", [(None, False), ("1", True)])
+def test_application_startup_requires_explicit_debug_opt_in(monkeypatch, debug_value, expected):
+    from flask import Flask
+
+    if debug_value is None:
+        monkeypatch.delenv("FLASK_DEBUG", raising=False)
+    else:
+        monkeypatch.setenv("FLASK_DEBUG", debug_value)
+    called = {}
+    monkeypatch.setattr(Flask, "run", lambda self, **options: called.update(options))
+    runpy.run_path(str(PROJECT_ROOT / "service" / "app.py"), run_name="__main__")
+    assert called["debug"] is expected
 
 
 def test_deploy_script_targets_tokenleague_defaults():
@@ -60,6 +79,31 @@ def test_deploy_preserves_runtime_env_and_postgres_data():
     assert "--exclude='.env.*'" in content
     assert "--exclude='data/'" in content
     assert "mkdir -p data/postgres" in content
+
+
+@pytest.mark.parametrize("git_is_file", [True, False])
+def test_deploy_excludes_preserve_git_files_and_directories(tmp_path, git_is_file):
+    source, target = tmp_path / "source", tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    marker = target / ".git"
+    if git_is_file:
+        marker.write_text("gitdir: /private/worktree/git-metadata\n")
+    else:
+        marker.mkdir()
+        (marker / "config").write_text("existing metadata\n")
+    (source / "application.py").write_text("deployed code\n")
+    (target / ".env").write_text("PRESERVE_ME=1\n")
+    (target / "data").mkdir()
+    (target / "data" / "preserve").write_text("existing data\n")
+    script = (PROJECT_ROOT / "deploy.sh").read_text(encoding="utf-8")
+    excludes = [f"--exclude={value}" for value in re.findall(r"--exclude='([^']+)'", script)]
+    subprocess.run(["rsync", "-rlt", "--delete", *excludes, f"{source}/", f"{target}/"], check=True, capture_output=True)
+    assert marker.exists()
+    assert (marker.read_text() if git_is_file else (marker / "config").read_text()).strip()
+    assert (target / ".env").read_text() == "PRESERVE_ME=1\n"
+    assert (target / "data" / "preserve").read_text() == "existing data\n"
+    assert (target / "application.py").read_text() == "deployed code\n"
 
 
 def test_project_name_schema_assets_exist():

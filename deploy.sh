@@ -145,7 +145,7 @@ run_rsync() {
     --no-group --no-owner
     --exclude='__pycache__/'
     --exclude='*.pyc'
-    --exclude='.git/'
+    --exclude='.git'
     --exclude='.env'
     --exclude='.env.*'
     --exclude='data/'
