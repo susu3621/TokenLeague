@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -r /app/service/requirements.txt
 COPY service/ /app/service/
 COPY scripts/ /app/scripts/
 COPY docs/ /app/docs/
+COPY README.md README_EN.md /app/
 
 ENV PYTHONPATH="/app/service"
 EXPOSE 5006
