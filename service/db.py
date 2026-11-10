@@ -1486,6 +1486,9 @@ def upsert_turn_timing(user_id: int, payload: dict[str, Any]):
     row = {"user_id": user_id, **timing.normalize(payload)}
     identity = (user_id, row["agent_type"], row["session_id"], row["turn_id"])
     if use_in_memory_store():
+        existing = _memory_turn_timings.get(identity)
+        if existing and existing.get("parser_version", 1) > row["parser_version"]:
+            return existing
         _memory_turn_timings[identity] = row
         return row
     fields = ("user_id", "session_id", "turn_id", "project_name", "agent_type", "agent_version", "model_name",
@@ -1504,7 +1507,9 @@ def upsert_turn_timing(user_id: int, payload: dict[str, Any]):
                     time_to_first_token_ms = EXCLUDED.time_to_first_token_ms,
                     timing_source = EXCLUDED.timing_source, tool_status = EXCLUDED.tool_status,
                     details_json = EXCLUDED.details_json, updated_at = NOW()
-            """, (*[row[field] for field in fields], Json({"tools": row["tools"], "model_blocks": row["model_blocks"]})))
+                WHERE COALESCE((EXCLUDED.details_json->>'parser_version')::integer, 1)
+                    >= COALESCE((turn_timings.details_json->>'parser_version')::integer, 1)
+            """, (*[row[field] for field in fields], Json({"tools": row["tools"], "model_blocks": row["model_blocks"], "parser_version": row["parser_version"]})))
     return row
 
 
@@ -1548,6 +1553,7 @@ def get_timing_data(*, user_id=None, lower=None, upper=None, filters=None):
             for row in rows:
                 details = _decode_json_value(row.pop("details_json"), {})
                 row["tools"], row["model_blocks"] = details.get("tools", []), details.get("model_blocks", [])
+                row["parser_version"] = details.get("parser_version", 1)
             cursor.execute("SELECT DISTINCT user_id, agent_type, external_task_id FROM task_runs WHERE " + " AND ".join(task_clauses), task_params)
             known = {(r["user_id"], r["agent_type"], r["external_task_id"]) for r in cursor.fetchall()}
     return rows, known

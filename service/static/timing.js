@@ -94,7 +94,10 @@
         });
         $('#timing-metrics').replaceChildren(...metricNodes);
         $('#timing-coverage').textContent = text('coverage_note', {measured: s.session_count, observed: s.observed_session_count, missing: s.unmeasured_session_count});
-        $('#timing-tools-coverage').textContent = text('tools_coverage', {count: s.tool_measured_turns, total: s.turn_count});
+        $('#timing-tools-coverage').textContent = text('tools_coverage', {
+            observed: s.tool_observed_turns, count: s.tool_measured_turns,
+            partial: s.tool_incomplete_turns, total: s.turn_count,
+        }) + (s.legacy_codex_turns ? ` ${text('legacy_codex_note', {count: s.legacy_codex_turns})}` : '');
         renderHistogram(result.histogram);
         const byKind = new Map();
         for (const row of s.breakdown) {

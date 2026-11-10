@@ -51,6 +51,136 @@ def test_codex_prefers_recorded_latency_and_does_not_invent_tool_time_or_ttft():
     assert rows[1]["duration_ms"] == 0 and rows[1]["time_to_first_token_ms"] is None
 
 
+def native_item(item_type, start, end, *, turn_id="a", item_id="item-1", **extra):
+    return event("item_completed", end, turn_id=turn_id,
+                 started_at_ms=round((NOW + timedelta(seconds=start)).timestamp() * 1000),
+                 completed_at_ms=round((NOW + timedelta(seconds=end)).timestamp() * 1000),
+                 item={"type": item_type, "id": item_id, **extra})
+
+
+def response_item(kind, at, **extra):
+    return {"type": "response_item", "timestamp": iso(at), "payload": {"type": kind, **extra}}
+
+
+def test_codex_native_activity_fills_the_breakdown_without_double_counting_wrappers():
+    command = native_item("CommandExecution", -96, -90, item_id="cmd",
+                          command=["bash", "-lc", "pytest /secret/path"], status="Completed")
+    entries = [event("task_started", -100, turn_id="a"),
+               native_item("UserMessage", -100, -100, item_id="user", content="private prompt"),
+               native_item("AgentMessage", -99, -98, item_id="msg", content="private text"),
+               response_item("custom_tool_call", -97, call_id="wrapper", name="exec", input="private command"),
+               command, command,
+               native_item("Reasoning", -89, -89, item_id="reason", raw_content="private thought"),
+               native_item("Extension", -95, -85, item_id="sleep", kind="clock.sleep"),
+               response_item("custom_tool_call_output", -84, call_id="wrapper", output="private output"),
+               native_item("AgentMessage", -83, -80, item_id="final", content="private answer"),
+               native_item("ContextCompaction", -80, -79, item_id="compact"),
+               event("task_complete", -78, turn_id="a", duration_ms=22000)]
+    rows = build_turn_timings(entries, source="codex", session_id="s", project_name="p")
+    assert len(rows) == 1 and rows[0]["parser_version"] == 2
+    assert rows[0]["tool_status"] == "measured"
+    assert len(rows[0]["tools"]) == 3
+    assert all(word not in json.dumps(rows) for word in ("private", "/secret", "pytest"))
+    report = timing.build_report([{"user_id": 1, **timing.normalize(rows[0])}], upper=NOW)
+    summary = report["summary"]
+    assert summary["tool_observed_turns"] == 1 and summary["legacy_codex_turns"] == 0
+    assert sum(s["duration_ms"] for s in summary["breakdown"]) == 22000
+    tools = {tool["tool"]: tool for tool in report["tools"]}
+    assert tools["exec_command"]["call_count"] == 1
+    assert tools["exec_command"]["exclusive_ms"] == 3500
+    assert tools["clock.sleep"]["exclusive_ms"] == 7500
+    assert tools["exec"]["exclusive_ms"] == 2000
+    assert next(s for s in summary["breakdown"] if s["kind"] == "compaction")["duration_ms"] == 1000
+    assert next(s for s in summary["breakdown"] if s["kind"] == "unobserved")["duration_ms"] == 1000
+
+
+def test_codex_native_mcp_and_raw_call_are_one_call():
+    entries = [event("task_started", -100, turn_id="a"),
+               response_item("function_call", -98, call_id="call-1", name="js", namespace="mcp__browser", arguments='{"private":"arguments"}'),
+               native_item("McpToolCall", -97, -93, item_id="call-1", server="browser", tool="js", arguments={"private": "arguments"}),
+               response_item("function_call_output", -92, call_id="call-1", output="private output"),
+               event("task_complete", -90, turn_id="a")]
+    row = build_turn_timings(entries, source="codex", session_id="s", project_name="p")[0]
+    assert len(row["tools"]) == 1
+    assert row["tools"][0]["source"] == "recorded" and row["tools"][0]["tool"] == "browser.js"
+
+
+def test_codex_legacy_pairs_call_ids_without_reading_tool_output_text():
+    entries = [event("task_started", -100, turn_id="a"),
+               response_item("reasoning", -98, id="r", summary="private thought"),
+               response_item("function_call", -97, call_id="call-1", name="exec_command", arguments='{"cmd":"cargo test /secret/path"}'),
+               response_item("function_call_output", -90, call_id="call-1", output=[{"text": "Wall time: 999999 seconds. private output"}]),
+               response_item("message", -85, role="assistant", content="private answer"),
+               event("task_complete", -84, turn_id="a")]
+    row = build_turn_timings(entries, source="codex", session_id="s", project_name="p")[0]
+    assert row["tools"][0]["source"] == "paired"
+    assert row["tools"][0]["started_at"] == iso(-97)
+    assert row["tools"][0]["finished_at"] == iso(-90)
+    assert row["tools"][0]["kind"] == "test"
+    assert all(span["source"] == "estimated" for span in row["model_blocks"])
+    assert "private" not in json.dumps(row)
+
+
+def test_codex_unmatched_call_is_partial_and_unfinished_turn_is_excluded():
+    entries = [event("task_started", -100, turn_id="a"),
+               response_item("function_call", -95, call_id="missing", name="exec_command", arguments="{}"),
+               event("task_complete", -90, turn_id="a"),
+               event("task_started", -85, turn_id="unfinished"),
+               native_item("Extension", -80, -70, turn_id="unfinished", kind="clock.sleep")]
+    rows = build_turn_timings(entries, source="codex", session_id="s", project_name="p")
+    assert len(rows) == 1 and rows[0]["tool_status"] == "incomplete"
+    assert rows[0]["tools"] == []
+
+
+def test_codex_native_rust_duration_fallback_and_clipping():
+    item = event("item_completed", -90, turn_id="a", item={"type": "CommandExecution", "id": "cmd", "command": ["rg", "test"],
+                 "parsed_cmd": [{"type": "Search"}], "duration": {"secs": 20, "nanos": 500000000}})
+    row = build_turn_timings([event("task_started", -100, turn_id="a"), item, event("task_complete", -80, turn_id="a")],
+                            source="codex", session_id="s", project_name="p")[0]
+    assert row["tools"][0]["started_at"] == iso(-100)
+    assert row["tools"][0]["kind"] == "search_read"
+    timing.normalize(row)
+
+
+def test_estimated_model_gaps_cannot_take_time_away_from_measured_tools():
+    row = {"user_id": 1, **timing.normalize(payload(
+        tools=[{**span("build", -100, -80, tool="native"), "source": "recorded"},
+               {**span("orchestration", -100, -80, tool="wrapper"), "source": "paired"}],
+        model_blocks=[{**span("thinking", -100, -80), "source": "estimated"}],
+    ))}
+    report = timing.build_report([row], upper=NOW)
+    assert next(t for t in report["tools"] if t["tool"] == "native")["exclusive_ms"] == 20000
+    assert next(t for t in report["tools"] if t["tool"] == "wrapper")["exclusive_ms"] == 0
+    assert report["summary"]["agent_ms"] == 20000
+
+
+def test_old_parser_replay_cannot_erase_enriched_timing():
+    enriched = payload(parser_version=2, tool_status="measured", tools=[{**span("build", -100, -80, tool="native"), "source": "recorded"}])
+    db.upsert_turn_timing(1, enriched)
+    db.upsert_turn_timing(1, payload())
+    rows, _ = db.get_timing_data(upper=NOW)
+    assert len(rows) == 1 and rows[0]["parser_version"] == 2 and len(rows[0]["tools"]) == 1
+
+
+def test_later_human_message_does_not_become_estimated_model_time():
+    entries = [event("task_started", -100, turn_id="a"),
+               native_item("UserMessage", -100, -100, item_id="u1"),
+               native_item("AgentMessage", -99, -98, item_id="m1"),
+               native_item("UserMessage", -10, -10, item_id="u2"),
+               native_item("Reasoning", -9, -9, item_id="r"),
+               event("task_complete", -8, turn_id="a")]
+    row = build_turn_timings(entries, source="codex", session_id="s", project_name="p")[0]
+    report = timing.build_report([{"user_id": 1, **timing.normalize(row)}], upper=NOW)
+    unknown = next(s for s in report["summary"]["breakdown"] if s["kind"] == "unobserved")
+    assert unknown["duration_ms"] == 89000  # human gap plus the final unrecorded second
+
+
+@pytest.mark.parametrize("change", [{"parser_version": True}, {"parser_version": 0}, {"tools": [{**span("build", -100, -90, tool="x"), "source": "invented"}]}])
+def test_invalid_activity_metadata_is_rejected(change):
+    with pytest.raises(ValueError):
+        timing.normalize(payload(**change))
+
+
 def claude_fixture():
     return [
         {"type": "user", "uuid": "prompt-1", "timestamp": iso(-100), "message": {"content": "private prompt"}},
@@ -231,3 +361,18 @@ def test_timing_backfill_uses_stable_ids_and_touches_no_usage(tmp_path, monkeypa
         assert module.main(["--source", "claude", "--claude-root", str(tmp_path)]) == 0
     assert len(db._memory_turn_timings) == 1
     assert db._memory_prompt_events == [] and db._memory_task_runs == []
+
+
+def test_timing_backfill_project_filter_does_not_upload_other_projects(tmp_path, monkeypatch):
+    spec = importlib.util.spec_from_file_location("backfill_timing_filtered", ROOT / "scripts" / "backfill_timing.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    for name in ("target", "unrelated"):
+        (tmp_path / f"{name}.jsonl").write_text("{}")
+    monkeypatch.setenv("TOKENLEAGUE_HOOK_KEY", "test-only")
+    uploads = []
+    hook = type("Hook", (), {"_send_api_request": staticmethod(lambda endpoint, row: uploads.append(row) or True)})()
+    monkeypatch.setattr(module, "load_hook", lambda source: hook)
+    monkeypatch.setattr(module, "session_timings", lambda path, source, hook: [payload(project=path.stem)])
+    assert module.main(["--source", "claude", "--claude-root", str(tmp_path), "--project-name", "target"]) == 0
+    assert [row["project_name"] for row in uploads] == ["target"]

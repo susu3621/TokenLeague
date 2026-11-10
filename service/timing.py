@@ -7,8 +7,8 @@ import math
 
 
 TOOL_KINDS = {"test", "build", "lint", "web", "version_control", "wait", "search_read",
-              "user_input", "subagent", "mcp", "edit", "shell", "other"}
-MODEL_KINDS = {"thinking", "text", "tool_writing"}
+              "user_input", "subagent", "mcp", "edit", "shell", "other", "orchestration"}
+MODEL_KINDS = {"thinking", "text", "tool_writing", "response_wait", "compaction"}
 BUCKETS = (1000, 5000, 15000, 30000, 60000, 300000, 900000)
 
 
@@ -24,6 +24,10 @@ def normalize(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("Expected a JSON object")
     row = {}
+    version = payload.get("parser_version", 1)
+    if isinstance(version, bool) or not isinstance(version, int) or not 1 <= version <= 1000:
+        raise ValueError("parser_version must be a positive integer")
+    row["parser_version"] = version
     for field, limit in (("session_id", 255), ("turn_id", 255), ("project_name", 255),
                          ("agent_type", 64), ("agent_version", 128), ("model_name", 128)):
         value = payload.get(field)
@@ -68,6 +72,10 @@ def normalize(payload: dict) -> dict:
             if end < start or start < row["started_at"] or end > row["finished_at"]:
                 raise ValueError(f"{field} interval is outside the turn")
             span = {"kind": item["kind"], "started_at": start.isoformat(), "finished_at": end.isoformat()}
+            if "source" in item:
+                if item["source"] not in {"recorded", "paired", "estimated"}:
+                    raise ValueError(f"Invalid {field} timing source")
+                span["source"] = item["source"]
             if field == "tools":
                 if not isinstance(item.get("tool"), str) or not 0 < len(item["tool"]) <= 160:
                     raise ValueError("Invalid tool name")
@@ -114,7 +122,7 @@ def statistics(values):
 
 
 def _exclusive_breakdown(row, lower, upper):
-    """Model blocks take precedence; parallel tools share the remaining time.
+    """Measured activity precedes model-gap estimates and wrapper fallbacks.
 
     A sweep makes the exclusive slices add up exactly to agent time, even when
     tool intervals overlap. Tool call latency is kept separately in tool rows.
@@ -128,7 +136,7 @@ def _exclusive_breakdown(row, lower, upper):
             a, b = max(start, parse_time(span["started_at"])), min(end, parse_time(span["finished_at"]))
             if b > a:
                 identity = (family, index)
-                value = (family, span["kind"], span.get("tool", ""))
+                value = (family, span["kind"], span.get("tool", ""), span.get("source", "legacy"))
                 events[a].append((True, identity, value))
                 events[b].append((False, identity, value))
     active = {}
@@ -136,11 +144,14 @@ def _exclusive_breakdown(row, lower, upper):
     previous = start
     for at in sorted(events):
         duration = (at - previous).total_seconds() * 1000
-        model = [v for v in active.values() if v[0] == "model"]
-        selected = model[-1:] or [v for v in active.values() if v[0] == "tool"]
+        model = [v for v in active.values() if v[0] == "model" and v[3] != "estimated"]
+        measured_tools = [v for v in active.values() if v[0] == "tool" and v[3] != "paired"]
+        paired_tools = [v for v in active.values() if v[0] == "tool" and v[3] == "paired"]
+        estimated_models = [v for v in active.values() if v[0] == "model" and v[3] == "estimated"]
+        selected = model[-1:] or measured_tools or paired_tools or estimated_models[-1:]
         if selected and duration > 0:
             for key in selected:
-                slices[key] += duration / len(selected)
+                slices[key[:3]] += duration / len(selected)
         elif duration > 0:
             slices[("other", "unobserved", "")] += duration
         # Removals must win over additions for zero-width boundaries.
@@ -167,6 +178,8 @@ def summarize(rows, lower, upper):
         "recorded_turns": sum(r["timing_source"] == "recorded" for r in rows),
         "tool_measured_turns": sum(r["tool_status"] == "measured" for r in rows),
         "tool_incomplete_turns": sum(r["tool_status"] == "incomplete" for r in rows),
+        "tool_observed_turns": sum(r["tool_status"] != "unavailable" for r in rows),
+        "legacy_codex_turns": sum(r["agent_type"] == "codex" and r.get("parser_version", 1) < 2 for r in rows),
     }
     slices = defaultdict(float)
     tools = {}

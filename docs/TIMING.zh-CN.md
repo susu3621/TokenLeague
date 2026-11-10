@@ -14,12 +14,18 @@
 - **去重活跃时间**：合并重叠区间后，只计一次的活跃时长。累计执行时间除以它，得到有效并发度。它表示记录到的 Agent 活动重叠程度，不是人类节省时间或硬件并行度。
 - **会话间隙**：同一会话内最早轮次开始与最晚轮次结束之间，未被已记录轮次覆盖的部分。单独展示，不计入执行耗时，也不能当作测得的人工等待。
 - **首 Token 延迟**：仅使用日志明确给出的 `time_to_first_token_ms`。首条消息的写入时间不能替代首 Token 时间。
-- **工具归属耗时**：在模型区间之外，对重叠工具区间进行等分归属，各分项合计等于累计执行时间。原始调用延迟独立统计，可能包含审批等待，所以归属耗时和平均调用耗时含义不同。
+- **工具归属耗时**：原生模型与工具计时优先于封装调用和模型间隔估算；同级重叠工具等分归属，各分项合计等于累计执行时间。原始调用延迟独立统计，可能包含审批等待或嵌套封装，不能直接相加。
 - **计时覆盖**：已计时会话与既有 Token 会话的并集作为已观测会话。历史记录没有计时时，标为待补录，不会用整段会话跨度推算执行时间。
 
 ## 来源差异
 
-Codex 优先使用 `task_complete.duration_ms`；没有该字段时，从匹配的 `task_started` 与 `task_complete` 时间戳估算。首 Token 延迟只在日志明确提供时统计。Codex 日志不提供可信的工具执行和思考计时，这些时间保留为未观测。
+Codex 优先使用 `task_complete.duration_ms`；没有该字段时，从匹配的 `task_started` 与 `task_complete` 时间戳估算。首 Token 延迟只在日志明确提供时统计。
+
+新版 Codex 日志的 `event_msg.item_completed` 包含 `started_at_ms`、`completed_at_ms` 和原生活动类型，能够统计终端命令、MCP 调用、文件修改、等待、网络访问和上下文压缩。同一调用若同时出现在原生事件和调用/返回记录里，会去重；嵌套编排区间的归属优先级低于原生执行区间。
+
+旧日志可按 `call_id` 配对 `function_call` / `custom_tool_call` 与对应输出，得到调用到返回的区间，不解析工具输出文本里的耗时。模型事件之间的区间只作为估算，可能包含请求、调度和网络延迟，不等同于纯模型计算时间；它们不会覆盖已经测得的工具区间。缺少可归属证据的剩余时间仍保留为未观测。
+
+这些指标描述活动的墙钟区间；后台任务可能与模型活动并行。归属占比可用于定位排查方向，不能单独证明 CPU 瓶颈或阻塞路径。
 
 Claude 按真实用户提问划分轮次，以最终回答的时间戳结束。通过 `tool_use.id` 与 `tool_result.tool_use_id` 配对工具区间。内容块之间的时间可估算思考、回答生成、工具调用生成；首个内容块包含请求延迟，并非纯模型计算时间。没有结果的工具调用和未结束的轮次不伪装成完成记录。主会话中的 sidechain 记录不会混入主轮次。
 
@@ -44,6 +50,14 @@ bash scripts/install_hooks.sh --codex --claude --global
 python3 scripts/backfill_timing.py --source all --dry-run
 python3 scripts/backfill_timing.py --source all
 ```
+
+如果曾用旧版脚本补录后，Codex 项目全部显示为未观测，更新仓库后重新执行相同命令即可补充明细。也可以只处理一个项目：
+
+```bash
+python3 scripts/backfill_timing.py --source codex --project-name data-platform
+```
+
+计时解析版本随记录保存；旧版 Hook 或脚本不会覆盖新版已经补全的明细。更新 Hook 后，新轮次会自动使用新解析器。
 
 可使用 `--source codex|claude|all`、`--days 7`、`--limit 10`、`--codex-root PATH`、`--claude-root PATH`。`--days` 只筛选文件的修改时间，不截断文件中的历史轮次。Claude 支持 `$CLAUDE_CONFIG_DIR/projects`；子 Agent 文件以自身文件 ID 单独计为会话。
 

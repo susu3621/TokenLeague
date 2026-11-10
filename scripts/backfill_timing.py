@@ -47,6 +47,7 @@ def main(argv=None):
     parser.add_argument("--dry-run", action="store_true", help="parse locally without uploading")
     parser.add_argument("--days", type=positive_int, help="scan files modified within N days (does not truncate turns)")
     parser.add_argument("--limit", type=positive_int, help="maximum number of files per source")
+    parser.add_argument("--project-name", help="process timing for one exact project name")
     args = parser.parse_args(argv)
     if not args.dry_run and not (os.getenv("TOKENLEAGUE_HOOK_KEY") or "").strip():
         parser.error("TOKENLEAGUE_HOOK_KEY is required for upload")
@@ -62,6 +63,8 @@ def main(argv=None):
             summary["files"] += 1
             try:
                 rows = session_timings(path, source, hook)
+                if args.project_name:
+                    rows = [row for row in rows if row["project_name"] == args.project_name]
             except (OSError, ValueError, TypeError, OverflowError):
                 summary["failures"] += 1
                 continue
