@@ -30,10 +30,6 @@ Project/session time analysis is available at `/timing`: duration distributions,
   </p>
 </div>
 
-<p align="center">
-  <img src="docs/assets/usage-timeline-masked.png" alt="TokenLeague dashboard with usage timeline and average tokens per prompt trend" width="960" />
-</p>
-
 <a id="overview"></a>
 ## Overview
 
@@ -316,7 +312,6 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q service/tests/test_deploy_assets.py
 ```text
 .
 ├── docs/                # in-app docs and operational guides
-│   └── assets/          # README documentation images
 ├── hooks/               # hook and collector templates
 ├── scripts/             # init, migrations, workers, backfill, installers
 ├── service/             # Flask app, templates, tests

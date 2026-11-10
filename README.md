@@ -28,10 +28,6 @@
   </p>
 </div>
 
-<p align="center">
-  <img src="docs/assets/usage-timeline-masked.png" alt="TokenLeague 仪表盘截图，展示使用时间线与平均每次 Prompt Token 趋势" width="960" />
-</p>
-
 <a id="overview"></a>
 ## 项目概览
 
@@ -317,7 +313,6 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q service/tests/test_deploy_assets.py
 ```text
 .
 ├── docs/                # 站内文档与运维说明
-│   └── assets/          # README 中使用的文档图片
 ├── hooks/               # hook 与 collector 模板
 ├── scripts/             # 初始化、迁移、worker、补录、安装脚本
 ├── service/             # Flask 应用、模板、测试
