@@ -819,8 +819,8 @@ def test_user_timeline_api_supports_month_daily_range(auth_session, monkeypatch)
     payload = response.get_json()
     assert payload["window"] == "month"
     assert payload["granularity"] == "day"
-    assert len(payload["timeline"]) == 30
-    assert payload["timeline"][0]["time_bucket"] == "2026-02-23"
+    assert len(payload["timeline"]) == 31
+    assert payload["timeline"][0]["time_bucket"] == "2026-02-22"
     assert payload["timeline"][-1]["time_bucket"] == "2026-03-24"
 
     timeline = {row["time_bucket"]: row for row in payload["timeline"]}
@@ -835,6 +835,34 @@ def test_user_timeline_api_supports_month_daily_range(auth_session, monkeypatch)
     assert timeline["2026-03-24"]["project_breakdown"] == [
         {"project_name": "TokenLeague", "total_token_count": 25, "prompt_count": 1},
     ]
+
+
+@pytest.mark.parametrize('window,days', [('week',7), ('month',30), ('quarter',90)])
+def test_daily_trends_and_all_breakdowns_share_the_rolling_window(auth_session, monkeypatch, window, days):
+    import db
+
+    now = datetime(2026, 3, 24, 12, tzinfo=timezone.utc)
+    monkeypatch.setattr(db, '_utcnow', lambda: now)
+    lower = now - timedelta(days=days)
+    for name, finished, tokens in [('before',lower-timedelta(seconds=1),900), ('boundary',lower,10), ('first-day',lower+timedelta(hours=1),20), ('recent',now-timedelta(hours=1),30)]:
+        event = _prompt_payload(name, finished-timedelta(seconds=12), input_tokens=tokens, output_tokens=0)
+        db.upsert_prompt_event(1, event)
+    other = _prompt_payload('other-agent',now-timedelta(hours=2),input_tokens=1000,output_tokens=0)
+    other['agent_type'] = 'claude-code'
+    db.upsert_prompt_event(1, other)
+
+    query = f'window={window}&agent_type=codex'
+    stats = auth_session.get('/api/users/1/stats?'+query).get_json()
+    timeline = auth_session.get('/api/users/1/timeline?granularity=day&'+query).get_json()['timeline']
+    projects = auth_session.get('/api/users/1/projects?'+query).get_json()['projects']
+    models = auth_session.get('/api/users/1/models?'+query).get_json()['models']
+    assert stats['summary']['total_token_count'] == 60
+    assert sum(row['total_token_count'] for row in timeline) == 60
+    assert sum(row['prompt_count'] for row in timeline) == stats['summary']['prompt_count'] == 3
+    assert sum(row['total_token_count'] for row in projects) == sum(row['total_token_count'] for row in models) == 60
+    assert timeline[0]['time_bucket'] == lower.strftime('%Y-%m-%d')
+    assert timeline[0]['total_token_count'] == 30
+    assert len(timeline) == days+1
 
 
 def test_user_timeline_api_supports_quarter_daily_range(auth_session, monkeypatch):
@@ -899,8 +927,8 @@ def test_user_timeline_api_supports_quarter_daily_range(auth_session, monkeypatc
     payload = response.get_json()
     assert payload["window"] == "quarter"
     assert payload["granularity"] == "day"
-    assert len(payload["timeline"]) == 90
-    assert payload["timeline"][0]["time_bucket"] == "2025-12-25"
+    assert len(payload["timeline"]) == 91
+    assert payload["timeline"][0]["time_bucket"] == "2025-12-24"
     assert payload["timeline"][-1]["time_bucket"] == "2026-03-24"
 
     timeline = {row["time_bucket"]: row for row in payload["timeline"]}

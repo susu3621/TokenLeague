@@ -60,7 +60,7 @@
             <h2>{{ t('user_detail.timeline_heading') }}</h2>
             <label class="usage-project-filter" for="usage-project-select">{{ t('ui.trend_project') }}<select id="usage-project-select"><option value="">{{ t('ui.all_projects') }}</option></select></label>
         </div>
-        <p class="section-description">{{ t('ui.project_focus') }}</p>
+        <p class="section-description">{{ t('ui.project_focus') }} <span id="usage-chart-scope">{{ t('ui.timeline_hourly' if window == 'today' else 'ui.timeline_daily') }}</span></p>
         <div class="chart-container">
             <canvas id="timeline-chart" role="img" aria-label="{{ t('user_detail.timeline_heading') }}"></canvas>
         </div>
@@ -197,6 +197,8 @@
         "chart_error": t("ui.chart_error"),
         "all_projects": t("ui.all_projects"),
         "other_projects": t("ui.other_projects"),
+        "daily_note": t("ui.timeline_daily"),
+        "hourly_note": t("ui.timeline_hourly"),
         "description": t("user_detail.description", username=stats.user.username, window_label="__WINDOW__"),
         "windows": {"today": t("user_detail.window.today"), "week": t("user_detail.window.week"), "month": t("user_detail.window.month"), "quarter": t("user_detail.window.quarter"), "all": t("user_detail.window.all")},
         "no_data": t("user_detail.no_data"),
@@ -286,7 +288,7 @@
         }
     }
 
-    // Convert UTC time bucket to local time label for timeline chart
+    // Keep UTC calendar bucket labels stable in every browser timezone.
     function formatTimelineLabel(timeBucket, isHourly) {
         if (!timeBucket) return '-';
         try {
@@ -305,6 +307,7 @@
             if (isHourly) {
                 // Show only HH:MM for hourly data
                 return date.toLocaleTimeString(navigator.language || 'en-US', {
+                    timeZone: 'UTC',
                     hour: '2-digit',
                     minute: '2-digit',
                     hour12: false
@@ -312,6 +315,7 @@
             } else {
                 // Show MM-DD for daily data
                 return date.toLocaleDateString(navigator.language || 'en-US', {
+                    timeZone: 'UTC',
                     month: '2-digit',
                     day: '2-digit'
                 });
@@ -508,6 +512,7 @@
 
     function setTimelineWindow(windowValue) {
         currentWindow = windowValue;
+        document.getElementById('usage-chart-scope').textContent = windowValue === 'today' ? userDetailMessages.hourly_note : userDetailMessages.daily_note;
         const selector = document.querySelector('[data-user-detail-window-selector]');
         if (selector) {
             selector.dataset.userDetailWindowSelector = windowValue;
@@ -901,7 +906,7 @@
             panel.setAttribute('role', 'tabpanel');
             panel.setAttribute('aria-labelledby', `usage-tab-${panel.dataset.usagePanel}`);
         });
-        if (tab === 'models') modelChart?.resize();
+        if (tab === 'models') requestAnimationFrame(() => modelChart?.resize());
         if (save) {
             const next = `${location.pathname}${location.search}#usage-${tab}`;
             history.replaceState({}, '', next);

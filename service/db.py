@@ -1348,7 +1348,9 @@ def get_user_time_series(
     if granularity == "day" and window in USER_DETAIL_WINDOW_DAY_COUNTS:
         end_date = now.astimezone(UTC).date()
         day_count = USER_DETAIL_WINDOW_DAY_COUNTS[window]
-        start_date = end_date - timedelta(days=day_count - 1)
+        # A trailing N-day window touches N+1 UTC dates when its edge days
+        # are partial. Use the same timestamp cutoff as the summary/tables.
+        start_date = (now.astimezone(UTC) - timedelta(days=day_count)).date()
         daily_bucket_range = (start_date, end_date)
 
     hourly_bucket_range: tuple[datetime, datetime] | None = None
@@ -1369,13 +1371,6 @@ def get_user_time_series(
                 continue
             event_dt = _to_storage_datetime(event_time)
             if hourly_bucket_range[0] <= event_dt <= hourly_bucket_range[1]:
-                matching_events.append(event)
-            continue
-        if daily_bucket_range is not None:
-            if event_time is None:
-                continue
-            event_date = _to_storage_datetime(event_time).date()
-            if daily_bucket_range[0] <= event_date <= daily_bucket_range[1]:
                 matching_events.append(event)
             continue
         if _within_window(event_time, window, now):
