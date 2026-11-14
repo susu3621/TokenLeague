@@ -85,6 +85,7 @@ config/settings.local.*
 
 # 数据库相关
 *.sql
+!scripts/postgres_inventory.sql
 *.sqlite
 *.db-journal
 

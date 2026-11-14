@@ -1,0 +1,67 @@
+# PostgreSQL 16 to 18.4
+
+Run `./deploy.sh --upgrade-postgres` from the local checkout. The deployment uses
+`postgres:18.4-alpine3.23` and `/var/lib/postgresql/18/docker`. It requires Python
+3.10+ and Docker Compose on the deployment host. Ingestion is unavailable while
+Web and worker are stopped. Collectors should submit again after service resumes.
+
+The migration retains the source directory and private logical backups under
+`data/`. It compares all non-template databases before and after restore and
+again after promotion, before application writers resume. Backups include role
+credentials and application data. Keep their directory private. Do not commit
+them or print their contents.
+
+The official image changed its volume mount to `/var/lib/postgresql` for version
+18. A version tag change alone cannot upgrade a PostgreSQL 16 cluster. See the
+[official image documentation](https://hub.docker.com/_/postgres) and the
+[PostgreSQL upgrade documentation](https://www.postgresql.org/docs/18/upgrading.html).
+
+## If migration stops
+
+Read `data/postgres18-migration.json` and inspect the named containers. Do not
+rerun a restore, move a directory, or remove a receipt until their actual state
+is known. The state is saved before and after promotion so a disconnect can be
+reconciled without repeating a write.
+
+- Before `promoting`, `data/postgres` still contains the source. Web and worker
+  may be stopped, and the source may be read-only. The candidate and backup are
+  separate. Preserve them while diagnosing the failure.
+- At `promoting` or `promoted`, compare both directory paths with `PG_VERSION`
+  and inspect the actual container mounts. `promoting` is written before either
+  directory rename. Do not infer which rename completed from the receipt alone.
+- At `complete`, PostgreSQL 18.4 has passed the deployed inventory comparison.
+  The deployment then starts Web and worker. Confirm application reads,
+  ingestion, and the snapshot worker separately.
+
+To return to the retained source **before PostgreSQL 18 accepts new application
+writes**, stop all three services. Preserve the candidate directory. Restore the
+old directory at `data/postgres` and the PostgreSQL 16 image and volume mapping
+from the prior Git revision. Start only PostgreSQL. The source was deliberately
+left read-only; use a local administrative `psql` session to run these commands
+as separate statements:
+
+```sql
+SET default_transaction_read_only = off;
+ALTER SYSTEM RESET default_transaction_read_only;
+SELECT pg_reload_conf();
+```
+
+Verify that a new connection reports `default_transaction_read_only=off` before
+starting Web and worker. Archive the receipt with the reconciled recovery record
+before a new attempt. After PostgreSQL 18 has accepted writes, returning to the
+old directory would lose those writes. Reconcile them or restore from a fresh
+logical backup instead. Retained clusters are not automatically deleted.
+
+## Validation
+
+Run unit and isolated Docker checks. The Docker checks use separate Compose
+projects and exercise successful migration, container recreation, role grants,
+sequence continuation, and a failed inventory comparison that blocks promotion.
+They also run application migrations, all three ingestion routes, idempotent
+prompt submission, snapshot generation, and authenticated statistics reads on 18.
+They require cached `postgres:16-alpine` and `postgres:18.4-alpine3.23` images.
+
+```bash
+TOKENLEAGUE_RUN_POSTGRES_UPGRADE_TEST=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+  python3 -m pytest -q service/tests/test_postgres_upgrade.py
+```

@@ -11,6 +11,7 @@
 #   --port       服务端口（默认: 5006）
 #   -n, --lines  日志行数（默认: 100）
 #   --dry-run    只显示将执行的操作，不实际执行
+#   --upgrade-postgres  备份并将 PostgreSQL 16 迁移到 18.4
 # =============================================================================
 set -euo pipefail
 
@@ -20,6 +21,7 @@ HEALTH_PORT=5006
 APP_PORT="$HEALTH_PORT"
 LOG_LINES=100
 DRY_RUN=false
+UPGRADE_POSTGRES=false
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -55,9 +57,13 @@ while [[ $# -gt 0 ]]; do
       DRY_RUN=true
       shift
       ;;
+    --upgrade-postgres)
+      UPGRADE_POSTGRES=true
+      shift
+      ;;
     *)
       error "未知参数: $1"
-      echo "用法: $0 [-h host] [-p path] [--port port] [-n lines] [--dry-run]"
+      echo "用法: $0 [-h host] [-p path] [--port port] [-n lines] [--dry-run] [--upgrade-postgres]"
       exit 1
       ;;
   esac
@@ -206,6 +212,13 @@ run_ssh "test -f .env && PORT=${APP_PORT} ${COMPOSE_CMD} config >/dev/null"
 success "Compose 配置有效"
 
 step 7 "构建并启动容器"
+if [[ "$UPGRADE_POSTGRES" == "true" ]]; then
+  # Build before stopping writers to keep the database maintenance window short.
+  run_ssh "PORT=${APP_PORT} ${COMPOSE_CMD} build web worker"
+  run_ssh "python3 scripts/upgrade_postgres.py --migrate --compose '${COMPOSE_CMD}'"
+else
+  run_ssh "python3 scripts/upgrade_postgres.py --compose '${COMPOSE_CMD}'"
+fi
 run_ssh "PORT=${APP_PORT} ${COMPOSE_CMD} up -d --build --remove-orphans"
 success "新容器已启动"
 

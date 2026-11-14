@@ -112,7 +112,11 @@ Flask 应用 + PostgreSQL
 - Docker Compose 管理的 PostgreSQL
 - 基于 `.env.example` 生成并填写好的 `.env`
 
-`docker-compose.yml` 会自动启动 PostgreSQL 容器。默认数据目录是 `./data/postgres`；在 `homegpu1` 的部署路径下对应 `/home/juns/project/TokenLeague/data/postgres`。
+`docker-compose.yml` 使用 `postgres:18.4-alpine3.23`。宿主机目录 `./data/postgres` 挂载到 `/var/lib/postgresql`，实际数据库位于 `./data/postgres/18/docker`。在 `homegpu1` 上，宿主机根目录是 `/home/juns/project/TokenLeague`。
+
+已有 PostgreSQL 16 数据的部署必须使用 `./deploy.sh --upgrade-postgres`。脚本会先构建应用，再停止 Web 和 worker，冻结旧库写入，使用 PostgreSQL 18 客户端备份所有非模板数据库及角色。恢复到独立目录后，脚本逐表核对行数、内容摘要、序列、索引和约束，再切换生产库并启动应用。普通部署会拒绝直接启动旧格式的数据目录。
+
+备份和核对结果保存在 `data/postgres-upgrades/<UTC时间>/`。旧库保存在 `data/postgres16-retained-<UTC时间>/`。迁移状态记录在 `data/postgres18-migration.json`。这些文件不上传到 GitHub。迁移中断后，请先按[恢复说明](docs/postgres-upgrade.md)核对状态；脚本不会自动重试。
 
 <a id="docker-compose-recommended"></a>
 ## Docker Compose 部署（推荐）

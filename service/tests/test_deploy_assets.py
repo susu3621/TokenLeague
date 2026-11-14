@@ -42,8 +42,9 @@ def test_runtime_assets_use_port_5006():
     assert '"3306:3306"' not in compose
     assert "\n  mysql:\n" not in compose
     assert "\n  postgres:\n" in compose
-    assert "postgres:16" in compose
-    assert "./data/postgres:/var/lib/postgresql/data" in compose
+    assert "postgres:18.4-alpine3.23" in compose
+    assert "./data/postgres:/var/lib/postgresql\n" in compose
+    assert "PGDATA: /var/lib/postgresql/18/docker" in compose
     assert "env_file:" in compose
     assert "MY_APP_DB_HOST: mysql" not in compose
     assert "MY_APP_DB_HOST: postgres" in compose

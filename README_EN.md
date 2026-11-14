@@ -111,7 +111,11 @@ Detailed per-agent commands, installed file locations, privacy notes, and troubl
 - Docker Compose managed PostgreSQL
 - A writable `.env` file based on `.env.example`
 
-`docker-compose.yml` provisions a PostgreSQL container. The default data directory is `./data/postgres`; on `homegpu1` this resolves to `/home/juns/project/TokenLeague/data/postgres`.
+`docker-compose.yml` uses `postgres:18.4-alpine3.23`. It mounts `./data/postgres` at `/var/lib/postgresql`; the database lives in `./data/postgres/18/docker`. The project root on `homegpu1` is `/home/juns/project/TokenLeague`.
+
+For existing PostgreSQL 16 data, run `./deploy.sh --upgrade-postgres`. The script builds the application before stopping Web and worker. It freezes source writes, backs up every non-template database and all roles with PostgreSQL 18 clients, and restores to a separate directory. It compares table counts, content hashes, sequences, indexes and constraints before promoting the database and starting the application. Regular deployment rejects the old data layout.
+
+Backups and inventories stay in `data/postgres-upgrades/<UTC timestamp>/`. The old cluster stays in `data/postgres16-retained-<UTC timestamp>/`. The migration receipt is `data/postgres18-migration.json`. These files are excluded from GitHub. If migration stops, reconcile its state using the [recovery instructions](docs/postgres-upgrade.md) before proceeding. The script does not retry an unfinished migration.
 
 <a id="docker-compose-recommended"></a>
 ## Docker Compose (Recommended)
