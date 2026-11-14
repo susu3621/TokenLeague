@@ -203,6 +203,11 @@ class Upgrade:
         record["backup_sha256"] = {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
                                    for path in backup.iterdir()}
         state("backed_up")
+        # On Linux, initdb switches to the postgres user. It must be able to
+        # traverse the parent of PGDATA as well as PGDATA itself.
+        run(["docker", "run", "--rm", "--network", "none", "--user", "0", "--entrypoint", "sh",
+             "--mount", f"type=bind,src={stage},dst=/cluster", IMAGE, "-ec",
+             "chown postgres:postgres /cluster; chmod 700 /cluster"])
         target_env = {**os.environ, "POSTGRES_PASSWORD": source_env["POSTGRES_PASSWORD"]}
         run(["docker", "run", "-d", "--name", candidate, "--network", "none",
              "-e", f"POSTGRES_USER={user}", "-e", "POSTGRES_DB=postgres", "-e", "POSTGRES_PASSWORD",
