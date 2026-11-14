@@ -106,6 +106,35 @@ class Upgrade:
         """))
         return result
 
+    def verify_inventory(self, before, restored, container, user):
+        """Reparse differing CHECK definitions with the target SQL parser.
+
+        PostgreSQL 18 can push an array cast into individual elements. Compare
+        its parsed definition, while retaining the original source inventory.
+        Every other field, including row hashes, must still match exactly.
+        """
+        canonical = json.loads(json.dumps(before))
+        for database, entries in before.items():
+            if database.startswith("_"):
+                continue
+            for key, source in entries.items():
+                target = restored.get(database, {}).get(key)
+                if source == target or not key.startswith("constraint:") or target is None:
+                    continue
+                if not source["definition"].startswith("CHECK "):
+                    continue
+                schema, table, _ = key[len("constraint:"):].split(".", 2)
+                definition = self.sql(container, user, database, f"""
+                    CREATE TEMP TABLE upgrade_source_check (LIKE {quote_identifier(schema)}.{quote_identifier(table)});
+                    ALTER TABLE upgrade_source_check ADD CONSTRAINT source_check {source['definition']};
+                    SELECT pg_get_constraintdef(oid) FROM pg_constraint
+                    WHERE conrelid = 'pg_temp.upgrade_source_check'::regclass AND conname = 'source_check';
+                """)
+                canonical[database][key]["definition"] = definition
+        if canonical != restored:
+            raise RuntimeError("Restored inventory differs; preserve both clusters and inspect the private inventories")
+        return canonical
+
     def wait(self, container, user):
         for _ in range(120):
             probe = subprocess.run(["docker", "exec", container, "pg_isready", "-U", user, "-d", "postgres"],
@@ -116,6 +145,9 @@ class Upgrade:
                                    "-U", user, "-d", "postgres"], stdout=subprocess.DEVNULL,
                                   stderr=subprocess.DEVNULL).returncode == 0:
                     return
+            status = run(["docker", "inspect", "--format", "{{.State.Status}}", container]).decode().strip()
+            if status != "running":
+                raise RuntimeError(f"Database container is {status}: {container}. Inspect before retrying")
             time.sleep(1)
         raise RuntimeError(f"Database startup timed out: {container}. Inspect before retrying")
 
@@ -221,8 +253,8 @@ class Upgrade:
             run(args, input=(backup / f"database-{number}.dump").read_bytes())
         restored = self.inventory(candidate, user, databases)
         save(backup / "restored-inventory.json", restored)
-        if before != restored:
-            raise RuntimeError(f"Restored inventory differs; inspect {backup}")
+        canonical = self.verify_inventory(before, restored, candidate, user)
+        save(backup / "source-inventory-pg18.json", canonical)
         for database in databases:
             self.sql(candidate, user, database, "ANALYZE;")
         state("restore_verified")
@@ -241,7 +273,7 @@ class Upgrade:
             raise RuntimeError("Deployed PGDATA differs from the PostgreSQL 18 layout")
         final = self.inventory(deployed, user, databases)
         save(backup / "deployed-inventory.json", final)
-        if final != before:
+        if final != canonical:
             raise RuntimeError("Deployed inventory differs; writers remain stopped")
         record["verified_tables"] = sum(key.startswith("relation:") and "rows" in value
                                         for database in databases for key, value in before[database].items())

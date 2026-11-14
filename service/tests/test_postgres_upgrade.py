@@ -49,6 +49,15 @@ def test_completed_migration_cannot_silently_initialize_an_empty_cluster(tmp_pat
         upgrade.check()
 
 
+def test_startup_detects_an_exited_container_without_waiting(tmp_path, monkeypatch):
+    upgrade = upgrade_module.Upgrade(tmp_path)
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: subprocess.CompletedProcess(args, 1))
+    monkeypatch.setattr(upgrade_module, "run", lambda *args, **kwargs: b"exited\n")
+    monkeypatch.setattr(upgrade_module.time, "sleep", lambda _: pytest.fail("Must detect the exited container immediately"))
+    with pytest.raises(RuntimeError, match="container is exited"):
+        upgrade.wait("isolated-test", "test-user")
+
+
 @pytest.mark.parametrize("username", ["tokenleague_user", 'name with "quotes"'])
 def test_globals_restore_preserves_password_and_other_roles(username):
     quoted = upgrade_module.quote_identifier(username)
@@ -84,7 +93,8 @@ def test_docker_upgrade_preserves_contents_and_blocks_bad_cutover(tmp_path, mism
         upgrade.wait(source, user)
         upgrade.sql(source, user, "tokenleague", """
             CREATE TABLE samples (id bigserial PRIMARY KEY, payload jsonb, tags text[],
-                                  recorded_at timestamptz, amount numeric(20,4), parent bigint REFERENCES samples);
+                                  recorded_at timestamptz, amount numeric(20,4), parent bigint REFERENCES samples,
+                                  status varchar(16) CHECK (status IN ('active', 'disabled')));
             INSERT INTO samples(payload, tags, recorded_at, amount) VALUES
                 ('{"name":"测试","nested":[1,null,true]}', ARRAY['a','b'], '2026-01-01T03:04:05Z', 123.4567),
                 (NULL, ARRAY[]::text[], NULL, NULL);
