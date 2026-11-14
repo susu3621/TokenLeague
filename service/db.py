@@ -908,6 +908,7 @@ def _build_leaderboard_rows(
 ):
     now = _utcnow()
     rows: dict[int, dict[str, Any]] = {}
+    users_by_id = {user["id"]: user for user in get_all_users()}
 
     for event in prompt_events:
         event_time = _prompt_event_time(event)
@@ -915,7 +916,7 @@ def _build_leaderboard_rows(
             continue
         if not _record_matches_filters(event, filters):
             continue
-        user = get_user_by_id(event["user_id"])
+        user = users_by_id.get(event["user_id"])
         if not user or user["status"] != USER_ACTIVE:
             continue
         row = rows.setdefault(

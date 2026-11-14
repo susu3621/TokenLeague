@@ -11,6 +11,10 @@ again after promotion, before application writers resume. Backups include role
 credentials and application data. Keep their directory private. Do not commit
 them or print their contents.
 
+CHECK definitions that differ across versions are parsed again on PostgreSQL 18
+using temporary tables. Every other field must match exactly. The original
+source inventory is retained beside the canonical PostgreSQL 18 inventory.
+
 The official image changed its volume mount to `/var/lib/postgresql` for version
 18. A version tag change alone cannot upgrade a PostgreSQL 16 cluster. See the
 [official image documentation](https://hub.docker.com/_/postgres) and the
@@ -65,3 +69,28 @@ They require cached `postgres:16-alpine` and `postgres:18.4-alpine3.23` images.
 TOKENLEAGUE_RUN_POSTGRES_UPGRADE_TEST=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
   python3 -m pytest -q service/tests/test_postgres_upgrade.py
 ```
+
+## Production record: 2026-11-14
+
+`homegpu1` migrated PostgreSQL 16.14 to `postgres:18.4-alpine3.23` (Alpine 3.23.5).
+All 7 application tables and 84,179 rows matched before writers resumed. Sequence
+values, indexes, column definitions, role credentials and memberships matched.
+Five CHECK definitions were equivalent after parsing on PostgreSQL 18. The
+original source inventory remains unchanged.
+
+The receipt is `data/postgres18-migration.json`. Backups and comparison files are
+in `data/postgres-upgrades/20261114T083027Z/`. The retained PostgreSQL 16 cluster is
+`data/postgres16-retained-20261114T083027Z/`. Backup SHA-256 checks passed after
+promotion. These paths are relative to `/home/juns/project/TokenLeague`.
+
+The first candidate startup stopped before initdb because its parent directory
+belonged to the host user with mode 700. The migration now assigns that directory
+to the image's postgres user. Recovery verified the uninitialized candidate, the
+backup hashes and the frozen source inventory before continuing. A later CHECK
+text comparison stopped before promotion; recovery parsed the source expressions
+on PostgreSQL 18 and continued without repeating the restore.
+
+The final regression run passed 260 tests, including isolated Docker migration,
+failed verification, container recreation and application ingestion. Production
+acceptance also exposed per-event user lookups in the live leaderboard. The
+application now loads users once per leaderboard request.

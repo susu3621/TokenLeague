@@ -172,6 +172,31 @@ def test_leaderboard_requires_login(client):
     assert "/login" in response.headers["Location"]
 
 
+def test_leaderboard_user_queries_do_not_grow_with_event_count(monkeypatch):
+    import db
+
+    now = datetime.now(timezone.utc)
+    disabled = db.create_user("disabled-user", "test-only")
+    db.set_user_status(disabled["id"], db.USER_DISABLED)
+    for number in range(50):
+        db.upsert_prompt_event(1, _prompt_payload(f"batch-{number}", now))
+    db.upsert_prompt_event(disabled["id"], _prompt_payload("disabled-event", now))
+    db.upsert_prompt_event(99999, _prompt_payload("missing-user-event", now))
+    queries = []
+    original = db.get_all_users
+
+    def load_users():
+        queries.append("users")
+        return original()
+
+    monkeypatch.setattr(db, "get_all_users", load_users)
+    monkeypatch.setattr(db, "get_user_by_id", lambda _: pytest.fail("Per-event database lookup"))
+    rows = db.get_leaderboard()
+    assert len(rows) == 1
+    assert (rows[0]["user_id"], rows[0]["prompt_count"], rows[0]["total_token_count"]) == (1, 50, 750)
+    assert queries == ["users"]
+
+
 def test_login_page_renders_language_switcher(client):
     response = client.get("/login")
 
@@ -663,13 +688,13 @@ def test_leaderboard_handles_naive_datetimes_from_db(monkeypatch):
     monkeypatch.setattr(db, "_fetch_task_runs_from_db", lambda: [])
     monkeypatch.setattr(
         db,
-        "get_user_by_id",
-        lambda user_id: {
-            "id": user_id,
+        "get_all_users",
+        lambda: [{
+            "id": 1,
             "username": "admin",
             "display_name": "Admin",
             "status": db.USER_ACTIVE,
-        },
+        }],
     )
 
     rows = db.get_leaderboard(window="all")
